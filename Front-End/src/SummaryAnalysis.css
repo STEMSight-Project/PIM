@@ -1,0 +1,21 @@
+body{
+  padding: 25px;
+}
+.title {
+	color: #5C6AC4;
+}
+table{
+  border: 1px solid black;
+  border-collapse: collapse;
+  text-align:left;
+  padding: 10px;
+  width: 80%;
+  
+  
+th, td{
+  tr:nth-child(even) {
+  background-color: #dddddd;
+  width: 60%;
+}
+}
+}
