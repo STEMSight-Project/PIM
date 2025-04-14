@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { Bell, Settings, User } from 'lucide-react';
-import Navbar from '../Navbar';
+import React from "react";
+import { Bell, Settings, User } from "lucide-react";
+import Navbar from "../Navbar";
 
 const Header = ({ patientId }: { patientId: string | null }) => {
   return (
@@ -21,7 +21,9 @@ const Header = ({ patientId }: { patientId: string | null }) => {
           <div className="relative">
             <button className="p-2 rounded-full hover:bg-gray-100 relative">
               <Bell className="w-6 h-6 text-gray-600" />
-              <span className="absolute top-0 right-0 h-4 w-4 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">3</span>
+              <span className="absolute top-0 right-0 h-4 w-4 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">
+                3
+              </span>
             </button>
           </div>
           <button className="p-2 rounded-full hover:bg-gray-100">
@@ -29,7 +31,10 @@ const Header = ({ patientId }: { patientId: string | null }) => {
           </button>
           <div className="flex items-center space-x-2">
             {/* Clickable user name */}
-            <a href="/" className="text-sm font-medium text-gray-700 hover:underline">
+            <a
+              href="/"
+              className="text-sm font-medium text-gray-700 hover:underline"
+            >
               Dr. Sarah Johnson
             </a>
             {/* Clickable user icon */}
