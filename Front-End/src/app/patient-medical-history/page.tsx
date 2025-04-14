@@ -1,10 +1,8 @@
 "use client";
 import "./style.css";
-import Image from "next/image";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Header from "@/components/Header"; // Import the Header component
-import Footer from "@/components/Footer";
 type Patient = {
   id: string;
   first_name: string;
@@ -12,7 +10,7 @@ type Patient = {
   medical_history: string; // Medical history is a string
 };
 
-export default function PatientMedicalHistory() {
+function Page() {
   const searchParams = useSearchParams();
   const patientId = searchParams.get("patientId"); // Retrieve the patientId from the URL
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -75,5 +73,13 @@ export default function PatientMedicalHistory() {
         &copy; 2025 STEMSight Inc. All rights reserved.
       </footer>
     </div>
+  );
+}
+
+export default function PatientMedicalHistory() {
+  return (
+    <Suspense>
+      <Page />
+    </Suspense>
   );
 }

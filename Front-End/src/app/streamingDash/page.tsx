@@ -1,11 +1,11 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Maximize2 } from "lucide-react"; // Fullscreen icon
 import Header from "@/components/Header"; // Header component
 import Footer from "@/components/Footer"; // Footer component
 
-export default function StreamingDash() {
+function Page() {
   const searchParams = useSearchParams();
   const patientId = searchParams.get("patientId");
 
@@ -176,5 +176,13 @@ export default function StreamingDash() {
 
       <Footer />
     </div>
+  );
+}
+
+export default function StreamingDash() {
+  return (
+    <Suspense>
+      <Page />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation"; // To get query parameters
 import "./styles.css"; // Import the styles.css file
 import Header from "@/components/Header"; // Import the Header component
@@ -20,7 +20,7 @@ interface Patient {
   last_name: string;
 }
 
-export default function Page() {
+function Page() {
   const searchParams = useSearchParams();
   const patientId = searchParams.get("patientId"); // Retrieve the patientId from the URL
 
@@ -98,7 +98,7 @@ export default function Page() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header /> {/* Add the Header component */}
+      <Header patientId={null} /> {/* Add the Header component */}
       <main className="flex-grow p-6">
         <h1 className="title">Summary Analysis</h1>
         <p>{currentTime}</p>
@@ -145,5 +145,13 @@ export default function Page() {
       </main>
       <Footer /> {/* Add the Footer component */}
     </div>
+  );
+}
+
+export default function ResultPage() {
+  return (
+    <Suspense>
+      <Page />
+    </Suspense>
   );
 }

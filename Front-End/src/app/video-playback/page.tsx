@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import SessionReview from '@/components/session-review/SessionReview';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import React, { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import SessionReview from "@/components/session-review/SessionReview";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 interface Patient {
   id: string;
@@ -12,9 +12,9 @@ interface Patient {
   last_name: string;
 }
 
-export default function SessionReviewPage() {
+function SessionReviewView() {
   const searchParams = useSearchParams();
-  const patientId = searchParams.get('patientId');
+  const patientId = searchParams.get("patientId");
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,7 +23,7 @@ export default function SessionReviewPage() {
     if (patientId) {
       fetch(`http://127.0.0.1:8000/patients/${patientId}`)
         .then((response) => {
-          if (!response.ok) throw new Error('Failed to fetch patient data');
+          if (!response.ok) throw new Error("Failed to fetch patient data");
           return response.json();
         })
         .then((data: Patient) => {
@@ -31,7 +31,7 @@ export default function SessionReviewPage() {
           setLoading(false);
         })
         .catch((error) => {
-          console.error('Error fetching patient data:', error);
+          console.error("Error fetching patient data:", error);
           setLoading(false);
         });
     } else {
@@ -49,9 +49,17 @@ export default function SessionReviewPage() {
 
   return (
     <div className="bg-gray-50 min-h-screen">
-      <Header />
+      <Header patientId={null} />
       <SessionReview initialPatient={patient} />
       <Footer />
     </div>
+  );
+}
+
+export default function SessionReviewPage() {
+  return (
+    <Suspense>
+      <SessionReviewView />
+    </Suspense>
   );
 }

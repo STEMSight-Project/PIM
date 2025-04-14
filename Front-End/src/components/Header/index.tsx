@@ -3,6 +3,7 @@
 import React from "react";
 import { Bell, Settings, User } from "lucide-react";
 import Navbar from "../Navbar";
+import Link from "next/link";
 
 const Header = ({ patientId }: { patientId: string | null }) => {
   return (
@@ -10,12 +11,12 @@ const Header = ({ patientId }: { patientId: string | null }) => {
       <div className="flex items-center justify-between px-6 py-3">
         <div className="flex items-center space-x-4">
           {/* Clickable logo that navigates to the patient-dashboard */}
-          <a
+          <Link
             href="/patient-dashboard"
             className="font-bold text-2xl text-blue-700 transition-transform transform hover:scale-105"
           >
             StemSight
-          </a>
+          </Link>
         </div>
         <div className="flex items-center space-x-6">
           <div className="relative">
@@ -31,19 +32,19 @@ const Header = ({ patientId }: { patientId: string | null }) => {
           </button>
           <div className="flex items-center space-x-2">
             {/* Clickable user name */}
-            <a
+            <Link
               href="/"
               className="text-sm font-medium text-gray-700 hover:underline"
             >
               Dr. Sarah Johnson
-            </a>
+            </Link>
             {/* Clickable user icon */}
-            <a
+            <Link
               href="/"
               className="relative w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center transition-transform transform hover:scale-110 hover:shadow-lg"
             >
               <User className="w-6 h-6 text-blue-700" />
-            </a>
+            </Link>
           </div>
         </div>
       </div>

@@ -54,7 +54,7 @@ export default function PatientDashboard() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <Header />
+      <Header patientId={null} />
 
       <div className="p-6">
         <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg p-6">
@@ -87,13 +87,15 @@ export default function PatientDashboard() {
                   <PatientCard key={patient.id} patient={patient} />
                 ))
               ) : (
-                <p className="text-gray-500 text-center">No inactive patients.</p>
+                <p className="text-gray-500 text-center">
+                  No inactive patients.
+                </p>
               )}
             </ul>
           </div>
         </div>
       </div>
-        <Footer />
+      <Footer />
     </div>
   );
 }
