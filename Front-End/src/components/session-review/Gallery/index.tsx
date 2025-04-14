@@ -36,6 +36,7 @@ interface ColorMap {
 }
 
 interface SessionGalleryProps {
+    sessions: SessionWithPatient[];
     onSessionSelect?: (sessionId: string) => void;
 }
 
@@ -400,7 +401,7 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({ onSessionSelect }) => {
                                 onClick={() => handleSessionSelect(session.id)}
                             >
                                 <div className="relative h-24 bg-gray-200 rounded mb-2 overflow-hidden">
-                                    <img src="/api/placeholder/150/100" alt="Thumbnail" className="object-cover w-full h-full" />
+                                    <img src="https://sdmntpreastus2.oaiusercontent.com/files/00000000-af0c-61f6-8ba8-ea9291be3c5c/raw?se=2025-04-13T23%3A19%3A06Z&sp=r&sv=2024-08-04&sr=b&scid=563129be-489f-5ec1-be05-0cebbf7f375a&skoid=d958ec58-d47c-4d2f-a9f2-7f3e03fdcf72&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-04-13T16%3A54%3A07Z&ske=2025-04-14T16%3A54%3A07Z&sks=b&skv=2024-08-04&sig=UJ8Yqc2dpdsJOawYzQoxXAhKUkWKDPP7JyDgdS0IiAk%3D" alt="Thumbnail" className="object-cover w-full h-full" />
                                     <div className="absolute top-1 right-1 flex -space-x-1">
                                         {session.detections.slice(0, 3).map((detection, index) => (
                                             <div

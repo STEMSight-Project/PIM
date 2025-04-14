@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation"; // To get query parameters
 import "./styles.css"; // Import the styles.css file
+import Header from "@/components/Header"; // Import the Header component
+import Footer from "@/components/Footer"; // Import the Footer component
 
 interface EventData {
   time: string;
@@ -11,9 +14,43 @@ interface EventData {
   strokeRisk: string;
 }
 
+interface Patient {
+  id: string;
+  first_name: string;
+  last_name: string;
+}
+
 export default function Page() {
+  const searchParams = useSearchParams();
+  const patientId = searchParams.get("patientId"); // Retrieve the patientId from the URL
+
   const [currentTime, setCurrentTime] = useState<string>("");
   const [events, setEvents] = useState<EventData[]>([]);
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch patient details based on patientId
+  useEffect(() => {
+    if (patientId) {
+      fetch(`http://127.0.0.1:8000/patients/${patientId}`)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Failed to fetch patient data");
+          }
+          return response.json();
+        })
+        .then((data: Patient) => {
+          setPatient(data);
+          setLoading(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching patient data:", error);
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+  }, [patientId]);
 
   // Update time every second
   useEffect(() => {
@@ -51,45 +88,62 @@ export default function Page() {
     setEvents(dummyData);
   }, []);
 
-  return (
-    <div>
-      <h1 className="title">Summary Analysis</h1>
-      <p>{currentTime}</p>
+  if (loading) {
+    return <div>Loading...</div>;
+  }
 
-      <table>
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Symptom</th>
-            <th>Video View</th>
-            <th>Wire Frame View</th>
-            <th>Indicative of Stroke?</th>
-          </tr>
-        </thead>
-        <tbody>
-          {events.map((event, index) => (
-            <tr key={index}>
-              <td>{event.time}</td>
-              <td>{event.symptom}</td>
-              <td>
-                <img
-                  src={event.video}
-                  alt={`Video at ${event.time}`}
-                  width="100"
-                />
-              </td>
-              <td>
-                <img
-                  src={event.wireframe}
-                  alt={`Wireframe at ${event.time}`}
-                  width="100"
-                />
-              </td>
-              <td>{event.strokeRisk}</td>
+  if (!patientId || !patient) {
+    return <div>Patient not found.</div>;
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header /> {/* Add the Header component */}
+      <main className="flex-grow p-6">
+        <h1 className="title">Summary Analysis</h1>
+        <p>{currentTime}</p>
+
+        {/* Display the patient's name */}
+        <h2>
+          Showing results for patient: {patient.first_name} {patient.last_name}
+        </h2>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Symptom</th>
+              <th>Video View</th>
+              <th>Wire Frame View</th>
+              <th>Indicative of Stroke?</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {events.map((event, index) => (
+              <tr key={index}>
+                <td>{event.time}</td>
+                <td>{event.symptom}</td>
+                <td>
+                  <img
+                    src={event.video}
+                    alt={`Video at ${event.time}`}
+                    width="100"
+                  />
+                </td>
+                <td>
+                  <img
+                    src={event.wireframe}
+                    alt={`Wireframe at ${event.time}`}
+                    width="100"
+                  />
+                </td>
+                <td>{event.strokeRisk}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </main>
+      <Footer /> {/* Add the Footer component */}
     </div>
   );
 }

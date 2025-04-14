@@ -25,7 +25,7 @@ const SessionHeader = ({
       <div>
         <h1 className="text-2xl font-bold text-gray-800 mb-1"> Session Video Playback: </h1>
         <p className="text-gray-700">
-          Station {stationId} | Patient ID {patientId} | {sessionDate}<br />
+          Station {stationId} | Patient Name: {patientId} | {sessionDate}<br />
           {startTime} - {endTime}
         </p>
       </div>

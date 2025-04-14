@@ -46,6 +46,7 @@ function printSymptoms(){
   }
   converttxttoArray("stops.txt");
 }
+  )
 }
 const fileInput = document.getElementById("file-input");
 const fileContentDisplay = document.getElementById("file-content");
