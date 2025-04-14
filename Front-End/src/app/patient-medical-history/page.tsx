@@ -1,59 +1,76 @@
+"use client";
 import "./style.css";
 import Image from "next/image";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Header from "@/components/Header"; // Import the Header component
+import Footer from "@/components/Footer";
+type Patient = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  medical_history: string; // Medical history is a string
+};
 
 export default function PatientMedicalHistory() {
+  const searchParams = useSearchParams();
+  const patientId = searchParams.get("patientId"); // Retrieve the patientId from the URL
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (patientId) {
+      // Fetch the patient data by ID
+      fetch(`http://127.0.0.1:8000/patients/${patientId}`)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Failed to fetch patient data");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          setPatient(data);
+          setLoading(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching patient data:", error);
+          setLoading(false);
+        });
+    }
+  }, [patientId]);
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!patient) {
+    return <div>Patient not found.</div>;
+  }
+
   return (
     <div className="bg-white text-black min-h-screen">
-      
-      <nav className="bg-gray-800 text-white p-4 flex justify-between">
-        <span className="text-xl font-bold">STEMSight </span>
-        <ul className="flex gap-6">
-          <li><a href="#" className="hover:underline">Home</a></li>
-          <li><a href="#" className="hover:underline">Live Cameras</a></li>
-          <li><a href="#" className="hover:underline">Records</a></li>
-          <li><a href="#" className="hover:underline">Support</a></li>
-
-          <li>
-      <a href="#">
-        <Image
-          src="/profile-icon.svg" // The profile icon svg to pull up drop-down menu
-          alt="Profile"
-          width={24}
-          height={24}
-          className="cursor-pointer invert"
-        />
-      </a>
-    </li>
-
-        </ul>
-      </nav>
-      
+      {/* Pass patientId to Header */}
+      <Header patientId={patientId} />
       <header className="text-center p-6 text-2xl font-bold">
-        Patient Name: <span className="text-blue-600">{`{Patient Name Placeholder}`}</span>
+        Patient Name:{" "}
+        <span className="text-blue-600">
+          {patient.first_name} {patient.last_name}
+        </span>
       </header>
 
       <main className="max-w-3xl mx-auto p-6">
-
         <h2 className="text-xl font-semibold mb-4">Medical History</h2>
         <div className="space-y-4">
-          {}
-          <div className="border p-4 rounded shadow">
-            <p className="font-semibold">Condition: Diabetes</p>
-            <p>Date Diagnosed: 2023-05-20</p>
-            <p>Notes: Patient uses Insulin medication</p>
-          </div>
-
-          <div className="border p-4 rounded shadow">
-            <p className="font-semibold">Condition: Hypertension</p>
-            <p>Date Diagnosed: 2018-09-10</p>
-            <p>Notes: The patient has a history of mild focal epilepsy and is 
-                currently taking levetiracetam (Keppra) for seizure management. They 
-                report a good response to the medication, with minimal to no seizures 
-                and no significant side effects.</p>
-          </div>
+          {patient.medical_history ? (
+            <div className="border p-4 rounded shadow">
+              <p>{patient.medical_history}</p>
+            </div>
+          ) : (
+            <p>No medical history available for this patient.</p>
+          )}
         </div>
-
       </main>
+
       <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
         &copy; 2025 STEMSight Inc. All rights reserved.
       </footer>
