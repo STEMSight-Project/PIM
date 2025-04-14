@@ -2,7 +2,6 @@ import asyncio
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from supabase_settings.config import settings
-import httpx
 import aiofiles
 from datetime import datetime
 from supabase_settings.supabase_client import get_supabase_client
@@ -26,7 +25,14 @@ class ConnectionManager:
         for connection in self.active_connections:
             await connection.send_bytes(data)
 
-manager = ConnectionManager()
+class StreamingRoom:
+    def __init__(self, patient_id: str):
+        self.patient_id = patient_id
+        self.manager = ConnectionManager()
+        self.temp_file_path = f"/tmp/{patient_id}_{datetime.now()}.webm"
+        self.broadcaster_connected = False
+
+streaming_rooms = dict[str, StreamingRoom] = {}
 
 async def upload_video_to_supabase(file_path: str):
     async with aiofiles.open(file_path) as file:
@@ -44,11 +50,11 @@ async def upload_video_to_supabase(file_path: str):
 async def watch_video_stream(patient_id: str, ws: WebSocket, backgroundTasks: BackgroundTasks):
     # Ready for device connect into streaming room
     await ws.accept()
-    
-    # Store video file into local storage as temporary file
-    temp_file_path = f"/tmp/{patient_id}_{datetime.now()}.webm"
+    streaming_rooms[patient_id] = StreamingRoom(patient_id)
+    current: StreamingRoom = streaming_rooms[patient_id]
+    current.broadcaster_connected = True
 
-    async with aiofiles.open(temp_file_path, "wb") as file:
+    async with aiofiles.open(current.temp_file_path, "wb") as file:
         try: 
             while True:
                 chunk = await ws.receive_bytes()
@@ -56,19 +62,20 @@ async def watch_video_stream(patient_id: str, ws: WebSocket, backgroundTasks: Ba
                     continue
                 await file.write(chunk)
 
-                await manager.broadcast(chunk)
+                await current.manager.broadcast(chunk)
         except WebSocketDisconnect:
             logger.info(f"Live stream of {patient_id} had been ended")
-            backgroundTasks.add_task(upload_video_to_supabase, temp_file_path)
+            backgroundTasks.add_task(upload_video_to_supabase, current.temp_file_path)
 
 @router.websocket("/watch/{patient_id}")
 async def watch_video_stream(patient_id: str, ws: WebSocket):
     await ws.accept()
-    manager.connect(ws)
+    current: StreamingRoom = streaming_rooms[patient_id]
+    current.manager.connect(ws)
     try:
         while True:
             await asyncio.sleep(1)
     except WebSocketDisconnect:
-        manager.disconnect(ws)
+        current.manager.disconnect(ws)
         logger.info("Client disconnected")
 
