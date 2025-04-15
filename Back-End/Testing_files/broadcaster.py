@@ -5,6 +5,10 @@ import websockets
 async def video_stream():
     # Open the default camera (change the index if necessary)
     cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FPS, 60)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1928)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
     if not cap.isOpened():
         print("Error: Could not open camera.")
         return
@@ -27,7 +31,7 @@ async def video_stream():
                 break
 
             # Encode the frame as JPEG.
-            ret, buffer = cv2.imencode('.jpg', frame)
+            ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 100])
             if not ret:
                 print("Error: Could not encode frame.")
                 continue

@@ -25,8 +25,19 @@ class ConnectionManager:
     async def broadcast(self, data: bytes):
         if self.active_connections.count == 0:
             return
-        for connection in self.active_connections:
-            await connection.send_bytes(data)
+        for connection in self.active_connections.copy():
+            if connection.client_state == WebSocketState.DISCONNECTED:
+                self.active_connections.remove(connection)
+                continue
+            try:
+                await connection.send_bytes(data)
+            except WebSocketDisconnect:
+                self.active_connections.remove(connection)
+                logger.info("Client disconnected")
+            except Exception as e:
+                logger.error(f"Error sending data: {e}")
+                self.active_connections.remove(connection)
+                await connection.close()
 
 class StreamingRoom:
     def __init__(self, patient_id: str, broadcasterWS: WebSocket):
