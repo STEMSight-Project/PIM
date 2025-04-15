@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import TextField from "@/components/TextField";
+import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import STEMSightLogo from "../assets/STEMSight-Logo.png";
@@ -71,7 +72,7 @@ export default function App() {
       <div className="bg-white px-8 py-8 rounded-2xl">
         <form onSubmit={handleLogin} className="flex-row space-y-10">
           <div className="flex w-full h-full justify-center">
-            <img src={STEMSightLogo.src} alt="Logo" className="w-3xs" />
+            <Image src={STEMSightLogo.src} alt="Logo" className="w-3xs" />
           </div>
           <p className="font-bold font-serif px-16 text-2xl text-black">
             Enter your login credentials

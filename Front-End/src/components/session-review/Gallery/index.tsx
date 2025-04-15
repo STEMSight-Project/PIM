@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Grid, List } from "lucide-react";
+import Image from "next/image";
 /**
  * Session Gallery: displays and manages a gallery of sessions with view and sorting options.
  * When user clicks on one it will take them to the session review (video playback) for that patient session
@@ -77,129 +78,128 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({ onSessionSelect }) => {
     },
   };
 
-  // Mock data for sessions
-  const initialSessions: SessionItem[] = [
-    {
-      id: "session-123",
-      patientId: "28491",
-      date: "March 17, 2025",
-      time: "10:35 AM",
-      ambulanceId: "S-103",
-      detections: [
-        { type: "myoclonus", color: "red" },
-        { type: "tremor", color: "yellow" },
-        { type: "decerebrate", color: "purple" },
-        { type: "decorticate", color: "blue" },
-      ],
-      detectionCount: 4,
-      isSelected: true,
-    },
-    {
-      id: "session-124",
-      patientId: "28495",
-      date: "March 17, 2025",
-      time: "9:22 AM",
-      ambulanceId: "S-217",
-      detections: [{ type: "versive", color: "orange" }],
-      detectionCount: 1,
-      isSelected: false,
-    },
-    {
-      id: "session-125",
-      patientId: "28492",
-      date: "March 17, 2025",
-      time: "8:47 AM",
-      ambulanceId: "S-103",
-      detections: [
-        { type: "ballistic", color: "green" },
-        { type: "decerebrate", color: "purple" },
-      ],
-      detectionCount: 3,
-      isSelected: false,
-    },
-    {
-      id: "session-126",
-      patientId: "28487",
-      date: "March 16, 2025",
-      time: "4:12 PM",
-      ambulanceId: "S-054",
-      detections: [{ type: "myoclonus", color: "red" }],
-      detectionCount: 1,
-      isSelected: false,
-    },
-    {
-      id: "session-127",
-      patientId: "28486",
-      date: "March 16, 2025",
-      time: "2:38 PM",
-      ambulanceId: "S-217",
-      detections: [{ type: "tremor", color: "yellow" }],
-      detectionCount: 1,
-      isSelected: false,
-    },
-    {
-      id: "session-128",
-      patientId: "28483",
-      date: "March 16, 2025",
-      time: "11:04 AM",
-      ambulanceId: "S-103",
-      detections: [],
-      detectionCount: 0,
-      isSelected: false,
-    },
-    {
-      id: "session-129",
-      patientId: "28480",
-      date: "March 15, 2025",
-      time: "7:55 PM",
-      ambulanceId: "S-221",
-      detections: [
-        { type: "decerebrate", color: "red" },
-        { type: "myoclonus", color: "green" },
-        { type: "ballistic", color: "orange" },
-      ],
-      detectionCount: 4,
-      isSelected: false,
-    },
-    {
-      id: "session-130",
-      patientId: "28478",
-      date: "March 15, 2025",
-      time: "3:17 PM",
-      ambulanceId: "S-103",
-      detections: [
-        { type: "versive", color: "purple" },
-        { type: "tremor", color: "yellow" },
-      ],
-      detectionCount: 2,
-      isSelected: false,
-    },
-    {
-      id: "session-131",
-      patientId: "28475",
-      date: "March 15, 2025",
-      time: "10:42 AM",
-      ambulanceId: "S-217",
-      detections: [{ type: "decorticate", color: "blue" }],
-      detectionCount: 1,
-      isSelected: false,
-    },
-    {
-      id: "session-132",
-      patientId: "28472",
-      date: "March 14, 2025",
-      time: "8:09 PM",
-      ambulanceId: "S-103",
-      detections: [
-        { type: "ballistic", color: "orange" },
-        { type: "tremor", color: "yellow" },
-      ],
-      detectionCount: 2,
-      isSelected: false,
-    },
-  ];
-
   useEffect(() => {
+    const initialSessions: SessionItem[] = [
+      {
+        id: "session-123",
+        patientId: "28491",
+        date: "March 17, 2025",
+        time: "10:35 AM",
+        ambulanceId: "S-103",
+        detections: [
+          { type: "myoclonus", color: "red" },
+          { type: "tremor", color: "yellow" },
+          { type: "decerebrate", color: "purple" },
+          { type: "decorticate", color: "blue" },
+        ],
+        detectionCount: 4,
+        isSelected: true,
+      },
+      {
+        id: "session-124",
+        patientId: "28495",
+        date: "March 17, 2025",
+        time: "9:22 AM",
+        ambulanceId: "S-217",
+        detections: [{ type: "versive", color: "orange" }],
+        detectionCount: 1,
+        isSelected: false,
+      },
+      {
+        id: "session-125",
+        patientId: "28492",
+        date: "March 17, 2025",
+        time: "8:47 AM",
+        ambulanceId: "S-103",
+        detections: [
+          { type: "ballistic", color: "green" },
+          { type: "decerebrate", color: "purple" },
+        ],
+        detectionCount: 3,
+        isSelected: false,
+      },
+      {
+        id: "session-126",
+        patientId: "28487",
+        date: "March 16, 2025",
+        time: "4:12 PM",
+        ambulanceId: "S-054",
+        detections: [{ type: "myoclonus", color: "red" }],
+        detectionCount: 1,
+        isSelected: false,
+      },
+      {
+        id: "session-127",
+        patientId: "28486",
+        date: "March 16, 2025",
+        time: "2:38 PM",
+        ambulanceId: "S-217",
+        detections: [{ type: "tremor", color: "yellow" }],
+        detectionCount: 1,
+        isSelected: false,
+      },
+      {
+        id: "session-128",
+        patientId: "28483",
+        date: "March 16, 2025",
+        time: "11:04 AM",
+        ambulanceId: "S-103",
+        detections: [],
+        detectionCount: 0,
+        isSelected: false,
+      },
+      {
+        id: "session-129",
+        patientId: "28480",
+        date: "March 15, 2025",
+        time: "7:55 PM",
+        ambulanceId: "S-221",
+        detections: [
+          { type: "decerebrate", color: "red" },
+          { type: "myoclonus", color: "green" },
+          { type: "ballistic", color: "orange" },
+        ],
+        detectionCount: 4,
+        isSelected: false,
+      },
+      {
+        id: "session-130",
+        patientId: "28478",
+        date: "March 15, 2025",
+        time: "3:17 PM",
+        ambulanceId: "S-103",
+        detections: [
+          { type: "versive", color: "purple" },
+          { type: "tremor", color: "yellow" },
+        ],
+        detectionCount: 2,
+        isSelected: false,
+      },
+      {
+        id: "session-131",
+        patientId: "28475",
+        date: "March 15, 2025",
+        time: "10:42 AM",
+        ambulanceId: "S-217",
+        detections: [{ type: "decorticate", color: "blue" }],
+        detectionCount: 1,
+        isSelected: false,
+      },
+      {
+        id: "session-132",
+        patientId: "28472",
+        date: "March 14, 2025",
+        time: "8:09 PM",
+        ambulanceId: "S-103",
+        detections: [
+          { type: "ballistic", color: "orange" },
+          { type: "tremor", color: "yellow" },
+        ],
+        detectionCount: 2,
+        isSelected: false,
+      },
+    ];
+
     setSessions(initialSessions);
   }, []);
 
@@ -450,7 +450,7 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({ onSessionSelect }) => {
                 onClick={() => handleSessionSelect(session.id)}
               >
                 <div className="relative h-24 bg-gray-200 rounded mb-2 overflow-hidden">
-                  <img
+                  <Image
                     src="https://sdmntpreastus2.oaiusercontent.com/files/00000000-af0c-61f6-8ba8-ea9291be3c5c/raw?se=2025-04-13T23%3A19%3A06Z&sp=r&sv=2024-08-04&sr=b&scid=563129be-489f-5ec1-be05-0cebbf7f375a&skoid=d958ec58-d47c-4d2f-a9f2-7f3e03fdcf72&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-04-13T16%3A54%3A07Z&ske=2025-04-14T16%3A54%3A07Z&sks=b&skv=2024-08-04&sig=UJ8Yqc2dpdsJOawYzQoxXAhKUkWKDPP7JyDgdS0IiAk%3D"
                     alt="Thumbnail"
                     className="object-cover w-full h-full"

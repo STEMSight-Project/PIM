@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"; // To get query parameters
 import "./styles.css"; // Import the styles.css file
 import Header from "@/components/Header"; // Import the Header component
 import Footer from "@/components/Footer"; // Import the Footer component
+import Image from "next/image";
 
 interface EventData {
   time: string;
@@ -124,14 +125,14 @@ function Page() {
                 <td>{event.time}</td>
                 <td>{event.symptom}</td>
                 <td>
-                  <img
+                  <Image
                     src={event.video}
                     alt={`Video at ${event.time}`}
                     width="100"
                   />
                 </td>
                 <td>
-                  <img
+                  <Image
                     src={event.wireframe}
                     alt={`Wireframe at ${event.time}`}
                     width="100"
