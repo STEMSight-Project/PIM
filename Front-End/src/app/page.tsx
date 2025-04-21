@@ -1,9 +1,9 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image"
 import TextField from "@/components/TextField";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import STEMSightLogo from "../assets/STEMSight-Logo.png";
 
 export default function App() {
     const [username, setUsername] = useState("");
@@ -80,11 +80,13 @@ export default function App() {
             <div className="bg-white px-8 py-8 rounded-2xl">
                 <form onSubmit={handleLogin} className="flex-row space-y-10">
                     <div className="flex w-full h-full justify-center">
-                        <img
-                            src={STEMSightLogo.src}
-                            alt="Logo"
-                            className="w-3xs"
-                        />
+                    <Image
+              src="/STEMSight-Logo.png"
+              alt="STEMSight Logo"
+              width={256}
+              height={256}
+              className="object-contain"
+            />
                     </div>
                     <p className="font-bold font-serif px-16 text-2xl text-black">
                         Enter your login credentials
@@ -119,9 +121,9 @@ export default function App() {
                     <div className="flex-row space-y-0.5">
                         <p className="font-serif text-black">
                             Don't have an account?
-                            <Link href="/create-account"> <!-- call render function for NewUserForm -->
+                            <Link href="/create-account"> {/*-- call render function for NewUserForm */}
                                 <span className="font-serif text-blue-800 hover:text-blue-300">
-                                    Contact Support <!-- Create New User Account -->
+                                    Contact Support {/* Create New User Account */}
                                 </span>
                             </Link>
                         </p>

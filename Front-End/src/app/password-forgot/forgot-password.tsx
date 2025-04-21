@@ -15,11 +15,38 @@ export default function PatientDashboard() {
     event.preventDefault();
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(email)) {
-      setError('Please enter a valid email address.');
+      setError("Please enter a valid email address.");
+      setSuccess("");
       return;
     }
-    setError('');
-    setSuccess('A reset link has been sent to your email address.'); // Success message
+
+
+    try {
+      // Will make POST request to initiate password reset with API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/request-password-reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      // If response is successful, then a success message will be displayed
+      if (response.ok) {
+        setSuccess("A reset link has been sent to your email address.");
+        setError("");
+      }
+      // If action is not successful, then will display error mesage 
+      else {
+        const data = await response.json();
+        setError(data.detail || "Something went wrong.");
+        setSuccess("");
+      }
+    } 
+    // Will detect any other errors that might occur
+    catch (err) {
+      console.error("Error during password reset request:", err); //Will log errors that occured to console.
+      setError("Unable to send request. Please try again later.");
+      setSuccess("");
+    }
   };
 
   return (
@@ -51,5 +78,5 @@ export default function PatientDashboard() {
       </div>
     </div>
   );
-};
+}
 
