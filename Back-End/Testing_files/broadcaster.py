@@ -116,15 +116,9 @@ async def publish(room_id: str, base_url: str, device: Optional[str]) -> None:
                     return
                 answer_json = await resp.json()
 
-    # -----------------------------------------------------------------
-    #  5. Apply SDP answer locally
-    # -----------------------------------------------------------------
     await pc.setRemoteDescription(RTCSessionDescription(**answer_json))
     LOGGER.info("Streaming…  (Ctrl+C to stop)")
 
-    # -----------------------------------------------------------------
-    #  6. Keep the event loop alive
-    # -----------------------------------------------------------------
     try:
         while True:
             await asyncio.sleep(30)
