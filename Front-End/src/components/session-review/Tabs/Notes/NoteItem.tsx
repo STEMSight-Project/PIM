@@ -1,6 +1,6 @@
 import React from 'react';
 import { Edit3, Clock, CheckCircle, Trash2 } from 'lucide-react';
-import { Note } from './types';
+import { createNote, updateNote, deleteNote, Note } from "@/services/noteService";
 
 interface NoteItemProps {
     note: Note;
@@ -30,8 +30,8 @@ const NoteItem: React.FC<NoteItemProps> = ({
     currentVideoTime
 }) => {
     const handleJumpToTimestamp = () => {
-        if (note.videoTimeSeconds !== undefined) {
-            const timeSeconds = note.videoTimeSeconds; // store the value in a local variable
+        if (note.timestamp_seconds !== undefined) {
+            const timeSeconds = note.timestamp_seconds; // store the value in a local variable
             console.log("NoteItem: Jump to timestamp clicked", timeSeconds);
 
             // first set to a slightly different time to allow re-clicking the same timestamp
@@ -62,9 +62,9 @@ const NoteItem: React.FC<NoteItemProps> = ({
                     {/* timestamp controls in edit mode */}
                     <div className="flex items-center mb-2">
                         <span className="text-xs text-gray-600 mr-2">
-                            {note.videoTimeSeconds !== undefined ? (
+                            {note.timestamp_seconds !== undefined ? (
                                 <>
-                                    Current timestamp: {Math.floor(note.videoTimeSeconds / 60)}:{String(Math.floor(note.videoTimeSeconds % 60)).padStart(2, '0')}
+                                    Current timestamp: {Math.floor(note.timestamp_seconds / 60)}:{String(Math.floor(note.timestamp_seconds % 60)).padStart(2, '0')}
                                 </>
                             ) : (
                                 <>No timestamp</>
@@ -99,7 +99,7 @@ const NoteItem: React.FC<NoteItemProps> = ({
                 <>
                     <div className="flex justify-between">
                         <p className="font-medium text-gray-800">{note.content.length > 50 ? `${note.content.substring(0, 50)}...` : note.content}</p>
-                        <span className="text-xs text-gray-500">{note.created_time}</span>
+                        <span className="text-xs text-gray-500">{note.created_at}</span>
                     </div>
 
                     <p className="mt-2 text-sm text-gray-600">
@@ -110,13 +110,13 @@ const NoteItem: React.FC<NoteItemProps> = ({
                         <span className="text-xs text-gray-500 font-medium">{note.author}</span>
 
                         <div className="flex items-center space-x-3">
-                            {note.videoTimeSeconds !== undefined && (
+                            {note.timestamp_seconds !== undefined && (
                                 <button
                                     className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
                                     onClick={handleJumpToTimestamp}
                                 >
                                     <Clock className="w-3 h-3 mr-1" />
-                                    Jump to {Math.floor(note.videoTimeSeconds / 60)}:{String(Math.floor(note.videoTimeSeconds % 60)).padStart(2, '0')}
+                                    Jump to {Math.floor(note.timestamp_seconds / 60)}:{String(Math.floor(note.timestamp_seconds % 60)).padStart(2, '0')}
                                 </button>
                             )}
 

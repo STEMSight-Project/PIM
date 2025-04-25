@@ -11,7 +11,7 @@ supabase = get_supabase_client()
 class Video(BaseModel):
     id: str
     patient_id: str
-    description: str
+    description: Optional[str]
     file_path: str
     public_video_url: str
     created_at: datetime
@@ -41,22 +41,26 @@ def get_videos_for_patient(patient_id: str):
     try:
         response_database = (
             supabase
-            .table('videos')
+            .table('video')
             .select('*')
             .eq('patient_id', patient_id)
             .execute()
         )
         videos: list[Video] = []
-        for object in response_database.data:
-            video_url = supabase.storage.from_('recorded.videos').get_public_url(object.file_path)
+        for obj in response_database.data:
+            video_url = supabase.storage.from_('recorded.videos').get_public_url(obj['file_path'])
             video = Video(
-                id= object.id, 
+                id= obj['id'], 
                 patient_id= 
-                object.patient_id, 
-                description= object.description,
-                file_path= object.file_path,
+                obj['patient_id'], 
+                description= obj['description'],
+                file_path= obj['file_path'],
                 public_video_url= video_url,
+                created_at=obj['created_at'], 
             )
+            videos.append(video)
+
+        return videos 
         
     except Exception as e:
         logger.error(f"Error getting videos for patient {patient_id}: {e}")

@@ -1,14 +1,9 @@
-export interface Note {
-    id: string;
-    content: string;
-    created_time: string;
-    videoTimeSeconds?: number;
-    author: string;
-    created_at: string;
-}
-
 export interface NotesProps {
     sessionId: string;
+    notes: import('@/services/noteService').Note[]; 
+    setNotes: React.Dispatch<React.SetStateAction<import('@/services/noteService').Note[]>>;
     setCurrentTimestamp: (time: number) => void;
     currentVideoTime: number;
+    videoId: string;
+    patientId: string;
 }
