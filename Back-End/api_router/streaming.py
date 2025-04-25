@@ -1,6 +1,6 @@
 import asyncio
 
-from typing import Literal, Optional
+from typing import Optional
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 from fastapi import APIRouter, HTTPException, Response
@@ -91,14 +91,8 @@ async def publish_viewer(patient_id: str, body: SDPBody):
             room.viewers.discard(pc)
 
     streamer = room.streamer
-    @pc.on("iceconnectionstatechange")
-    async def _():
-        if pc.iceConnectionState in ("failed", "closed", "disconnected"):
-            await pc.close()
-            room.viewers.discard(pc)
 
-    # ★ copy publisher’s video track ★
-    for receiver in streamer.getReceivers():       #  ←  fixed
+    for receiver in streamer.getReceivers():
         if receiver.track.kind == "video":
             pc.addTrack(relay.subscribe(receiver.track))
 
