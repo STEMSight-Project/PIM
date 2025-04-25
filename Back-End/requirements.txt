@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pydantic
+supabase
+python-dotenv
+pydantic-settings
+torch
+Pylance
+mediapipe
+fastapi>=0.68.0
+uvicorn>=0.15.0
+python-dotenv>=0.19.0
+supabase>=0.5.8
+pydantic>=1.8.2
+email-validator

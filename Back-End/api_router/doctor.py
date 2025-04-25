@@ -1,16 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 from typing import Optional
-from supabase_settings.supabase_client import get_supabase_client
+from common import supabase
 from pydantic import BaseModel
 from enum import Enum
 from common import logger
 
-supabase = get_supabase_client()
 
 router = APIRouter()
 
 @router.get('/')
-def get_doctors():
+def get_doctors(request: Request, response: Response):
     try:
         response = supabase.table('doctors').select('*').execute()
 

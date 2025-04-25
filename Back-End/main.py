@@ -25,9 +25,4 @@ async def validation_exception_handler(request, exc):
 def read_root():
     return RedirectResponse(url= '/docs')
 
-@app.get("/live-broadcast", response_class=HTMLResponse)
-async def live_broadcast(request: Request, patient_id: str = Query("test_patient", description="Patient ID for broadcast")):
-    return templates.TemplateResponse("receiver.html", {"request": request, "patient_id": patient_id})
-
-
 app.include_router(api_router)

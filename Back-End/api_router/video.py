@@ -1,12 +1,11 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
-from supabase_settings.supabase_client import get_supabase_client
+from common import supabase
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from common import logger
 
 router = APIRouter()
-supabase = get_supabase_client()
 
 class Video(BaseModel):
     id: str
