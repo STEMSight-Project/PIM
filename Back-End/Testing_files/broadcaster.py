@@ -1,20 +1,3 @@
-"""
-streamer.py
-===========
-
-Run on the device that owns the camera.
-
-Usage
------
-    # 1.  Make sure the FastAPI server is running (uvicorn main:app …)
-    # 2.  Create a room   →  curl -X POST http://localhost:8080/rooms
-    # 3.  Start publishing video into that room:
-    #
-    #       python streamer.py --room 8f9b6cc0-…  \
-    #                          --signaling http://localhost:8080 \
-    #                          --device /dev/video0        # or "video=Integrated Camera"
-"""
-
 import argparse
 import asyncio
 import inspect

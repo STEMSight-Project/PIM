@@ -2,7 +2,7 @@ import asyncio
 
 from typing import Literal, Optional
 from aiortc import RTCPeerConnection, RTCSessionDescription
-
+from aiortc.contrib.media import MediaRelay
 from fastapi import APIRouter, HTTPException, Response
 
 from common import logger
@@ -24,11 +24,12 @@ class Room:
 
 class SDPBody(BaseModel):
     sdp: str
-    type: Literal["offer", "answer"]
+    type: str
 
 router = APIRouter()
 
 rooms: dict[str, Room] = {}
+relay = MediaRelay()
 
 @router.post("/create_room/{patient_id}")
 async def create_room(patient_id: str):
@@ -90,11 +91,16 @@ async def publish_viewer(patient_id: str, body: SDPBody):
             room.viewers.discard(pc)
 
     streamer = room.streamer
-    @streamer.on("track")
-    def on_track(track):
-        logger.info(f"Track received: {track.kind}")
-        if track.kind == "video":
-            pc.addTrack(track)
+    @pc.on("iceconnectionstatechange")
+    async def _():
+        if pc.iceConnectionState in ("failed", "closed", "disconnected"):
+            await pc.close()
+            room.viewers.discard(pc)
+
+    # ★ copy publisher’s video track ★
+    for receiver in streamer.getReceivers():       #  ←  fixed
+        if receiver.track.kind == "video":
+            pc.addTrack(relay.subscribe(receiver.track))
 
     await pc.setRemoteDescription(RTCSessionDescription(**body.model_dump()))
     answer = await pc.createAnswer()

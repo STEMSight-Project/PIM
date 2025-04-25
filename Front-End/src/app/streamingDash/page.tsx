@@ -34,9 +34,9 @@ async function negotiateViewer(roomId: string, pc: RTCPeerConnection) {
   );
 
   if (!res.ok) throw new Error(await res.text());
-
-  const answer = await res.json();
-  await pc.setRemoteDescription(answer);
+  console.log("SDP sent to server", pc.localDescription);
+  const answerJson = await res.json();
+  await pc.setRemoteDescription(new RTCSessionDescription(answerJson));
 }
 /* ──────────────────────────────────────────────────────────────────────── */
 
@@ -84,7 +84,6 @@ function Page() {
     return () => clearInterval(timer);
   }, []);
 
-  /* WebRTC viewer setup -------------------------------------------------- */
   useEffect(() => {
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -92,6 +91,7 @@ function Page() {
     pcRef.current = pc;
 
     pc.ontrack = (ev) => {
+      console.log("ontrack", ev);
       if (ev.track.kind === "video" && videoRef.current) {
         videoRef.current.srcObject = ev.streams[0];
       }
@@ -102,7 +102,6 @@ function Page() {
     return () => pc.close();
   }, [patientId]);
 
-  /* fullscreen ----------------------------------------------------------- */
   const containerRef = useRef<HTMLDivElement>(null);
   const toggleFS = () => {
     const el = containerRef.current;
@@ -131,7 +130,7 @@ function Page() {
             className="w-full h-full bg-black"
             autoPlay
             playsInline
-            controls
+            muted
           />
 
           <button
