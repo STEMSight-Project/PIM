@@ -1,155 +1,141 @@
 "use client";
-import React, { useState, useEffect, useRef, Suspense } from "react";
+import React, { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Maximize2 } from "lucide-react"; // Fullscreen icon
-import Header from "@/components/Header"; // Header component
-import Footer from "@/components/Footer"; // Footer component
+import { Maximize2 } from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+
+async function negotiateViewer(roomId: string, pc: RTCPeerConnection) {
+  // ❶ Create recv-only transceiver so the SDP has "m=video recvonly"
+  pc.addTransceiver("video", { direction: "recvonly" });
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  // wait for ICE (single, non-trickle)
+  await new Promise<void>((r) => {
+    if (pc.iceGatheringState === "complete") return r();
+    const check = () =>
+      pc.iceGatheringState === "complete" &&
+      (pc.removeEventListener("icegatheringstatechange", check), r());
+    pc.addEventListener("icegatheringstatechange", check);
+  });
+
+  const res = await fetch(
+    `http://127.0.0.1:8000/streaming/rooms/test_patient/viewer`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sdp: pc.localDescription!.sdp,
+        type: pc.localDescription!.type,
+      }),
+    }
+  );
+
+  if (!res.ok) throw new Error(await res.text());
+
+  const answer = await res.json();
+  await pc.setRemoteDescription(answer);
+}
+/* ──────────────────────────────────────────────────────────────────────── */
 
 function Page() {
-  const searchParams = useSearchParams();
-  const patientId = searchParams.get("patientId");
+  const params = useSearchParams();
+  const patientId = params.get("patientId") ?? "test_patient";
 
   const [patient, setPatient] = useState<{
     first_name: string;
     last_name: string;
   } | null>(null);
-  const [fullLogHistory, setFullLogHistory] = useState<string[]>([]);
-  const [visibleLogsCount, setVisibleLogsCount] = useState(10);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [show, setShow] = useState(10);
 
-  const videoContainerRef = useRef<HTMLDivElement>(null);
-  // Use a canvas to draw JPEG frames
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
 
-  // Fetch patient details by ID
+  /* fetch patient once --------------------------------------------------- */
   useEffect(() => {
-    if (patientId) {
-      fetch(`http://127.0.0.1:8000/patients/${patientId}`)
-        .then((response) => {
-          if (!response.ok) throw new Error("Failed to fetch patient data");
-          return response.json();
-        })
-        .then((data) => setPatient(data))
-        .catch((error) => console.error("Error fetching patient data:", error));
-    }
+    fetch(`http://127.0.0.1:8000/patients/${patientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setPatient)
+      .catch(() => {});
   }, [patientId]);
 
-  // Function to generate random detection logs
-  const generateRandomLog = () => {
-    const events = [
-      "Myoclonus detected",
-      "Figure of four detected",
-      "Fencer posture detected",
-      "Decorticate posture detected",
-      "Decerebrate posture detected",
-      "Hemichorea detected",
-      "Tremor detected",
-      "Ballistic movements",
-      "Versive head posture",
-    ];
-    const randomEvent = events[Math.floor(Math.random() * events.length)];
-    const timestamp = new Date().toLocaleTimeString();
-    return `🟡 ${timestamp} - ${randomEvent}`;
-  };
-
-  // Simulate adding logs every 5 seconds
+  /* generate fake detection logs ---------------------------------------- */
   useEffect(() => {
-    const interval = setInterval(() => {
-      const newLog = generateRandomLog();
-      setFullLogHistory((prev) => [newLog, ...prev]);
-    }, 5000);
-
-    return () => clearInterval(interval);
+    const timer = setInterval(() => {
+      const events = [
+        "Myoclonus",
+        "Figure of four",
+        "Fencer posture",
+        "Decorticate posture",
+        "Decerebrate posture",
+        "Hemichorea",
+        "Tremor",
+        "Ballistic movements",
+        "Versive head posture",
+      ];
+      const entry = `🟡 ${new Date().toLocaleTimeString()} – ${
+        events[(Math.random() * events.length) >> 0]
+      }`;
+      setLogs((prev) => [entry, ...prev]);
+    }, 5_000);
+    return () => clearInterval(timer);
   }, []);
 
-  // Setup the WebSocket for streaming JPEG frames and draw them on a canvas
+  /* WebRTC viewer setup -------------------------------------------------- */
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+    pcRef.current = pc;
 
-    const ws = new WebSocket(
-      "ws://127.0.0.1:8000/video-streaming/watch/test_patient"
-    );
-    ws.binaryType = "arraybuffer";
-
-    ws.onopen = () => {
-      console.log("WebSocket connection opened for streaming.");
-    };
-
-    ws.onmessage = (event) => {
-      // Create a Blob from the received ArrayBuffer with image/jpeg type
-      const blob = new Blob([event.data], { type: "image/jpeg" });
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
-
-      img.onload = () => {
-        // Clear the canvas and draw the new frame
-        context.clearRect(0, 0, canvas.width, canvas.height);
-        context.drawImage(img, 0, 0, canvas.width, canvas.height);
-        // Release the object URL after image has loaded
-        URL.revokeObjectURL(url);
-      };
-      img.src = url;
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket error in streaming:", error);
-    };
-
-    ws.onclose = () => {
-      console.log("WebSocket connection closed for streaming.");
-    };
-
-    return () => {
-      ws.close();
-    };
-  }, []);
-
-  const visibleLogs = fullLogHistory.slice(0, visibleLogsCount);
-
-  // Fullscreen toggle function
-  const toggleFullscreen = () => {
-    if (videoContainerRef.current) {
-      if (!document.fullscreenElement) {
-        videoContainerRef.current
-          .requestFullscreen()
-          .catch((err) =>
-            console.error(
-              `Error attempting to enable fullscreen mode: ${err.message}`
-            )
-          );
-      } else {
-        document
-          .exitFullscreen()
-          .catch((err) =>
-            console.error(
-              `Error attempting to exit fullscreen mode: ${err.message}`
-            )
-          );
+    pc.ontrack = (ev) => {
+      if (ev.track.kind === "video" && videoRef.current) {
+        videoRef.current.srcObject = ev.streams[0];
       }
-    }
+    };
+
+    negotiateViewer(patientId, pc).catch(console.error);
+
+    return () => pc.close();
+  }, [patientId]);
+
+  /* fullscreen ----------------------------------------------------------- */
+  const containerRef = useRef<HTMLDivElement>(null);
+  const toggleFS = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    document.fullscreenElement
+      ? document.exitFullscreen()
+      : el.requestFullscreen();
   };
 
   return (
     <div className="flex flex-col min-h-screen bg-black">
       <Header patientId={null} />
 
-      <div className="flex flex-col items-center justify-center flex-grow">
-        <p className="text-lg text-gray-300 mb-4">
-          Viewing live stream for Patient:{" "}
-          {patient
-            ? `${patient.first_name} ${patient.last_name}`
-            : "Loading..."}
+      <div className="flex flex-col items-center flex-grow">
+        <p className="text-lg text-gray-300 my-4">
+          Viewing live stream for&nbsp;
+          {patient ? `${patient.first_name} ${patient.last_name}` : patientId}
         </p>
 
         <div
-          ref={videoContainerRef}
+          ref={containerRef}
           className="relative w-full max-w-5xl aspect-video border-4 border-gray-700 rounded-lg overflow-hidden"
         >
-          <canvas ref={canvasRef} className="w-full h-full" />
+          <video
+            ref={videoRef}
+            className="w-full h-full bg-black"
+            autoPlay
+            playsInline
+            controls
+          />
+
           <button
-            onClick={toggleFullscreen}
+            onClick={toggleFS}
             className="absolute top-2 right-2 bg-gray-800 text-white p-2 rounded-md hover:bg-gray-700"
           >
             <Maximize2 className="w-5 h-5" />
@@ -158,16 +144,16 @@ function Page() {
           <div className="absolute bottom-0 w-full backdrop-blur-md text-white p-4 text-sm max-h-48 overflow-y-auto">
             <h2 className="text-lg font-semibold">Detection Logs</h2>
             <ul className="text-xs">
-              {visibleLogs.map((log, index) => (
-                <li key={index}>{log}</li>
+              {logs.slice(0, show).map((l, i) => (
+                <li key={i}>{l}</li>
               ))}
             </ul>
-            {visibleLogsCount < fullLogHistory.length && (
+            {show < logs.length && (
               <button
-                onClick={() => setVisibleLogsCount((prev) => prev + 10)}
-                className="mt-2 text-blue-400 hover:underline"
+                onClick={() => setShow(show + 10)}
+                className="mt-1 text-blue-400 hover:underline"
               >
-                Load More
+                Load more
               </button>
             )}
           </div>
@@ -181,7 +167,7 @@ function Page() {
 
 export default function StreamingDash() {
   return (
-    <Suspense>
+    <Suspense fallback={null}>
       <Page />
     </Suspense>
   );

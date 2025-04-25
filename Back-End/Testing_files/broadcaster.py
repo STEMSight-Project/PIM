@@ -72,7 +72,7 @@ async def publish(room_id: str, base_url: str, device: Optional[str]) -> None:
             options={
                 "video_size": "1280x720",    # pick a mode your Brio supports
                 "framerate": "30",
-                "vcodec":     "mjpeg",
+                "vcodec": "mjpeg",
             }
         )
     else:

@@ -71,7 +71,7 @@ export default function App() {
       <div className="bg-white px-8 py-8 rounded-2xl">
         <form onSubmit={handleLogin} className="flex-row space-y-10">
           <div className="flex w-full h-full justify-center">
-            <Image src="/STEMSight-Logo.png" alt="Logo" className="w-3xs" />
+            <img src="/STEMSight-Logo.png" alt="Logo" className="w-3xs" />
           </div>
           <p className="font-bold font-serif px-16 text-2xl text-black">
             Enter your login credentials

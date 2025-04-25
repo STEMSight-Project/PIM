@@ -3,7 +3,7 @@ import asyncio
 from typing import Literal, Optional
 from aiortc import RTCPeerConnection, RTCSessionDescription
 
-from fastapi import APIRouter, HTTPException, Response as HTTPResponse
+from fastapi import APIRouter, HTTPException, Response
 
 from common import logger
 from pydantic import BaseModel
