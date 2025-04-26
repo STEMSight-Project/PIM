@@ -2,10 +2,11 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 from common import supabase
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from common import logger
+from security.jwt_verify import current_user
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(current_user)])
 
 class Video(BaseModel):
     id: str

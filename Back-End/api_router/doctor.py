@@ -1,12 +1,12 @@
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from typing import Optional
 from common import supabase
 from pydantic import BaseModel
 from enum import Enum
 from common import logger
+from security.jwt_verify import current_user
 
-
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(current_user)])
 
 @router.get('/')
 def get_doctors(request: Request, response: Response):

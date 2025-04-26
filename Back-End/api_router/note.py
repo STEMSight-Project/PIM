@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from common import supabase, logger
+from security.jwt_verify import current_user
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(current_user)])
 
 class NoteBase(BaseModel):
     content: str

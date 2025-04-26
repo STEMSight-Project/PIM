@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Response, Request  # Add Request here
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from common import supabase
 
@@ -12,7 +12,7 @@ class LoginRequest(BaseModel):
 COOKIE_SETTINGS = dict(httponly=True, secure=True, samesite="None")
 
 @router.post("/login")
-def login(body: LoginRequest, response: Response):
+def login(body: LoginRequest, request: Request, response: Response):
     try:
         auth = supabase.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}
@@ -21,6 +21,7 @@ def login(body: LoginRequest, response: Response):
         raise HTTPException(401, "Bad credentials")
 
     session = auth.session
+    
     response.set_cookie(
         "sb-access-token", session.access_token,
         max_age=session.expires_in, **COOKIE_SETTINGS
