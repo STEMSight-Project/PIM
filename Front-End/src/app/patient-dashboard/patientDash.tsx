@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Header from "@/components/Header"; // Import the Header component
 import Footer from "@/components/Footer";
+import { api } from "@/services/api";
 type Patient = {
   id: string; // UUID from Supabase
   first_name: string;
@@ -16,16 +17,15 @@ export default function PatientDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch patient data from the backend
-    fetch("http://127.0.0.1:8000/patients/")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to fetch patients");
+    api
+      .get<[Patient]>("/patients/")
+      .then((res) => {
+        const data = res.data;
+        if (!data) {
+          console.error("No data received from API");
+          setLoading(false);
+          return;
         }
-        return response.json();
-      })
-      .then((data) => {
-        // Assign a station number to all patients and simulate live status
         const updatedPatients = data.map((patient: Patient) => {
           const isLive = Math.random() < 0.1; // Randomly set isLive to true for ~10% of patients
           return {

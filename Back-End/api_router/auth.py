@@ -9,7 +9,7 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
-COOKIE_SETTINGS = dict(httponly=True, secure=True, samesite="lax")
+COOKIE_SETTINGS = dict(httponly=True, secure=True, samesite="None")
 
 @router.post("/login")
 def login(body: LoginRequest, response: Response):
@@ -20,7 +20,6 @@ def login(body: LoginRequest, response: Response):
     except Exception as e:
         raise HTTPException(401, "Bad credentials")
 
-    print(auth.session)
     session = auth.session
     response.set_cookie(
         "sb-access-token", session.access_token,
@@ -36,36 +35,18 @@ def login(body: LoginRequest, response: Response):
         "user": auth.user
     }
 
-def check_auth(request: Request, response: Response) -> bool:
+
+
+@router.get("/me")
+def me(request: Request, response: Response):
     access_token = request.cookies.get("sb-access-token")
-    if not access_token:
-        raise HTTPException(401, "Unauthorized")
     try:
         user = supabase.auth.get_user(access_token)
         if not user:
-            refresh(request, response)
+            raise HTTPException(401, "Unauthorized")
     except Exception as e:
         raise HTTPException(401, "Unauthorized")
-    return True
-
-def refresh(request: Request, response: Response):
-    rt = request.cookies.get("sb-refresh-token")
-    if not rt:
-        raise HTTPException(401)
-    try:
-        new = supabase.auth.refresh_session(rt)
-        session = new.session
-        response.set_cookie(
-            "sb-access-token", session.access_token,
-            max_age=session.expires_in, **COOKIE_SETTINGS
-        )
-        response.set_cookie(
-            "sb-refresh-token", session.refresh_token,
-            max_age=60*60*24*30, # 1 month for refresh token
-            path="/auth/refresh", **COOKIE_SETTINGS
-        )
-    except Exception as e:
-        raise HTTPException(401, "Unauthorized")
+    return user
 
 @router.post("/logout")
 def logout(response: Response):
