@@ -1,0 +1,6 @@
+green_check_mark = "✅"
+red_cross = "❌"
+blue_circle = "🔵"
+yellow_circle = "🟡"
+red_circle = "🔴"
+blue_square = "🟦"

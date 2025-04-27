@@ -4,7 +4,6 @@ from typing import Optional
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 from fastapi import APIRouter, HTTPException, Depends
-
 from common import logger
 from pydantic import BaseModel
 from security.jwt_verify import current_user

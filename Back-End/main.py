@@ -13,7 +13,7 @@ origins = [
     "http://127.0.0.1:8000",
     "http://127.0.0.1:3000",   # React / Next dev server
     "http://localhost:3000",   # add both forms so you can't miss
-    "https://main.d3nf33ntk31bcv.amplifyapp.com",
+    "https://main.d3nf33ntk31bcv.amplifyapp.com"
     # "https://app.example.com",   # your production URL goes here
 ]
 

@@ -13,18 +13,57 @@ const url = (endpoint: string) =>
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+async function refreshAccessToken() {
+  const refreshToken = localStorage.getItem("refresh_token");
+  if (!refreshToken) throw new Error("Missing refresh token");
+
+  const res = await fetch(url("/auth/refresh"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+
+  if (!res.ok) throw new Error("Failed to refresh token");
+
+  const result = await res.json();
+
+  localStorage.setItem("access_token", result.access_token);
+  if (result.refresh_token) {
+    localStorage.setItem("refresh_token", result.refresh_token);
+  }
+
+  return result.access_token;
+}
+
 async function request<T>(
   endpoint: string,
   method: HttpMethod,
-  body?: unknown
+  body?: unknown,
+  retry = true // Allow one retry after refreshing
 ): Promise<ApiResponse<T>> {
   try {
+    const headers = new Headers();
+    if (body) headers.append("Content-Type", "application/json");
+    headers.append("Accept", "application/json");
+
+    const token = localStorage.getItem("access_token");
+    if (token) headers.append("Authorization", `Bearer ${token}`);
+
     const res = await fetch(url(endpoint), {
       method,
       credentials: "include",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      headers: headers,
       body: body ? JSON.stringify(body) : undefined,
     });
+
+    if (res.status === 401 && retry) {
+      const data = await res.json();
+      await refreshAccessToken();
+      return request<T>(endpoint, method, body, false);
+    }
 
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 

@@ -5,6 +5,7 @@ class Env(BaseSettings):
     SUPABASE_STORAGE_URL: str
     SUPABASE_KEY: str
     SUPABASE_PATIENT_VIDEO_BUCKET: str
+    JWT_SECRET: str
     REDIRECT_PASSWORD_URL: str
     NEXT_PUBLIC_API_URL: str
 

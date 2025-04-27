@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Maximize2 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { api } from "@/services/api";
 
 async function negotiateViewer(roomId: string, pc: RTCPeerConnection) {
   // ❶ Create recv-only transceiver so the SDP has "m=video recvonly"
@@ -21,24 +22,24 @@ async function negotiateViewer(roomId: string, pc: RTCPeerConnection) {
     pc.addEventListener("icegatheringstatechange", check);
   });
 
-  const res = await fetch(
-    `http://127.0.0.1:8000/streaming/rooms/test_patient/viewer`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sdp: pc.localDescription!.sdp,
-        type: pc.localDescription!.type,
-      }),
-    }
-  );
-
-  if (!res.ok) throw new Error(await res.text());
-  console.log("SDP sent to server", pc.localDescription);
-  const answerJson = await res.json();
-  await pc.setRemoteDescription(new RTCSessionDescription(answerJson));
+  await api
+    .post(`http://127.0.0.1:8000/streaming/rooms/test_patient/viewer`, {
+      sdp: pc.localDescription!.sdp,
+      type: pc.localDescription!.type,
+    })
+    .then(async (res) => {
+      if (res.error) throw new Error(res.error);
+      console.log("SDP sent to server", pc.localDescription);
+      const answerJson = res.data as RTCSessionDescriptionInit;
+      await pc.setRemoteDescription(new RTCSessionDescription(answerJson));
+    });
 }
 /* ──────────────────────────────────────────────────────────────────────── */
+
+type PatientName = {
+  first_name: string;
+  last_name: string;
+};
 
 function Page() {
   const params = useSearchParams();
@@ -56,8 +57,18 @@ function Page() {
 
   /* fetch patient once --------------------------------------------------- */
   useEffect(() => {
-    fetch(`http://127.0.0.1:8000/patients/${patientId}`)
-      .then((r) => (r.ok ? r.json() : null))
+    api
+      .get<PatientName>(`http://127.0.0.1:8000/patients/${patientId}`)
+      .then((r) => {
+        if (r.error) throw new Error(r.error);
+        const data = r.data;
+        if (!data) {
+          console.error("No data received from API");
+          return null;
+        }
+        console.log("Patient data:", data);
+        return data;
+      })
       .then(setPatient)
       .catch(() => {});
   }, [patientId]);

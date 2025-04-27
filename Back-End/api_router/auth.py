@@ -9,10 +9,10 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
-COOKIE_SETTINGS = dict(httponly=True, secure=True, samesite="None")
-
 @router.post("/login")
-def login(body: LoginRequest, request: Request, response: Response):
+def login(body: LoginRequest):
+    supabase.auth._auto_refresh_token = True
+
     try:
         auth = supabase.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}
@@ -20,26 +20,16 @@ def login(body: LoginRequest, request: Request, response: Response):
     except Exception as e:
         raise HTTPException(401, "Bad credentials")
 
-    session = auth.session
-    
-    response.set_cookie(
-        "sb-access-token", session.access_token,
-        max_age=session.expires_in, **COOKIE_SETTINGS
-    )
-    response.set_cookie(
-        "sb-refresh-token", session.refresh_token,
-        max_age=60*60*24*30,  # 30 days
-        path="/auth/refresh", **COOKIE_SETTINGS
-    )
     return {
         "access_token": auth.session.access_token,
+        "refresh_token": auth.session.refresh_token,
         "user": auth.user
     }
 
 
 
 @router.get("/me")
-def me(request: Request, response: Response):
+def me(request: Request):
     access_token = request.cookies.get("sb-access-token")
     try:
         user = supabase.auth.get_user(access_token)
@@ -54,3 +44,21 @@ def logout(response: Response):
     response.delete_cookie("sb-access-token", path="/")
     response.delete_cookie("sb-refresh-token", path="/auth/refresh")
     return {"logged_out": True}
+
+class TokenRefreshRequest(BaseModel):
+    refresh_token: str
+
+@router.post("/refresh")
+def refresh(body: TokenRefreshRequest) -> dict:
+    try:
+        auth = supabase.auth.refresh_session(body.refresh_token)
+        session = auth.session
+        access_token = session.access_token
+        refresh_token = session.refresh_token
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        }
+    except Exception:
+        raise HTTPException(status_code=401, detail="Session expired")
+    

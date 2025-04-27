@@ -44,6 +44,7 @@ export default function App() {
           }
           console.log("Login successful:", data);
           localStorage.setItem("access_token", data.access_token);
+          localStorage.setItem("refresh_token", data.refresh_token);
           router.push("/patient-dashboard");
         })
         .catch((error) => {
