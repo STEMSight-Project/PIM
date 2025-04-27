@@ -1,13 +1,11 @@
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
-from supabase_settings.supabase_client import get_supabase_client
-from common import logger
+from common import logger, supabase
+from security.jwt_verify import current_user
 
-supabase = get_supabase_client()
-
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(current_user)])
 
 class MedicalHistoryBase(BaseModel):
     patient_id: str

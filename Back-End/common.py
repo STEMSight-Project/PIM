@@ -1,5 +1,5 @@
 import logging
-from supabase_settings.supabase_client import get_supabase_client
+from supabase_settings.create_client import SUPABASE
 
 logger = logging.getLogger("uvicorn.error")
-supabase = get_supabase_client()
+supabase = SUPABASE

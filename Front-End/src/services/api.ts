@@ -1,67 +1,45 @@
 // services/api.ts
-const BASE_URL = "http://127.0.0.1:8000";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
-export interface ApiResponse<T> {
+interface ApiResponse<T> {
   data: T | null;
   error: string | null;
 }
 
-export async function fetchData<T>(
-  endpoint: string
-): Promise<ApiResponse<T>> {
-  try {
-    const response = await fetch(`${BASE_URL}${endpoint}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.status}`);
-    }
-    const data = await response.json();
-    return { data, error: null };
-  } catch (error: unknown) {
-    console.error("API error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    return { data: null, error: errorMessage };
-  }
-}
+const url = (endpoint: string) =>
+  /^(http|https):\/\//i.test(endpoint)
+    ? endpoint
+    : `${BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
 
-export async function postData<T>(
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+async function request<T>(
   endpoint: string,
-  data: any
+  method: HttpMethod,
+  body?: unknown
 ): Promise<ApiResponse<T>> {
   try {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
+    const res = await fetch(url(endpoint), {
+      method,
+      credentials: "include",
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
     });
-    if (!response.ok) {
-      throw new Error(`Failed to post: ${response.status}`);
-    }
-    const responseData = await response.json();
-    return { data: responseData, error: null };
-  } catch (error: unknown) {
-    console.error("API error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    return { data: null, error: errorMessage };
+
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+    return { data: (await res.json()) as T, error: null };
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : "Unknown network error";
+    console.error("API error:", errMsg);
+    return { data: null, error: errMsg };
   }
 }
 
-export async function deleteData<T>(
-    endpoint: string
-  ): Promise<ApiResponse<T>> {
-    try {
-      const response = await fetch(`${BASE_URL}${endpoint}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to delete: ${response.status}`);
-      }
-      const responseData = await response.json();
-      return { data: responseData, error: null };
-    } catch (error: unknown) {
-      console.error("API error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-      return { data: null, error: errorMessage };
-    }
-  }
+export const api = {
+  get: <T>(e: string) => request<T>(e, "GET"),
+  post: <T>(e: string, b: unknown) => request<T>(e, "POST", b),
+  put: <T>(e: string, b: unknown) => request<T>(e, "PUT", b),
+  patch: <T>(e: string, b: unknown) => request<T>(e, "PATCH", b),
+  delete: <T>(e: string) => request<T>(e, "DELETE"),
+};

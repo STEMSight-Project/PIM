@@ -3,10 +3,12 @@ import asyncio
 from typing import Optional
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Depends
 
 from common import logger
 from pydantic import BaseModel
+from security.jwt_verify import current_user
+
 
 class Room:
     def __init__(self, room_id: str):
@@ -72,7 +74,7 @@ async def publish_streamer(patient_id: str, body: SDPBody):
     await pc.setLocalDescription(answer)
     return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
 
-@router.post("/rooms/{patient_id}/viewer")
+@router.post("/rooms/{patient_id}/viewer", dependencies=[Depends(current_user)])
 async def publish_viewer(patient_id: str, body: SDPBody):
     if patient_id not in rooms:
         return HTTPException(404, "Room not found")

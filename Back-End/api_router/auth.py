@@ -1,38 +1,56 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, EmailStr
-from supabase_settings.supabase_client import get_supabase_client
+from fastapi import APIRouter, HTTPException, Response, Request  # Add Request here
+from pydantic import BaseModel
+
+from common import supabase
 
 router = APIRouter()
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
-supabase = get_supabase_client()
-
-@router.get("/")
-def read_root():
-    return {"message": "Hello World"}
+COOKIE_SETTINGS = dict(httponly=True, secure=True, samesite="None")
 
 @router.post("/login")
-def login(request: LoginRequest):
+def login(body: LoginRequest, request: Request, response: Response):
     try:
-
-        response = supabase.auth.sign_in_with_password(
-            {"email": request.email, "password": request.password}
-        )
-        # Some Supabase versions might raise an exception if login fails,
-        # so it’s good practice to wrap this in try/except.
-
-        if not response.session:
-            # If session is None, the login was invalid.
-            raise HTTPException(status_code=401, detail="Invalid credentials.")
-
-        # If you got here, you have a valid session and user
-        return {
-            "access_token": response.session.access_token,
-            "user": response.user
-        }
-
+        auth = supabase.auth.sign_in_with_password(
+            {"email": body.email, "password": body.password}
+        )   
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+        raise HTTPException(401, "Bad credentials")
+
+    session = auth.session
+    
+    response.set_cookie(
+        "sb-access-token", session.access_token,
+        max_age=session.expires_in, **COOKIE_SETTINGS
+    )
+    response.set_cookie(
+        "sb-refresh-token", session.refresh_token,
+        max_age=60*60*24*30,  # 30 days
+        path="/auth/refresh", **COOKIE_SETTINGS
+    )
+    return {
+        "access_token": auth.session.access_token,
+        "user": auth.user
+    }
+
+
+
+@router.get("/me")
+def me(request: Request, response: Response):
+    access_token = request.cookies.get("sb-access-token")
+    try:
+        user = supabase.auth.get_user(access_token)
+        if not user:
+            raise HTTPException(401, "Unauthorized")
+    except Exception as e:
+        raise HTTPException(401, "Unauthorized")
+    return user
+
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie("sb-access-token", path="/")
+    response.delete_cookie("sb-refresh-token", path="/auth/refresh")
+    return {"logged_out": True}
