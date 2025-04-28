@@ -3,7 +3,6 @@ import asyncio
 import inspect
 import logging
 import platform
-import shlex
 from typing import Optional
 
 import aiohttp
@@ -15,54 +14,57 @@ logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("publisher")
 
 
-# ---------------------------------------------------------------------
-#  Helper: pick a sensible default capture device per OS
-# ---------------------------------------------------------------------
 def default_device() -> str:
     os_name = platform.system()
+    print(f"Detected OS: {os_name}")
     if os_name == "Windows":
         return "video=Logitech BRIO"
-    elif os_name == "Darwin":            # macOS (AVFoundation)
-        # Uses first video device.  Change index if you have multiples.
-        return "default:none"
-    else:                                # Linux / *BSD
+    elif os_name == "Darwin":  # macOS
+        return "0:none"  # First camera, no audio
+    else:  # Linux / *BSD
         return "/dev/video0"
 
+
 def safe_close_player(player: MediaPlayer):
-    """
-    Works whether MediaPlayer.stop() exists or not.
-    """
     if hasattr(player, "stop") and inspect.iscoroutinefunction(player.stop):
-        # modern aiortc ≥ 1.5
-        return player.stop()                  # caller should await this
+        return player.stop()
     else:
-        # older aiortc – stop the individual tracks
         for track in (player.audio, player.video):
             if track:
-                track.stop()                  # synchronous
-        return None   
+                track.stop()
+        return None
+
 
 async def publish(room_id: str, base_url: str, device: Optional[str]) -> None:
-    print(aiortc.__version__)              # should show 1.5.0 or later
-    print("stop" in dir(aiortc.contrib.media.MediaPlayer))
+    print(f"aiortc version: {aiortc.__version__}")
     media_src = device or default_device()
     LOGGER.info("Opening media source %s", media_src)
-    if platform.system() == "Windows" and media_src.startswith("video="):
-        # strip any wrapping quotes so FFmpeg doesn't get confused
+
+    os_name = platform.system()
+    if os_name == "Windows" and media_src.startswith("video="):
         player = MediaPlayer(
             media_src,
             format="dshow",
             options={
-                "video_size": "1280x720",    # pick a mode your Brio supports
+                "video_size": "1280x720",
                 "framerate": "30",
                 "vcodec": "mjpeg",
-            }
+            },
+        )
+    elif os_name == "Darwin":
+        player = MediaPlayer(
+            media_src,
+            format="avfoundation",
+            options={
+                "video_size": "1280x720",
+                "framerate": "30",
+            },
         )
     else:
         player = MediaPlayer(media_src)
+
     pc = RTCPeerConnection()
 
-    # Add the camera video track as *send-only*
     if player.video:
         pc.addTrack(player.video)
     else:
@@ -72,7 +74,6 @@ async def publish(room_id: str, base_url: str, device: Optional[str]) -> None:
 
     await pc.setLocalDescription(await pc.createOffer())
 
-    # Wait until ICE gathering is complete so we send a single, complete SDP
     while pc.iceGatheringState != "complete":
         await asyncio.sleep(0.1)
 
@@ -100,7 +101,7 @@ async def publish(room_id: str, base_url: str, device: Optional[str]) -> None:
                 answer_json = await resp.json()
 
     await pc.setRemoteDescription(RTCSessionDescription(**answer_json))
-    LOGGER.info("Streaming…  (Ctrl+C to stop)")
+    LOGGER.info("Streaming… (Ctrl+C to stop)")
 
     try:
         while True:
