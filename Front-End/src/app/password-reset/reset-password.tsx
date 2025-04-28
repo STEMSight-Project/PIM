@@ -1,23 +1,43 @@
 "use client";
-import React, { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { change_password } from "@/services/authServices";
+import Modal from "@/components/ModalPopUp/Modal";
 
 export default function ResetPassword() {
   const router = useRouter(); //The useRouter initialized to handle page navigation
-  const searchParams = useSearchParams(); //paramters from teh url are accessed by this
-  const accessToken = searchParams.get("access_token"); //The access token can be accessed by the URL
 
   //The state variables for managing the inputs and messages of this page
+  const [access_token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [popUp, setPopUp] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      const token = params.get("access_token");
+
+      if (token) {
+        setToken(token);
+      }
+      // 🔥 Remove token from URL bar (important!)
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
+  const handleBackToLogin = () => {
+    router.push("/"); //Redirects to login page
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     // Will check to see existence and validity of access token
-    if (!accessToken) {
+    if (!access_token) {
       setError("Missing access token."); //Will rise error for missing token
       return;
     }
@@ -27,41 +47,56 @@ export default function ResetPassword() {
       return;
     }
 
-    try {
-      // will send a request to backend to reset password
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/confirm-password-reset`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            access_token: accessToken, //token is being accessed
-            new_password: password, //The new password is being passed
-          }),
-        }
-      );
-
-      const data = await res.json(); //The response data is parsed
-      if (!res.ok) {
-        setError(data.detail || "Something went wrong."); //If response NOT ok, will set error message
-      }
-      //The form will be reset and show success message below
-      else {
-        setSuccess("Your password has been successfully reset.");
-        setPassword("");
-        setConfirmPassword("");
+    // will send a request to backend to reset password
+    await change_password(access_token, password)
+      .then((res) => {
+        setSuccess(res.message);
         setError("");
-        //Below the router will redirect the page to the main login page after 2 seconds
-        setTimeout(() => router.push("/page"), 2000); // Redirect after 2 seconds
-      }
-    } catch (err) {
-      console.error("Error sending reset request:", err); //Will log error to console if detected
-      setError("Server error. Please try again later."); // Set error message if server error encountered.
-    }
+        setConfirmPassword("");
+        setPopUp(true);
+      })
+      .catch((error) => {
+        setError("Unable to reset your password. Please try again!");
+        console.log(error);
+      });
+    //The form will be reset and show success message below
   };
 
   return (
     <div className="flex items-center justify-center h-screen bg-[linear-gradient(355.45deg,rgba(0,120,255,100%)11.26%,rgba(255,255,255,0)95.74%)]">
+      <Modal hidden={!popUp}>
+        <div className="mx-auto flex size-12 shrink-0 items-center justify-center rounded-full bg-green-100 sm:mx-0 sm:size-10">
+          <svg
+            className="size-6 text-green-600"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth="1.5"
+            stroke="currentColor"
+            aria-hidden="true"
+            data-slot="icon"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4.5 12.75l6 6 9-13.5"
+            />
+          </svg>
+        </div>
+        <div className="mt-3 text-center sm:text-center">
+          <h3
+            className="text-center font-semibold text-green-600"
+            id="modal-title"
+          >
+            {success}Success reset password
+          </h3>
+        </div>
+        <button
+          onClick={handleBackToLogin}
+          className="flex justify-center py-1 px-4 rounded-sm text-sm font-semibold bg-blue-400 hover:bg-blue-400/80"
+        >
+          Back to Login
+        </button>
+      </Modal>
       <div className="bg-white px-8 py-8 rounded-2xl shadow-lg w-full max-w-md">
         <h2 className="font-bold font-serif text-2xl text-black text-center mb-4">
           Reset Your Password
