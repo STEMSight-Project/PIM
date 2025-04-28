@@ -8,30 +8,30 @@ const url = (endpoint: string) =>
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-async function refreshAccessToken() {
-  const refreshToken = localStorage.getItem("refresh_token");
-  if (!refreshToken) throw new Error("Missing refresh token");
+// async function refreshAccessToken() {
+//   const refreshToken = localStorage.getItem("refresh_token");
+//   if (!refreshToken) throw new Error("Missing refresh token");
 
-  const res = await fetch(url("/auth/refresh"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
+//   const res = await fetch(url("/auth/refresh"), {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//       Accept: "application/json",
+//     },
+//     body: JSON.stringify({ refresh_token: refreshToken }),
+//   });
 
-  if (!res.ok) throw new Error("Failed to refresh token");
+//   if (!res.ok) throw new Error("Failed to refresh token");
 
-  const result = await res.json();
+//   const result = await res.json();
 
-  localStorage.setItem("access_token", result.access_token);
-  if (result.refresh_token) {
-    localStorage.setItem("refresh_token", result.refresh_token);
-  }
+//   localStorage.setItem("access_token", result.access_token);
+//   if (result.refresh_token) {
+//     localStorage.setItem("refresh_token", result.refresh_token);
+//   }
 
-  return result.access_token;
-}
+//   return result.access_token;
+// }
 
 async function request<T>(
   endpoint: string,
@@ -44,8 +44,8 @@ async function request<T>(
     if (body) headers.append("Content-Type", "application/json");
     headers.append("Accept", "application/json");
 
-    const token = localStorage.getItem("access_token");
-    if (token) headers.append("Authorization", `Bearer ${token}`);
+    // const token = localStorage.getItem("access_token");
+    // if (token) headers.append("Authorization", `Bearer ${token}`);
 
     const res = await fetch(url(endpoint), {
       method,
@@ -55,13 +55,17 @@ async function request<T>(
     });
 
     if (res.status === 401 && retry) {
-      await refreshAccessToken();
+      // await refreshAccessToken();
       return request<T>(endpoint, method, body, false);
     }
 
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-
-    return (await res.json()) as T;
+    const data = await res.json();
+    if (data["refresh_token"]) {
+      localStorage.setItem("refresh_token", data["refresh_token"]);
+      // maintaining the access token in local storage is not recommended for security reasons
+    }
+    return data as T;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : "Unknown network error";
     console.error("API error:", errMsg);

@@ -30,15 +30,14 @@ export default function App() {
     }
 
     await login(username, password)
-      .then((res) => {
+      .then(async (res) => {
         if (!res) {
           console.error("No data received from API");
           setError("Login failed. Please try again.");
           return null;
         }
         console.log("Login successful:", res);
-        localStorage.setItem("access_token", res.access_token);
-        localStorage.setItem("refresh_token", res.refresh_token);
+
         router.push("/patient-dashboard");
       })
       .catch((error) => {

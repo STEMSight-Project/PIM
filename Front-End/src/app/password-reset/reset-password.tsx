@@ -18,11 +18,13 @@ export default function ResetPassword() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const hash = window.location.hash.substring(1);
+      console.log(hash); //Logs the hash to the console for debugging purposes
       const params = new URLSearchParams(hash);
       const token = params.get("access_token");
 
       if (token) {
         setToken(token);
+        console.log(token); //Logs the token to the console for debugging purposes
       }
       // 🔥 Remove token from URL bar (important!)
       window.history.replaceState(null, "", window.location.pathname);
@@ -30,6 +32,7 @@ export default function ResetPassword() {
   }, []);
 
   const handleBackToLogin = () => {
+    setPopUp(false); //Closes the pop up
     router.push("/"); //Redirects to login page
   };
 
@@ -57,7 +60,7 @@ export default function ResetPassword() {
       })
       .catch((error) => {
         setError("Unable to reset your password. Please try again!");
-        console.log(error);
+        console.log(error, error.response.data);
       });
     //The form will be reset and show success message below
   };

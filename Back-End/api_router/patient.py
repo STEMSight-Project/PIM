@@ -31,7 +31,7 @@ def getAllPatients():
         return result.data
     except Exception as exc:
         logger.exception("Unhandled exception occurred: %s", exc)
-        raise HTTPException(status_code=500, detail= exc)
+        raise HTTPException(status_code=401, detail= exc)
 
 @router.get("/{patient_id}", response_model = Patient, summary = "Get patient by id")
 def getpatient(patient_id: str):

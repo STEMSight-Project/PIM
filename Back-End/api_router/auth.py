@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Response, Request  # Add Request here
 from pydantic import BaseModel
+from common import admin_supabase
 from env import ENVIRONMENT as ENV
+from security.jwt_verify import setAccessToken, setRefreshToken
 
 from common import supabase
 
@@ -11,7 +13,7 @@ class LoginRequest(BaseModel):
     password: str
 
 @router.post("/login")
-def login(body: LoginRequest):
+def login(body: LoginRequest, response: Response) -> dict:
     supabase.auth._auto_refresh_token = True
 
     try:
@@ -20,7 +22,10 @@ def login(body: LoginRequest):
         )   
     except Exception as e:
         raise HTTPException(401, "Bad credentials")
-
+    access_token = auth.session.access_token
+    refresh_token = auth.session.refresh_token
+    setAccessToken(response, access_token)
+    setRefreshToken(response, refresh_token)
     return {
         "access_token": auth.session.access_token,
         "refresh_token": auth.session.refresh_token,
@@ -73,7 +78,7 @@ async def request_password_reset(data: ResetRequest):
     try:
         supabase.auth.reset_password_email(
             data.email, {
-                "redirect_to": "https://main.d3nf33ntk31bcv.amplifyapp.com/password-reset",
+                "redirect_to": "https://localhost:3000/password-reset",
             }
         )
         return {"message": "Password reset email sent"}
@@ -86,15 +91,18 @@ class ConfirmResetRequest(BaseModel):
 
 
 @router.post("/confirm-password-reset")
-async def confirm_password_reset(data: ConfirmResetRequest):
+def confirm_password_reset(data: ConfirmResetRequest):
     try:
         #Supabase will update user PW using the provided access token
-        user = supabase.auth.update_user(
-            access_token=data.access_token,
-            attributes={"password": data.new_password}
+        res = admin_supabase.auth.get_user(data.access_token)
+        admin_supabase.auth.admin
+        print(f"[BOGUS]: {res.user}")
+        admin_supabase.auth.admin.update_user_by_id(
+            res.user.id, {"password": data.new_password}
         )
 
         return {"message": "Password reset successfully"}
     except Exception as e:
         #Will return HTTP 500 error for any other encountered errors.
+        print(f"[BOGUS]: {e.__dict__}")
         raise HTTPException(500, str(e))
