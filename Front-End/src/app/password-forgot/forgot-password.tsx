@@ -1,11 +1,12 @@
 "use client";
-import React, { useState } from 'react';
-import TextField from "@/components/TextField"; 
+import React, { useState } from "react";
+import TextField from "@/components/TextField";
+import { reset_password_request } from "@/services/authServices";
 
 export default function PatientDashboard() {
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(''); 
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const handleEmailChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(event.currentTarget.value);
@@ -20,33 +21,23 @@ export default function PatientDashboard() {
       return;
     }
 
-
-    try {
-      // Will make POST request to initiate password reset with API
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/request-password-reset`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-
-      // If response is successful, then a success message will be displayed
-      if (response.ok) {
+    reset_password_request(email)
+      .then((res) => {
+        if (!res) {
+          console.error("No data received from API");
+          setError("Request failed. Please try again.");
+          return null;
+        }
+        console.log("Password reset request successful:", res);
         setSuccess("A reset link has been sent to your email address.");
         setError("");
-      }
-      // If action is not successful, then will display error mesage 
-      else {
-        const data = await response.json();
-        setError(data.detail || "Something went wrong.");
+        return res;
+      })
+      .catch((error) => {
+        console.error("Error during password reset request:", error); //Will log errors that occured to console.
+        setError("Unable to send request. Please try again later.");
         setSuccess("");
-      }
-    } 
-    // Will detect any other errors that might occur
-    catch (err) {
-      console.error("Error during password reset request:", err); //Will log errors that occured to console.
-      setError("Unable to send request. Please try again later.");
-      setSuccess("");
-    }
+      });
   };
 
   return (
@@ -54,11 +45,13 @@ export default function PatientDashboard() {
       <div className="bg-white px-8 py-8 rounded-2xl">
         <div className="flex-row space-y-10">
           <h2 className="font-bold font-serif px-16 text-2xl text-black">
-            Forgot Password</h2>
+            Forgot Password
+          </h2>
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700">
-                Email Address</label>
+                Email Address
+              </label>
               <TextField
                 type="email"
                 value={email}
@@ -66,7 +59,8 @@ export default function PatientDashboard() {
               />
             </div>
             {error && <p className="text-red-500">{error}</p>}
-            {success && <p className="text-green-500">{success}</p>} {/* Display success message */}
+            {success && <p className="text-green-500">{success}</p>}{" "}
+            {/* Display success message */}
             <button
               type="submit"
               className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-500"
@@ -79,4 +73,3 @@ export default function PatientDashboard() {
     </div>
   );
 }
-

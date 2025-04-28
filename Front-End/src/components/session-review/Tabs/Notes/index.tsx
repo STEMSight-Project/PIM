@@ -5,19 +5,23 @@ import { MessageSquare } from "lucide-react";
 import NoteForm from "./NoteForm";
 import NotesList from "./NoteList";
 import { NotesProps } from "./types";
-import { createNote, updateNote, deleteNote, Note } from "@/services/noteService";
+import {
+  createNote,
+  updateNote,
+  deleteNote,
+  Note,
+} from "@/services/noteService";
 
 /**
  * For the notes tab, handling note creation via NoteForm and displaying/editing notes in NotesList.
  */
 const Notes: React.FC<NotesProps> = ({
-  sessionId,
   notes,
   setNotes,
   setCurrentTimestamp,
   currentVideoTime,
   patientId,
-  videoId
+  videoId,
 }) => {
   const [newNote, setNewNote] = useState("");
   const [isAdding, setIsAdding] = useState(false);
@@ -26,21 +30,28 @@ const Notes: React.FC<NotesProps> = ({
   const [editContent, setEditContent] = useState("");
 
   const handleUpdateTimestamp = async (noteId: string, newTime: number) => {
-    const response = await updateNote(noteId, { timestamp_seconds: newTime });
-    if (response.data) {
-      setNotes(notes.map(note =>
-        note.id === noteId ? { ...note, timestamp_seconds: newTime } : note
-      ));
-    } else {
-      console.error("Failed to update timestamp:", response.error);
-    }
+    await updateNote(noteId, { timestamp_seconds: newTime })
+      .then((note) => {
+        if (!note) throw new Error("Failed to update note");
+        console.log("Note updated successfully:", note);
+        setNotes(
+          notes.map((n) => {
+            if (n.id === noteId) {
+              return { ...n, timestamp_seconds: newTime };
+            }
+            return note;
+          })
+        );
+      })
+      .catch((error) => {
+        console.error("Error updating note:", error);
+      });
   };
 
   // Add a new note
   const handleAddNote = async () => {
     if (newNote.trim() === "") return;
 
-    const now = new Date();
     const notePayload = {
       content: newNote,
       timestamp_seconds: currentTime,
@@ -49,18 +60,17 @@ const Notes: React.FC<NotesProps> = ({
       patient_id: patientId,
     };
 
-    const res = await createNote(notePayload);
-
-    if (res.data) {
-      setNotes([res.data, ...notes]);
-      setNewNote("");
-      setIsAdding(false);
-      setCurrentTime(undefined);
-    } else {
-      console.error("Failed to create note:", res.error);
-    }
+    await createNote(notePayload).then((note) => {
+      if (note) {
+        setNotes([note, ...notes]);
+        setNewNote("");
+        setIsAdding(false);
+        setCurrentTime(undefined);
+      } else {
+        console.error("Failed to create note");
+      }
+    });
   };
-
 
   // Start editing a note
   const handleEditNote = (note: Note) => {
@@ -71,27 +81,30 @@ const Notes: React.FC<NotesProps> = ({
   const handleSaveEdit = async (id: string) => {
     if (editContent.trim() === "") return;
 
-    const response = await updateNote(id, { content: editContent });
-
-    if (response.data) {
-      setNotes(notes.map(note =>
-        note.id === id ? { ...note, content: editContent } : note
-      ));
-      setEditingNoteId(null);
-      setEditContent("");
-    } else {
-      console.error("Failed to update note:", response.error);
-    }
+    await updateNote(id, { content: editContent }).then((note) => {
+      if (note) {
+        setNotes(
+          notes.map((note) =>
+            note.id === id ? { ...note, content: editContent } : note
+          )
+        );
+        setEditingNoteId(null);
+        setEditContent("");
+      } else {
+        console.error("Failed to update note");
+      }
+    });
   };
 
   // Delete a note
   const handleDeleteNote = async (id: string) => {
-    const response = await deleteNote(id);
-    if (response.data) {
-      setNotes(notes.filter(note => note.id !== id));
-    } else {
-      console.error("Failed to delete note:", response.error);
-    }
+    await deleteNote(id).then((note) => {
+      if (note) {
+        setNotes(notes.filter((note) => note.id !== id));
+      } else {
+        console.error("Failed to delete note");
+      }
+    });
   };
   // Cancel form
   const handleCancelForm = () => {

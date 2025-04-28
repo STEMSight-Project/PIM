@@ -29,19 +29,22 @@ export default function ResetPassword() {
 
     try {
       // will send a request to backend to reset password
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/confirm-password-reset`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          access_token: accessToken, //token is being accessed
-          new_password: password,  //The new password is being passed
-        }),
-      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/confirm-password-reset`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            access_token: accessToken, //token is being accessed
+            new_password: password, //The new password is being passed
+          }),
+        }
+      );
 
       const data = await res.json(); //The response data is parsed
       if (!res.ok) {
         setError(data.detail || "Something went wrong."); //If response NOT ok, will set error message
-      } 
+      }
       //The form will be reset and show success message below
       else {
         setSuccess("Your password has been successfully reset.");
@@ -53,7 +56,7 @@ export default function ResetPassword() {
       }
     } catch (err) {
       console.error("Error sending reset request:", err); //Will log error to console if detected
-      setError("Server error. Please try again later.");  // Set error message if server error encountered.
+      setError("Server error. Please try again later."); // Set error message if server error encountered.
     }
   };
 
@@ -65,7 +68,9 @@ export default function ResetPassword() {
         </h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              New Password
+            </label>
             <input
               type="password"
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-black"
@@ -75,7 +80,9 @@ export default function ResetPassword() {
             />
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Confirm Password
+            </label>
             <input
               type="password"
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-black"

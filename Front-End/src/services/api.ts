@@ -1,11 +1,6 @@
 // services/api.ts
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
-interface ApiResponse<T> {
-  data: T | null;
-  error: string | null;
-}
-
 const url = (endpoint: string) =>
   /^(http|https):\/\//i.test(endpoint)
     ? endpoint
@@ -43,7 +38,7 @@ async function request<T>(
   method: HttpMethod,
   body?: unknown,
   retry = true // Allow one retry after refreshing
-): Promise<ApiResponse<T>> {
+): Promise<T> {
   try {
     const headers = new Headers();
     if (body) headers.append("Content-Type", "application/json");
@@ -60,18 +55,17 @@ async function request<T>(
     });
 
     if (res.status === 401 && retry) {
-      const data = await res.json();
       await refreshAccessToken();
       return request<T>(endpoint, method, body, false);
     }
 
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 
-    return { data: (await res.json()) as T, error: null };
+    return (await res.json()) as T;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : "Unknown network error";
     console.error("API error:", errMsg);
-    return { data: null, error: errMsg };
+    throw new Error(errMsg);
   }
 }
 

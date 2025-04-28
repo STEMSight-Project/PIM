@@ -1,4 +1,4 @@
-import { fetchData, postData } from './api';
+import { api } from "./api";
 
 export interface Patient {
   id: string;
@@ -12,10 +12,10 @@ export interface Patient {
   updated_at: string;
 }
 // get all patients
-export async function getAllPatients() {
-  return fetchData<Patient[]>('/patients/');
+export async function getAllPatients(): Promise<Patient[]> {
+  return await api.get("/patients/");
 }
 // get a patient by id
 export async function getPatient(id: string) {
-  return fetchData<Patient>(`/patients/${id}`);
+  return await api.get<Patient>(`/patients/${id}`);
 }

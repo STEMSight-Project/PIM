@@ -4,7 +4,7 @@ import Image from "next/image";
 import TextField from "@/components/TextField";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/services/api";
+import { login } from "@/services/authServices";
 
 export default function App() {
   const [username, setUsername] = useState("");
@@ -29,49 +29,38 @@ export default function App() {
       return;
     }
 
-    try {
-      const response = await api
-        .post<any>("http://127.0.0.1:8000/auth/login", {
-          email: username,
-          password,
-        })
-        .then((res) => {
-          const data = res.data;
-          if (!data) {
-            console.error("No data received from API");
-            setError("Login failed. Please try again.");
-            return null;
-          }
-          console.log("Login successful:", data);
-          localStorage.setItem("access_token", data.access_token);
-          localStorage.setItem("refresh_token", data.refresh_token);
-          router.push("/patient-dashboard");
-        })
-        .catch((error) => {
-          // 2. If the server returned 401 with “Invalid credentials,” show a clear message
-          if (error.status === 401) {
-            setError(
-              "Invalid credentials. Please check your email or password."
-            );
+    await login(username, password)
+      .then((res) => {
+        if (!res) {
+          console.error("No data received from API");
+          setError("Login failed. Please try again.");
+          return null;
+        }
+        console.log("Login successful:", res);
+        localStorage.setItem("access_token", res.access_token);
+        localStorage.setItem("refresh_token", res.refresh_token);
+        router.push("/patient-dashboard");
+      })
+      .catch((error) => {
+        // 2. If the server returned 401 with “Invalid credentials,” show a clear message
+        if (error.status === 401) {
+          setError("Invalid credentials. Please check your email or password.");
+        } else {
+          // Try to handle the detail array or string
+          if (Array.isArray(error.detail) && error.detail.length > 0) {
+            // Show the first message (or map over them in your UI)
+            setError(error.detail[0].msg);
+            window.alert(error.detail[0].msg); // Alert the first error message
+          } else if (typeof error.detail === "string") {
+            setError(error.detail);
           } else {
-            // Try to handle the detail array or string
-            if (Array.isArray(error.detail) && error.detail.length > 0) {
-              // Show the first message (or map over them in your UI)
-              setError(error.detail[0].msg);
-            } else if (typeof error.detail === "string") {
-              setError(error.detail);
-            } else {
-              setError("Login failed. Please try again.");
-            }
-            console.error("Error:", error);
             setError("Login failed. Please try again.");
-            return null;
           }
-        });
-    } catch (err) {
-      console.error("Error during login:", err);
-      setError("An unexpected error occurred. Please try again.");
-    }
+          console.error("Error:", error);
+          setError("Login failed. Please try again.");
+          return null;
+        }
+      });
   };
 
   return (

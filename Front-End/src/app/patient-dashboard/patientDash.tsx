@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Header from "@/components/Header"; // Import the Header component
 import Footer from "@/components/Footer";
 import { api } from "@/services/api";
+
 type Patient = {
   id: string; // UUID from Supabase
   first_name: string;
@@ -18,15 +19,14 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     api
-      .get<[Patient]>("/patients/")
-      .then((res) => {
-        const data = res.data;
-        if (!data) {
+      .get<Patient[]>("/patients/")
+      .then((patients) => {
+        if (!patients) {
           console.error("No data received from API");
           setLoading(false);
           return;
         }
-        const updatedPatients = data.map((patient: Patient) => {
+        const updatedPatients = patients.map((patient: Patient) => {
           const isLive = Math.random() < 0.1; // Randomly set isLive to true for ~10% of patients
           return {
             ...patient,

@@ -1,4 +1,4 @@
-import { fetchData, postData, ApiResponse } from './api';
+import { api } from "./api";
 
 export interface Video {
   id: string;
@@ -10,11 +10,11 @@ export interface Video {
 }
 
 // get all videos
-export async function getAllVideos(): Promise<ApiResponse<Video[]>> {
-  return fetchData<Video[]>('/videos/');
+export async function getAllVideos(): Promise<Video[]> {
+  return await api.get("/videos/");
 }
 
 // get video using patient id
-export async function getVideosForPatient(patientId: string): Promise<ApiResponse<Video[]>> {
-  return fetchData<Video[]>(`/videos/${patientId}/videos`);
+export async function getVideosForPatient(patientId: string): Promise<Video[]> {
+  return await api.get(`/videos/${patientId}/videos`);
 }

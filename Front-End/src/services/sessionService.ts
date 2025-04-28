@@ -9,8 +9,6 @@ import {
   mapEventToDetection,
 } from "@/components/session-review/utils";
 import {
-  Patient,
-  SessionData,
   Detection,
   SessionWithPatient,
 } from "@/components/session-review/types";
@@ -18,17 +16,17 @@ import {
 export async function fetchStitchedSessions(): Promise<SessionWithPatient[]> {
   const sessions: SessionWithPatient[] = [];
 
-  const patientResp = await getAllPatients();
-  if (!patientResp.data) {
-    console.error("Failed to fetch patients", patientResp.error);
+  const patients = await getAllPatients();
+  if (!patients) {
+    console.error("Failed to fetch patients", patients);
     return [];
   }
 
-  for (const patient of patientResp.data) {
-    const videoResp = await getVideosForPatient(patient.id);
-    const videos = videoResp.data?.sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    ) || [];
+  for (const patient of patients) {
+    const videos = (await getVideosForPatient(patient.id)).sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
 
     if (videos.length === 0) continue;
 
@@ -36,12 +34,12 @@ export async function fetchStitchedSessions(): Promise<SessionWithPatient[]> {
     let latestEventTimestamp = 0;
 
     for (const video of videos) {
-      const eventResp = await getEventsForVideo(video.id);
-      const detections = eventResp.data?.map(mapEventToDetection) || [];
+      const events = await getEventsForVideo(video.id);
+      const detections = events.map(mapEventToDetection) || [];
       allDetections.push(...detections);
 
       const maxEvent = Math.max(
-        ...eventResp.data?.map((e) => Number(e.timestamp)) || [0]
+        ...(events.map((e) => Number(e.timestamp)) || [0])
       );
 
       latestEventTimestamp = Math.max(latestEventTimestamp, maxEvent);

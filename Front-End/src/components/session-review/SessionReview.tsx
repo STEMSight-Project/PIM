@@ -4,18 +4,12 @@ import TabsContainer from "./Tabs/TabsContainer";
 import VideoPlayer from "./VideoPlayer";
 import SessionGallery from "./Gallery";
 import SessionHeader from "./SessionHeader";
-import { getAllVideos } from "@/services/videoService";
-import { getAllPatients } from "@/services/patientService";
 import { fetchStitchedSessions } from "@/services/sessionService";
-import { Note, getNotesForVideo } from "@/services/noteService"; 
-import {
-  Patient,
-  SessionData,
-  SessionWithPatient,
-} from "./types";
+import { Note, getNotesForVideo } from "@/services/noteService";
+import { Patient, SessionWithPatient } from "./types";
 
 interface SessionReviewProps {
-  initialPatient?: Patient; 
+  initialPatient?: Patient;
 }
 
 const SessionReview: React.FC<SessionReviewProps> = ({ initialPatient }) => {
@@ -28,7 +22,7 @@ const SessionReview: React.FC<SessionReviewProps> = ({ initialPatient }) => {
   const [currentTimestamp, setCurrentTimestamp] = useState<number>(0);
   const [currentVideoTime, setCurrentVideoTime] = useState<number>(0);
   const [notes, setNotes] = useState<Note[]>([]);
-  
+
   useEffect(() => {
     fetchStitchedSessions()
       .then((data) => {
@@ -59,7 +53,7 @@ const SessionReview: React.FC<SessionReviewProps> = ({ initialPatient }) => {
       // Randomly select a patient if no initialPatient is provided
       const randomSession =
         sessionsWithPatients[
-        Math.floor(Math.random() * sessionsWithPatients.length)
+          Math.floor(Math.random() * sessionsWithPatients.length)
         ];
       if (randomSession) {
         console.log(
@@ -71,7 +65,7 @@ const SessionReview: React.FC<SessionReviewProps> = ({ initialPatient }) => {
       }
     }
   }, [initialPatient, sessionsWithPatients]);
-  
+
   const currentSessionObj = sessionsWithPatients.find(
     (sp) => sp.session.id === sessionId
   );
@@ -80,17 +74,15 @@ const SessionReview: React.FC<SessionReviewProps> = ({ initialPatient }) => {
   const selectedVideo = currentSession?.videos?.[0] || null;
   useEffect(() => {
     if (selectedVideo?.id) {
-      getNotesForVideo(selectedVideo.id).then((res) => {
-        if (res.data) {
-          setNotes(res.data);
+      getNotesForVideo(selectedVideo.id).then((notes) => {
+        if (notes) {
+          setNotes(notes);
         } else {
-          console.error("Failed to fetch notes:", res.error);
           setNotes([]);
         }
       });
     }
   }, [selectedVideo]);
-  
 
   const handleTimeUpdate = (time: number) => {
     setCurrentVideoTime(time);
@@ -138,7 +130,8 @@ const SessionReview: React.FC<SessionReviewProps> = ({ initialPatient }) => {
           <SessionGallery
             sessions={sessionsWithPatients}
             selectedSessionId={sessionId}
-            onSessionSelect={handleSessionSelect} />
+            onSessionSelect={handleSessionSelect}
+          />
         </div>
       </div>
 

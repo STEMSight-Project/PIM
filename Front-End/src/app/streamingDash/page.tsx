@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Maximize2 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { getPatient } from "@/services/patientService";
 import { api } from "@/services/api";
 
 async function negotiateViewer(roomId: string, pc: RTCPeerConnection) {
@@ -23,23 +24,20 @@ async function negotiateViewer(roomId: string, pc: RTCPeerConnection) {
   });
 
   await api
-    .post(`http://127.0.0.1:8000/streaming/rooms/test_patient/viewer`, {
-      sdp: pc.localDescription!.sdp,
-      type: pc.localDescription!.type,
-    })
+    .post<RTCSessionDescriptionInit>(
+      `http://127.0.0.1:8000/streaming/rooms/test_patient/viewer`,
+      {
+        sdp: pc.localDescription!.sdp,
+        type: pc.localDescription!.type,
+      }
+    )
     .then(async (res) => {
-      if (res.error) throw new Error(res.error);
       console.log("SDP sent to server", pc.localDescription);
-      const answerJson = res.data as RTCSessionDescriptionInit;
+      const answerJson = res as RTCSessionDescriptionInit;
       await pc.setRemoteDescription(new RTCSessionDescription(answerJson));
     });
 }
 /* ──────────────────────────────────────────────────────────────────────── */
-
-type PatientName = {
-  first_name: string;
-  last_name: string;
-};
 
 function Page() {
   const params = useSearchParams();
@@ -57,20 +55,20 @@ function Page() {
 
   /* fetch patient once --------------------------------------------------- */
   useEffect(() => {
-    api
-      .get<PatientName>(`http://127.0.0.1:8000/patients/${patientId}`)
-      .then((r) => {
-        if (r.error) throw new Error(r.error);
-        const data = r.data;
-        if (!data) {
+    getPatient(patientId)
+      .then((patient) => {
+        if (patient) {
+          setPatient({
+            first_name: patient.first_name,
+            last_name: patient.last_name,
+          });
+        } else {
           console.error("No data received from API");
-          return null;
         }
-        console.log("Patient data:", data);
-        return data;
       })
-      .then(setPatient)
-      .catch(() => {});
+      .catch((error) => {
+        console.error("Error fetching patient:", error);
+      });
   }, [patientId]);
 
   /* generate fake detection logs ---------------------------------------- */

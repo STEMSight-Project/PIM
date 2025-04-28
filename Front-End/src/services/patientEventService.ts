@@ -1,4 +1,4 @@
-import { fetchData, postData, ApiResponse } from './api';
+import { api } from "./api";
 
 export interface PatientEvent {
   id: string;
@@ -11,19 +11,25 @@ export interface PatientEvent {
 }
 
 // get all events for a specific patient id
-export async function getEventsForPatient(patientId: string): Promise<ApiResponse<PatientEvent[]>> {
-  return fetchData<PatientEvent[]>(`/patient-events/patient/${patientId}`);
+export async function getEventsForPatient(
+  patientId: string
+): Promise<PatientEvent[]> {
+  return await api.get<PatientEvent[]>(`/patient-events/patient/${patientId}`);
 }
 
 // get all events for a specific video id
-export async function getEventsForVideo(videoId: string): Promise<ApiResponse<PatientEvent[]>> {
-  return fetchData<PatientEvent[]>(`/patient-events/video/${videoId}`);
+export async function getEventsForVideo(
+  videoId: string
+): Promise<PatientEvent[]> {
+  return await api.get<PatientEvent[]>(`/patient-events/video/${videoId}`);
 }
 
 // update the event's validation status (pending, confirmed, dismissed)
 export async function updateEventStatus(
-  eventId: string, 
-  status: 'pending' | 'confirmed' | 'dismissed'
-): Promise<ApiResponse<PatientEvent>> {
-  return postData<PatientEvent>(`/patient-events/${eventId}/status`, { validation_status: status });
+  eventId: string,
+  status: "pending" | "confirmed" | "dismissed"
+): Promise<PatientEvent> {
+  return await api.post<PatientEvent>(`/patient-events/${eventId}/status`, {
+    validation_status: status,
+  });
 }

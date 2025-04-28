@@ -1,6 +1,11 @@
 "use client";
+import { Suspense } from "react";
 import ResetPassword from "./reset-password";
 
 export default function App() {
-  return <ResetPassword />;
+  return (
+    <Suspense>
+      <ResetPassword />
+    </Suspense>
+  );
 }
