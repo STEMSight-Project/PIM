@@ -8,13 +8,16 @@ import { getPatient } from "@/services/patientService";
 import { api } from "@/services/api";
 
 async function negotiateViewer(roomId: string, pc: RTCPeerConnection) {
-  // ❶ Create recv-only transceiver so the SDP has "m=video recvonly"
+  // Ask for video
   pc.addTransceiver("video", { direction: "recvonly" });
+
+  // 🔥 NEW: Ask for audio!
+  pc.addTransceiver("audio", { direction: "recvonly" });
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  // wait for ICE (single, non-trickle)
+  // wait for ICE gathering
   await new Promise<void>((r) => {
     if (pc.iceGatheringState === "complete") return r();
     const check = () =>
@@ -101,9 +104,12 @@ function Page() {
 
     pc.ontrack = (ev) => {
       console.log("ontrack", ev);
-      if (ev.track.kind === "video" && videoRef.current) {
+      if (videoRef.current) {
         videoRef.current.srcObject = ev.streams[0];
+        videoRef.current.play();
       }
+      console.log("Stream audio tracks:", ev.streams[0].getAudioTracks());
+      console.log("Stream video tracks:", ev.streams[0].getVideoTracks());
     };
 
     negotiateViewer(patientId, pc).catch(console.error);
@@ -137,9 +143,10 @@ function Page() {
           <video
             ref={videoRef}
             className="w-full h-full bg-black"
+            controls
+            muted={false}
             autoPlay
             playsInline
-            muted
           />
 
           <button

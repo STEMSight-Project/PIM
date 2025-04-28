@@ -1,13 +1,12 @@
 from datetime import datetime
 from fastapi import Request, HTTPException
 import jwt
-from jwt import PyJWTError, ExpiredSignatureError, InvalidTokenError
+from jwt import InvalidAudienceError, ExpiredSignatureError, InvalidTokenError
 from common import supabase, logger
 from env import ENVIRONMENT as ENV
 
 def current_user(request: Request):
     token = request.headers.get("Authorization")
-    print(request.headers.items)
     try:
         if token:
             token = token.split(" ")[1]  # Remove "Bearer" prefix
@@ -21,3 +20,6 @@ def current_user(request: Request):
     except (ExpiredSignatureError, InvalidTokenError) as e:
         logger.error(f"Token expired or invalid: {e}")
         raise HTTPException(status_code=401, detail="Token expired or invalid")
+    except InvalidAudienceError as e:
+        logger.error(f"Invalid audience: {e}")
+        raise HTTPException(status_code=401, detail="Invalid audience")

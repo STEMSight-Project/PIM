@@ -94,7 +94,7 @@ async def publish_viewer(patient_id: str, body: SDPBody):
     streamer = room.streamer
 
     for receiver in streamer.getReceivers():
-        if receiver.track.kind == "video":
+        if receiver.track.kind == "video" or receiver.track.kind == "audio":
             pc.addTrack(relay.subscribe(receiver.track))
 
     await pc.setRemoteDescription(RTCSessionDescription(**body.model_dump()))

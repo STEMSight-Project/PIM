@@ -18,12 +18,46 @@ def default_device() -> str:
     os_name = platform.system()
     print(f"Detected OS: {os_name}")
     if os_name == "Windows":
-        return "video=Logitech BRIO"
+        return "video=Logitech BRIO:audio=Microphone (3- AT2020USB+)"
     elif os_name == "Darwin":  # macOS
         return "0:none"  # First camera, no audio
     else:  # Linux / *BSD
         return "/dev/video0"
 
+def get_video_device() -> str:
+    os_name = platform.system()
+    if os_name == "Windows":
+        return "video=Logitech BRIO:audio=Microphone (3- AT2020USB+)"
+    elif os_name == "Darwin":  # macOS
+        return "0:none"  # First camera, no audio
+    else:  # Linux / *BSD
+        return "/dev/video0"
+
+    
+def get_media_player(media_src: str) -> MediaPlayer:
+    os_name = platform.system()
+    format: str = None
+    options: dict = None
+    if os_name == "Windows":
+        format = "dshow"
+        options = {
+            "input_format": "h264",
+            "framerate": "30",
+            "video_size": "640x480",
+            "ar": "44100",
+            "ac": "1",
+            "rtbufsize": "2100M",
+            "preset": "ultrafast",
+            "tune": "zerolatency",
+        }
+    elif os_name == "Darwin":
+        format = "avfoundation"
+        options = {
+            "video_size": "1280x720",
+            "framerate": "30",
+        }
+    return MediaPlayer(media_src, format=format, options=options)
+    
 
 def safe_close_player(player: MediaPlayer):
     if hasattr(player, "stop") and inspect.iscoroutinefunction(player.stop):
@@ -37,36 +71,17 @@ def safe_close_player(player: MediaPlayer):
 
 async def publish(room_id: str, base_url: str, device: Optional[str]) -> None:
     print(f"aiortc version: {aiortc.__version__}")
-    media_src = device or default_device()
-    LOGGER.info("Opening media source %s", media_src)
+    media_src = get_video_device() if device is None else device
 
-    os_name = platform.system()
-    if os_name == "Windows" and media_src.startswith("video="):
-        player = MediaPlayer(
-            media_src,
-            format="dshow",
-            options={
-                "video_size": "1280x720",
-                "framerate": "30",
-                "vcodec": "mjpeg",
-            },
-        )
-    elif os_name == "Darwin":
-        player = MediaPlayer(
-            media_src,
-            format="avfoundation",
-            options={
-                "video_size": "1280x720",
-                "framerate": "30",
-            },
-        )
-    else:
-        player = MediaPlayer(media_src)
+    player = get_media_player(media_src)
 
     pc = RTCPeerConnection()
 
-    if player.video:
-        pc.addTrack(player.video)
+    if player.video or player.audio:
+        if player.video:
+            pc.addTrack(player.video)
+        if player.audio:
+            pc.addTrack(player.audio)
     else:
         LOGGER.error("No video track found on device %s", media_src)
         safe_close_player(player)
@@ -80,7 +95,6 @@ async def publish(room_id: str, base_url: str, device: Optional[str]) -> None:
     offer_payload = {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
 
     create_room_url = f"{base_url}/streaming/create_room/test_patient"
-    LOGGER.info("POST %s", create_room_url)
 
     async with aiohttp.ClientSession() as session:
         async with session.post(create_room_url) as resp:
@@ -90,7 +104,6 @@ async def publish(room_id: str, base_url: str, device: Optional[str]) -> None:
                 await pc.close()
                 return
             room_json = await resp.json()
-            LOGGER.info("Room created: %s", room_json)
             streaming_url = f"{base_url}/streaming/rooms/{room_id}/streamer"
             async with session.post(streaming_url, json=offer_payload) as resp:
                 if resp.status != 200:
