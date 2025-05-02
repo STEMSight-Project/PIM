@@ -1,5 +1,7 @@
 # Posture & Involuntary Movement (PIM) Detection Module
-![STEMSight-Logo](https://github.com/user-attachments/assets/f02eda1f-1769-4865-ad06-d2790e286197)
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/f02eda1f-1769-4865-ad06-d2790e286197" width="350" height="350">
+</div>
 
 # Table of Contents
 - Overview
