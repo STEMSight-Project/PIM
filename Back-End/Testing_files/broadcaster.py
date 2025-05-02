@@ -24,15 +24,6 @@ def default_device() -> str:
     else:  # Linux / *BSD
         return "/dev/video0"
 
-def get_video_device() -> str:
-    os_name = platform.system()
-    if os_name == "Windows":
-        return "video=Logitech BRIO:audio=Microphone (3- AT2020USB+)"
-    elif os_name == "Darwin":  # macOS
-        return "0:none"  # First camera, no audio
-    else:  # Linux / *BSD
-        return "/dev/video0"
-
     
 def get_media_player(media_src: str) -> MediaPlayer:
     os_name = platform.system()
@@ -67,20 +58,40 @@ def safe_close_player(player: MediaPlayer):
             if track:
                 track.stop()
         return None
+    
+def get_media_src(video_dev: Optional[str], audio_dev: Optional[str]) -> str:
+    os_name = platform.system()
+    if os_name == "Windows":
+        if video_dev and audio_dev:
+            return f'video={video_dev}:audio={audio_dev}'
+        elif video_dev:
+            return f'video={video_dev}'
+        else:
+            return f'video=default'
+    if os_name == "Darwin":
+        if video_dev and audio_dev:
+            return f'{video_dev}:{audio_dev}'
+        elif video_dev:
+            return f'{video_dev}:none'
+        else:
+            return '0:none'
+    else:
+        return '/dev/video0'
 
 
-async def publish(room_id: str, base_url: str, device: Optional[str]) -> None:
+async def publish(room_id: str, base_url: str, video_device: Optional[str], audio_device: Optional[str]) -> None:
     print(f"aiortc version: {aiortc.__version__}")
-    media_src = get_video_device() if device is None else device
+    media_src = default_device()
+    if video_device or audio_device:
+        media_src = get_media_src(video_device, audio_device)
 
     player = get_media_player(media_src)
 
     pc = RTCPeerConnection()
 
-    if player.video or player.audio:
-        if player.video:
-            pc.addTrack(player.video)
-        if player.audio:
+    if player.video:
+        pc.addTrack(player.video)
+        if player.video.kind == "audio":
             pc.addTrack(player.audio)
     else:
         LOGGER.error("No video track found on device %s", media_src)
@@ -135,16 +146,23 @@ def main() -> None:
         help="Base URL of signalling server (default: http://localhost:8000)",
     )
     parser.add_argument(
-        "--device",
-        help=(
-            "Camera device or media file path. "
-            "Examples: /dev/video0  |  video=Integrated Camera  |  sample.mp4"
-        ),
+        "--video_device", 
+        required=False, 
+        help='Check your device available with: ' \
+        '\n\tMacOS: ffmpeg -f avfoundation -list_devices true -i ""' \
+        '\n\tWindows: ffmpeg -list_devices true -f dshow -i dummy '
+    )
+    parser.add_argument(
+        "--audio_device", 
+        required=False, 
+        help='Check your device available with: ' \
+        '\n\tMacOS: ffmpeg -f avfoundation -list_devices true -i ""' \
+        '\n\tWindows: ffmpeg -list_devices true -f dshow -i dummy '
     )
     args = parser.parse_args()
 
     try:
-        asyncio.run(publish(args.room, args.signaling.rstrip("/"), args.device))
+        asyncio.run(publish(args.room, args.signaling.rstrip("/"), video_device=args.video_device, audio_device=args.audio_device))
     except Exception as exc:
         LOGGER.exception("Fatal error: %s", exc)
 

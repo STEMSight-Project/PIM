@@ -77,16 +77,28 @@ This repository contains both **Back-End** and **Front-End** components.
 ### Camera Streaming Setup
 1. Install FFMPEG at [FFMPEG](https://www.ffmpeg.org/download.html)
 
-2. Run
-  ```bash
-  
-  ```
-
-6. To simulate video streaming:
+2. Find supported devices:
+  - For MacOS:
+    ```bash
+    ffmpeg -f avfoundation -list_devices true -i ""
+    ```
+  - For Windows:
+    ```bash
+    ffmpeg -list_devices true -f dshow -i dummy
+    ```
+  - Other devices:
+    _*Coming later*_
+3. To simulate video streaming:
 ```bash
-python ./Back-End/Testing_files/broadcaster.py --room {room_id}
+python ./Back-End/Testing_files/broadcaster.py --room {room_id} --video_device {video_device} --audio_device {audio_device}
 ```
-Replace `{room_id}` with your desired room name or ID.
+- Replace `{room_id}` with your desired room name or ID.
+- Replease `{video_device}` for example:
+  - Windows `LOGITECH Logi` for camera
+  - MacOS `0` for Facetime HD Camera
+- Replease `{audio_device}` for example:
+  - Windows `Realtek Audio` for Realtek audio
+  - MacOS `0` for Macbook microphone
 
 ---
 
