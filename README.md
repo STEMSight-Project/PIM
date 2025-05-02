@@ -6,32 +6,33 @@
 </div>
 
 # Table of Contents
-- Overview
-- Download
-- Build and Install
-- Documentation
-- License
-- Support
-- Contributing
---- 
+- [Overview](#overview)
+- [Download](#download)
+- [Build and Install](#installation)
+- [Documentation](#documentation)
+- [Licenses](#licenses)
+
 # Overview
 Our team is developing a computer vision and machine learning system to detect abnormal postures and involuntary movements from live video aboard ambulances. Using a top- or side-mounted camera to collect live data, the system will be trained to recognize signs of neurological distress. This detection module will feed into NeuroSpring’s Virtual Neurologist detection tool, an autonomous diagnostic suite (under development).
---- 
+
 # Download
 
---- 
-# Build and Install
 
---- 
+# Installation
+
+
 # Documentation
+
 ## Testing
 ## Deployment
 ## Developer Instructions
---- 
-# License
 
---- 
-# Support
+# Licenses
 
---- 
-# Contributing
+- google-ai-edge/mediapipe is licensed under the
+Apache License 2.0
+- supabase/supabase is licensed under the
+Apache License 2.0
+- opencv/opencv is licensed under the
+Apache License 2.0
+
