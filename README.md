@@ -22,6 +22,9 @@ Our team is developing a computer vision and machine learning system to detect a
 
 # Download
 
+```
+git clone STEMSight-Project/PIM](https://github.com/STEMSight-Project/PIM.git
+```
 
 # Installation
 
