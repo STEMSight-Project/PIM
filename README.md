@@ -117,7 +117,6 @@ python ./Back-End/Testing_files/broadcaster.py --room {room_id} --video_device {
 # Timeline
 ![Image](https://github.com/user-attachments/assets/a323d74b-f31b-4633-8b33-18589715bfa0)
 ![Image](https://github.com/user-attachments/assets/7ae066f5-d493-44a3-881e-2479fff4fa89)
-# 🗓️ Timeline
 
 ## Phase 2: Feature Expansion (Late August – October 2025)
 
