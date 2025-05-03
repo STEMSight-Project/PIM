@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Response, Request  # Add Request here
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, ValidationError
 from common import admin_supabase
 from env import ENVIRONMENT as ENV
 from security.jwt_verify import setAccessToken, setRefreshToken
@@ -9,7 +9,7 @@ from common import supabase
 router = APIRouter()
 
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 @router.post("/login")
@@ -17,18 +17,28 @@ def login(body: LoginRequest, response: Response) -> dict:
     supabase.auth._auto_refresh_token = True
 
     try:
+        # Pydantic will raise ValidationError if email is not valid
         auth = supabase.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}
-        )   
+        )
+        if not auth.session:
+            raise HTTPException(401, detail="Invalid email or password.")
+    except ValidationError as ve:
+        raise HTTPException(422, detail="Invalid email format.")
+    except HTTPException as he:
+        # Already handled above
+        raise he
     except Exception as e:
-        raise HTTPException(401, "Bad credentials")
+        # Any other error (e.g., network, supabase error)
+        raise HTTPException(401, detail="Invalid email or password.")
+
     access_token = auth.session.access_token
     refresh_token = auth.session.refresh_token
     setAccessToken(response, access_token)
     setRefreshToken(response, refresh_token)
     return {
-        "access_token": auth.session.access_token,
-        "refresh_token": auth.session.refresh_token,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "user": auth.user
     }
 
@@ -70,7 +80,7 @@ def refresh(body: TokenRefreshRequest) -> dict:
     
 
 class ResetRequest(BaseModel):
-    email: str
+    email: EmailStr
 
 
 @router.post("/request-password-reset")
@@ -82,6 +92,8 @@ async def request_password_reset(data: ResetRequest):
             }
         )
         return {"message": "Password reset email sent"}
+    except ValidationError as ve:
+        raise HTTPException(status_code=422, detail="Invalid email format.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     

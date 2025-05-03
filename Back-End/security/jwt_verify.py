@@ -1,6 +1,4 @@
-from datetime import datetime
 from fastapi import Request, HTTPException, Response
-import jwt
 from jwt import InvalidAudienceError, ExpiredSignatureError, InvalidTokenError
 from common import supabase, logger
 from env import ENVIRONMENT as ENV

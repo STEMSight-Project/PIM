@@ -1,4 +1,5 @@
-Back-End/test_patient_20250414.mp4
-Back-End/test_patient_20250415.mp4
 *.pyc
 __pycache__/
+
+#Secure File with Sensitive Data
+# .env
