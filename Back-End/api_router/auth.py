@@ -78,7 +78,7 @@ async def request_password_reset(data: ResetRequest):
     try:
         supabase.auth.reset_password_email(
             data.email, {
-                "redirect_to": "https://localhost:3000/password-reset",
+                "redirect_to": "https://main.d3nf33ntk31bcv.amplifyapp.com/password-reset",
             }
         )
         return {"message": "Password reset email sent"}
