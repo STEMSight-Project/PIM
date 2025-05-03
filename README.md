@@ -23,12 +23,16 @@
 - [Licenses](#licenses)
 
 # Overview
-Our team is developing a computer vision and machine learning system to detect abnormal postures and involuntary movements from live video aboard ambulances. Using a top- or side-mounted camera to collect live data, the system will be trained to recognize signs of neurological distress. This detection module will feed into NeuroSpring’s Virtual Neurologist detection tool, an autonomous diagnostic suite (under development).
+Our team is developing a computer vision and machine learning system to detect abnormal postures and involuntary movements from live video aboard ambulances. Using a top- or side-mounted camera to collect live data, the system will be trained to recognize signs of neurological distress. This detection module will feed into NeuroSpring’s Virtual Neurologist detection tool, an autonomous diagnostic suite (under development). The purpose of the project is to develop a database of video recordings demonstrating abnormal body postures (“postures”) and involuntary movements (“movements”) that represent neurological disease. Then train an artificial intelligence-based medical device to recognize these postures & movements based on the synthetic database. In production, the medical device then monitors patients as they are transported in ambulances for development of one of the postures or movements, triggering an alert to healthcare providers.
+
+
+ 
 
 # Screenshots
 
-<insert_prototype_images>
-
+![Image](https://github.com/user-attachments/assets/e4975e16-84d4-41da-bfce-4849d732eb41)
+![Image](https://github.com/user-attachments/assets/43201b92-210f-4900-939d-03bf0cce1743)
+![Image](https://github.com/user-attachments/assets/1226fefd-6a3a-4371-8f7d-307c578d7746)
 # Download
 1. Open the terminal and get into location which you're prefer to clone repository
 
