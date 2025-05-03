@@ -33,6 +33,7 @@ Our team is developing a computer vision and machine learning system to detect a
 ![Image](https://github.com/user-attachments/assets/e4975e16-84d4-41da-bfce-4849d732eb41)
 ![Image](https://github.com/user-attachments/assets/43201b92-210f-4900-939d-03bf0cce1743)
 ![Image](https://github.com/user-attachments/assets/1226fefd-6a3a-4371-8f7d-307c578d7746)
+![Image](https://github.com/user-attachments/assets/76ff5830-a69b-439e-a7cb-7c2a36e87457)
 # Download
 1. Open the terminal and get into location which you're prefer to clone repository
 
