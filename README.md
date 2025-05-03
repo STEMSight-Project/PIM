@@ -20,6 +20,7 @@
 - [Download](#download)
 - [Build and Install](#installation)
 - [Documentation](#documentation)
+- [Timeline](#timeline)
 - [Licenses](#licenses)
 
 # Overview
@@ -116,36 +117,56 @@ python ./Back-End/Testing_files/broadcaster.py --room {room_id} --video_device {
 # Timeline
 ![Image](https://github.com/user-attachments/assets/a323d74b-f31b-4633-8b33-18589715bfa0)
 ![Image](https://github.com/user-attachments/assets/7ae066f5-d493-44a3-881e-2479fff4fa89)
-Phase 2: Feature Expansion (Late August - October 2025)
-Milestone 4: Enhanced Detection System (Estimated Start: Week of 8/25)
-• Implement all target posture detection algorithms
-• Develop movement detection algorithms
-• Integrate detection confidence scoring
-• Deliverable: Comprehensive detection system for all target conditions
-Milestone 5: Advanced UI Features (Estimated Start: Week of 8/25)
-• Implement session review interface
-• Develop comprehensive reporting system
-• Create remote monitoring capabilities
-• Deliverable: Complete user interface with all planned screens
-Milestone 6: System Integration (Estimated Start: Mid-Late September)
-• Integrate with docking station hardware
-• Implement HoloLens (Headset) activation trigger
-• Develop offline operation mode
-• Deliverable: Fully integrated system with hardware components
-Milestone 7A: Begin Testing & Refinement (Estimated Start: Early-Mid October)
-• Refine detection algorithms based on test results
-• API Integration & User Interface Interaction Testing – Unit Tests
+# 🗓️ Timeline
 
-• Deliverable: Testing report and optimized system
-Phase 3: Optimization & Finalization (November - December 2025)
-Milestone 7B: Continue Testing & Refinement (Estimated Start: November Resuming from 7A)
-Conduct comprehensive system testing
-• Refine detection algorithms based on test results
-• Deliverable: Testing report and optimized system
-Milestone 8: Final Delivery (Mid December)
-• Complete system documentation
-• Perform final validation testing
-• Deliverable: Final system delivery with documentation
+## Phase 2: Feature Expansion (Late August – October 2025)
+
+### 🔹 Milestone 4: Enhanced Detection System *(Est. Start: Week of 8/25)*
+- Implement all target posture detection algorithms  
+- Develop movement detection algorithms  
+- Integrate detection confidence scoring  
+**✅ Deliverable:** Comprehensive detection system for all target conditions
+
+---
+
+### 🔹 Milestone 5: Advanced UI Features *(Est. Start: Week of 8/25)*
+- Implement session review interface  
+- Develop comprehensive reporting system  
+- Create remote monitoring capabilities  
+**✅ Deliverable:** Complete user interface with all planned screens
+
+---
+
+### 🔹 Milestone 6: System Integration *(Est. Start: Mid–Late September)*
+- Integrate with docking station hardware  
+- Implement HoloLens (headset) activation trigger  
+- Develop offline operation mode  
+**✅ Deliverable:** Fully integrated system with hardware components
+
+---
+
+### 🔹 Milestone 7A: Begin Testing & Refinement *(Est. Start: Early–Mid October)*
+- Refine detection algorithms based on test results  
+- Conduct API integration & UI interaction testing  
+- Perform unit tests  
+**✅ Deliverable:** Testing report and optimized system
+
+---
+
+## Phase 3: Optimization & Finalization (November – December 2025)
+
+### 🔹 Milestone 7B: Continue Testing & Refinement *(Est. Start: November)*
+- Conduct comprehensive system testing  
+- Further refine detection algorithms  
+**✅ Deliverable:** Continued testing report and optimized system
+
+---
+
+### 🔹 Milestone 8: Final Delivery *(Est. Delivery: Mid December)*
+- Complete system documentation  
+- Perform final validation testing  
+**🎯 Deliverable:** Final system delivery with full documentation
+
 ![image](https://github.com/user-attachments/assets/967dde73-34a1-4288-a7fc-3b0568330afc)
 ![image](https://github.com/user-attachments/assets/601f45cd-edb7-454c-aa34-d988cd4293be)
 
