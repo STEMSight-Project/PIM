@@ -19,3 +19,16 @@ export async function getAllPatients(): Promise<Patient[]> {
 export async function getPatient(id: string) {
   return await api.get<Patient>(`/patients/${id}`);
 }
+
+export async function createPatient(
+  patient: Omit<Patient, "id" | "created_at" | "updated_at">
+) {
+  return await api.post<Patient>("/patients/", patient);
+}
+
+export async function updatePatient(
+  id: string,
+  patient: Partial<Omit<Patient, "id" | "created_at" | "updated_at">>
+) {
+  return await api.patch<Patient>(`/patients/${id}/`, patient);
+}

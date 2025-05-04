@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from typing import Optional
 from common import supabase
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, ValidationError
 from enum import Enum
 from common import logger
 from security.jwt_verify import current_user
@@ -52,6 +52,7 @@ class DoctorRequest(BaseModel):
     middle_name: Optional[str]
     last_name: str
     specialization: Specialization
+    email: EmailStr
     primary_phone: str
     
     class Config:
@@ -64,6 +65,12 @@ def create_doctor(doctor: DoctorRequest):
         if not response.data:
             raise HTTPException(status_code=400, detail="Failed to create doctor")
         return response.data[0]
+    except ValidationError as e:
+        logger.error("Validation error occurred: %s", e.errors())
+        raise HTTPException(status_code=422, detail=e.errors())
+    except HTTPException as e:
+        logger.error("HTTP error occurred: %s", e.detail)
+        raise e
     except Exception as e:
         logger.exception("Unhandled exception occurred: %s", e)
         raise HTTPException(status_code=500, detail= e)
@@ -78,7 +85,7 @@ class DoctorUpdateRequest(BaseModel):
     class Config:
         use_enum_values = True
 
-@router.put('/')
+@router.patch('/')
 def update_doctor(doctor_id: str, doctor: DoctorUpdateRequest):
     try:
         """This exclude_unset = True mean convert data to dict and exclude unset fields"""

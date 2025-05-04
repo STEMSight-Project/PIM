@@ -42,7 +42,7 @@ def get_all_medical_history():
         logger.error(f"Error getting medical history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{medical_history_id}", response_model=MedicalHistory)
+@router.get("/{medical_history_id}", response_model=MedicalHistoryOut)
 def get_medical_history_by_id(medical_history_id: str):
     try:
         response = (

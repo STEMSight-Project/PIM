@@ -1,48 +1,15 @@
 "use client";
-import React, { useEffect, useRef, useState, Suspense } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, ArrowLeft, ArrowRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { getPatient } from "@/services/patientService";
-import { api } from "@/services/api";
+import { createNewConnection } from "@/services/streamingVideoServices";
+import ScriptLog from "./ScriptLog";
 
-async function negotiateViewer(roomId: string, pc: RTCPeerConnection) {
-  // Ask for video
-  pc.addTransceiver("video", { direction: "recvonly" });
-
-  // 🔥 NEW: Ask for audio!
-  pc.addTransceiver("audio", { direction: "recvonly" });
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  // wait for ICE gathering
-  await new Promise<void>((r) => {
-    if (pc.iceGatheringState === "complete") return r();
-    const check = () =>
-      pc.iceGatheringState === "complete" &&
-      (pc.removeEventListener("icegatheringstatechange", check), r());
-    pc.addEventListener("icegatheringstatechange", check);
-  });
-
-  await api
-    .post<RTCSessionDescriptionInit>(
-      `http://127.0.0.1:8000/streaming/rooms/test_patient/viewer`,
-      {
-        sdp: pc.localDescription!.sdp,
-        type: pc.localDescription!.type,
-      }
-    )
-    .then(async (res) => {
-      console.log("SDP sent to server", pc.localDescription);
-      const answerJson = res as RTCSessionDescriptionInit;
-      await pc.setRemoteDescription(new RTCSessionDescription(answerJson));
-    });
-}
-/* ──────────────────────────────────────────────────────────────────────── */
-
-function Page() {
+export default function Page() {
   const params = useSearchParams();
   const patientId = params.get("patientId") ?? "test_patient";
 
@@ -50,13 +17,30 @@ function Page() {
     first_name: string;
     last_name: string;
   } | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [show, setShow] = useState(10);
+  const [showLog, setShowLog] = useState(true);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  /* fetch patient once --------------------------------------------------- */
+  const setupConnection = () => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    pc.ontrack = (ev) => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = ev.streams[0];
+        videoRef.current
+          .play()
+          .catch((err) => console.error("Autoplay error:", err));
+      }
+    };
+
+    pcRef.current = pc;
+    createNewConnection(patientId, pc);
+  };
+
   useEffect(() => {
     getPatient(patientId)
       .then((patient) => {
@@ -65,59 +49,16 @@ function Page() {
             first_name: patient.first_name,
             last_name: patient.last_name,
           });
-        } else {
-          console.error("No data received from API");
         }
       })
-      .catch((error) => {
-        console.error("Error fetching patient:", error);
-      });
+      .catch(console.error);
   }, [patientId]);
 
-  /* generate fake detection logs ---------------------------------------- */
   useEffect(() => {
-    const timer = setInterval(() => {
-      const events = [
-        "Myoclonus",
-        "Figure of four",
-        "Fencer posture",
-        "Decorticate posture",
-        "Decerebrate posture",
-        "Hemichorea",
-        "Tremor",
-        "Ballistic movements",
-        "Versive head posture",
-      ];
-      const entry = `🟡 ${new Date().toLocaleTimeString()} – ${
-        events[(Math.random() * events.length) >> 0]
-      }`;
-      setLogs((prev) => [entry, ...prev]);
-    }, 5_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
-    pcRef.current = pc;
-
-    pc.ontrack = (ev) => {
-      console.log("ontrack", ev);
-      if (videoRef.current) {
-        videoRef.current.srcObject = ev.streams[0];
-        videoRef.current.play();
-      }
-      console.log("Stream audio tracks:", ev.streams[0].getAudioTracks());
-      console.log("Stream video tracks:", ev.streams[0].getVideoTracks());
-    };
-
-    negotiateViewer(patientId, pc).catch(console.error);
-
-    return () => pc.close();
+    setupConnection();
+    return () => pcRef.current?.close();
   }, [patientId]);
 
-  const containerRef = useRef<HTMLDivElement>(null);
   const toggleFS = () => {
     const el = containerRef.current;
     if (!el) return;
@@ -127,18 +68,18 @@ function Page() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-black">
+    <div className="flex flex-col min-h-screen bg-black overflow-hidden">
       <Header patientId={null} />
 
-      <div className="flex flex-col items-center flex-grow">
-        <p className="text-lg text-gray-300 my-4">
+      <main className="flex flex-1 flex-col items-center justify-center relative px-4 py-6">
+        <p className="text-lg text-gray-300 mb-4 text-center">
           Viewing live stream for&nbsp;
           {patient ? `${patient.first_name} ${patient.last_name}` : patientId}
         </p>
 
         <div
           ref={containerRef}
-          className="relative w-full max-w-5xl aspect-video border-4 border-gray-700 rounded-lg overflow-hidden"
+          className="relative w-full max-w-5xl aspect-video border-4 border-gray-700 rounded-xl overflow-hidden shadow-lg"
         >
           <video
             ref={videoRef}
@@ -151,39 +92,45 @@ function Page() {
 
           <button
             onClick={toggleFS}
-            className="absolute top-2 right-2 bg-gray-800 text-white p-2 rounded-md hover:bg-gray-700"
+            className="absolute top-3 right-3 bg-gray-800 text-white p-2 rounded-md hover:bg-gray-700 z-10"
           >
             <Maximize2 className="w-5 h-5" />
           </button>
-
-          <div className="absolute bottom-0 w-full backdrop-blur-md text-white p-4 text-sm max-h-48 overflow-y-auto">
-            <h2 className="text-lg font-semibold">Detection Logs</h2>
-            <ul className="text-xs">
-              {logs.slice(0, show).map((l, i) => (
-                <li key={i}>{l}</li>
-              ))}
-            </ul>
-            {show < logs.length && (
-              <button
-                onClick={() => setShow(show + 10)}
-                className="mt-1 text-blue-400 hover:underline"
-              >
-                Load more
-              </button>
-            )}
-          </div>
         </div>
-      </div>
+
+        {/* Toggle button and log panel */}
+        <div className="absolute right-0 bottom-4 flex items-end pr-4 gap-2 z-20">
+          {/* Toggle button slides with log */}
+          <motion.div
+            animate={{ x: showLog ? 0 : 300 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          >
+            <motion.button
+              onClick={() => setShowLog((prev) => !prev)}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              className="bg-blue-600 text-white p-3 rounded-full shadow-md hover:bg-blue-500"
+            >
+              {showLog ? <ArrowRight /> : <ArrowLeft />}
+            </motion.button>
+          </motion.div>
+
+          {/* ScriptLog always mounted — just slides in/out */}
+          <motion.div
+            animate={{ x: showLog ? 0 : 300 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="w-[22rem] max-w-[90vw] h-[32rem] bg-black/70 backdrop-blur-md text-white rounded-xl shadow-xl overflow-hidden"
+            style={{
+              pointerEvents: showLog ? "auto" : "none",
+              opacity: showLog ? 1 : 0.3,
+            }}
+          >
+            <ScriptLog />
+          </motion.div>
+        </div>
+      </main>
 
       <Footer />
     </div>
-  );
-}
-
-export default function StreamingDash() {
-  return (
-    <Suspense fallback={null}>
-      <Page />
-    </Suspense>
   );
 }
