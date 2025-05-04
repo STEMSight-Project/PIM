@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Maximize2, ArrowLeft, ArrowRight } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { getPatient } from "@/services/patientService";
@@ -23,7 +23,20 @@ export default function Page() {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const setupConnection = () => {
+  useEffect(() => {
+    getPatient(patientId)
+      .then((patient) => {
+        if (patient) {
+          setPatient({
+            first_name: patient.first_name,
+            last_name: patient.last_name,
+          });
+        }
+      })
+      .catch(console.error);
+  }, [patientId]);
+
+  useEffect(() => {
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
@@ -39,23 +52,6 @@ export default function Page() {
 
     pcRef.current = pc;
     createNewConnection(patientId, pc);
-  };
-
-  useEffect(() => {
-    getPatient(patientId)
-      .then((patient) => {
-        if (patient) {
-          setPatient({
-            first_name: patient.first_name,
-            last_name: patient.last_name,
-          });
-        }
-      })
-      .catch(console.error);
-  }, [patientId]);
-
-  useEffect(() => {
-    setupConnection();
     return () => pcRef.current?.close();
   }, [patientId]);
 
