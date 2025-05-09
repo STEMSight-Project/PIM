@@ -100,10 +100,10 @@ This repository contains both **Back-End** and **Front-End** components.
 python ./Back-End/Testing_files/broadcaster.py --room {room_id} --video_device {video_device} --audio_device {audio_device}
 ```
 - Replace `{room_id}` with your desired room name or ID.
-- Replease `{video_device}` for example:
+- Replace `{video_device}` for example:
   - Windows `LOGITECH Logi` for camera
   - MacOS `0` for Facetime HD Camera
-- Replease `{audio_device}` for example:
+- Replace `{audio_device}` for example:
   - Windows `Realtek Audio` for Realtek audio
   - MacOS `0` for Macbook microphone
 
