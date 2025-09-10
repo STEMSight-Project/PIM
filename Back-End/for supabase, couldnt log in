@@ -89,3 +89,18 @@ CREATE TABLE inventory_transactions (
     transaction_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     user_id UUID REFERENCES users(user_id)
 )
+
+CREATE TABLE email_confirmations (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    token UUID NOT NULL UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    confirmed BOOLEAN DEFAULT FALSE,
+    confirmed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Add index for faster lookups
+CREATE INDEX idx_email_confirmations_token ON email_confirmations(token);
+CREATE INDEX idx_email_confirmations_user_id ON email_confirmations(user_id);
