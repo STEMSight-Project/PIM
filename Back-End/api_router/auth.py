@@ -30,6 +30,11 @@ def login(body: LoginRequest, response: Response) -> dict:
         )
         if not auth.session:
             raise HTTPException(401, detail="Invalid email or password.")
+            
+        # CHECK EMAIL CONFIRMATION - THIS IS THE NEW PART
+        if not auth.user.email_confirmed_at:
+            raise HTTPException(403, detail="Please confirm your email address before logging in.")
+            
     except ValidationError as ve:
         raise HTTPException(422, detail="Invalid email format.")
     except HTTPException as he:
@@ -48,6 +53,7 @@ def login(body: LoginRequest, response: Response) -> dict:
         "refresh_token": refresh_token,
         "user": auth.user
     }
+
 
 
 
