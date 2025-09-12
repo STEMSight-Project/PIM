@@ -32,7 +32,7 @@
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
-      "args": ["main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"],
+      "args": ["main:app", "--reload"],
       "cwd": "${workspaceFolder}/Back-End",
       "console": "integratedTerminal",
       "env": {

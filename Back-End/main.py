@@ -1,9 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from api_router.router import api_router
+from common import logger
 
 app = FastAPI(
     title="STEMSight API", 
@@ -21,32 +23,7 @@ app = FastAPI(
     ]
 )
 
-# Configure OpenAPI with Bearer token support
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-    
-    openapi_schema = get_openapi(
-        title="STEMSight API",
-        version="1.0.0",
-        description="STEMSight API with Bearer Token Authentication",
-        routes=app.routes,
-    )
-    
-    # Add Bearer token security scheme (but don't require it on all endpoints)
-    openapi_schema["components"]["securitySchemes"] = {
-        "BearerAuth": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-            "description": "Enter your JWT token (get it from /auth/login endpoint)"
-        }
-    }
-    
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
-
-app.openapi = custom_openapi
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # CORS configuration
 origins = [
@@ -68,6 +45,46 @@ app.add_middleware(
 @app.exception_handler((RequestValidationError))
 async def validation_exception_handler(request, exc):
     return {"error": "Invalid request", "details": exc.errors()}
+
+@app.post("/token", summary="OAuth2 Token Endpoint", tags=["Auth"])
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    OAuth2-compatible token endpoint for FastAPI docs authentication.
+    
+    This endpoint enables the "Authorize" button in FastAPI docs.
+    Use your email as username and your password to get a Bearer token.
+    """
+    from common import supabase
+    
+    try:
+        # Authenticate with Supabase using email (username) and password
+        auth = supabase.auth.sign_in_with_password({
+            "email": form_data.username,  # FastAPI form uses 'username' field for email
+            "password": form_data.password
+        })
+        
+        if not auth.session or not auth.session.access_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Return OAuth2-compatible token response
+        return {
+            "access_token": auth.session.access_token,
+            "token_type": "bearer"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Authentication error in /token endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 @app.get("/")
 def read_root():

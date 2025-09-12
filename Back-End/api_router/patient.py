@@ -1,11 +1,12 @@
 from common import logger, admin_supabase as supabase
 from fastapi import Depends, HTTPException, APIRouter, status, Request
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from datetime import datetime, date
 from security.jwt_verify import current_user
 
-router = APIRouter()
+# Use universal_auth for both OAuth2 docs AND frontend requests
+router = APIRouter(dependencies=[Depends(current_user)])
 
 class PatientBase(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=50, description="Patient's first name")
@@ -35,9 +36,7 @@ class Patient(PatientBase):
         from_attributes = True
 
 @router.get("/", response_model=List[Patient], summary="Get all patients")
-async def get_all_patients(request: Request):
-    user = current_user(request)  # Extract user from auth
-
+async def get_all_patients():
     try: 
         result = (
             supabase
@@ -59,9 +58,7 @@ async def get_all_patients(request: Request):
         )
 
 @router.get("/{patient_id}", response_model=Patient, summary="Get patient by id")
-async def get_patient(patient_id: str, request: Request):
-    user = current_user(request)  # Extract user from auth
-
+async def get_patient(patient_id: str):
     try:
         result = (
             supabase

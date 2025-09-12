@@ -27,7 +27,7 @@ class SDPBody(BaseModel):
     sdp: str
     type: str
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(current_user)])
 
 rooms: dict[str, Room] = {}
 relay = MediaRelay()

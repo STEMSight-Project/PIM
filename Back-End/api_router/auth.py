@@ -13,49 +13,8 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-@router.get("/test-info", summary="Get test credentials info")
-def get_test_info():
-    """
-    Get information about test credentials and how to authenticate.
-    
-    **To get started:**
-    1. Create a user in your Supabase dashboard
-    2. Use the /auth/login endpoint to get tokens
-    3. Click 🔒 "Authorize" button and enter: Bearer YOUR_TOKEN
-    4. Test any endpoint!
-    """
-    return {
-        "message": "Create user credentials in your Supabase dashboard",
-        "steps": [
-            "1. Go to your Supabase project dashboard",
-            "2. Navigate to Authentication > Users",
-            "3. Create a new user with email/password",
-            "4. Use those credentials in the /auth/login endpoint below",
-            "5. Copy the access_token from the response",
-            "6. Click the 🔒 'Authorize' button at the top",
-            "7. Enter: Bearer YOUR_ACCESS_TOKEN",
-            "8. Now you can test all protected endpoints!"
-        ],
-        "docs_url": "/docs"
-    }
-
 @router.post("/login", summary="Login to get access token", description="Use this endpoint to get your Bearer token for API authentication")
 def login(body: LoginRequest) -> dict:
-    """
-    Login with email and password to get access tokens.
-    
-    **Steps to use the API:**
-    1. Call this endpoint with your credentials
-    2. Copy the `access_token` from the response
-    3. Click the 🔒 "Authorize" button at the top of this page
-    4. Enter: `Bearer YOUR_ACCESS_TOKEN` (replace YOUR_ACCESS_TOKEN with the actual token)
-    5. Now you can test all protected endpoints!
-    
-    **Response includes:**
-    - `access_token`: Use this for API authentication
-    - `refresh_token`: Use this to refresh expired tokens
-    - `user`: Your user information
-    """
     supabase.auth._auto_refresh_token = True
 
     try:
