@@ -13,7 +13,8 @@ export interface Patient {
 }
 // get all patients
 export async function getAllPatients(): Promise<Patient[]> {
-  return await api.get("/patients/");
+  const response = await api.get<Patient[]>("/patients/");
+  return response.data || [];
 }
 // get a patient by id
 export async function getPatient(id: string) {

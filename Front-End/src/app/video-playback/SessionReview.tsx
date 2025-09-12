@@ -5,13 +5,8 @@ import { useSearchParams } from "next/navigation";
 import SessionReview from "@/components/session-review/SessionReview";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { getAllPatients, getPatient } from "@/services/patientService";
-
-interface Patient {
-  id: string;
-  first_name: string;
-  last_name: string;
-}
+import { usePatients } from "@/hooks";
+import type { Patient } from "@/types";
 
 export default function SessionReviewPage() {
   const searchParams = useSearchParams();
@@ -20,13 +15,16 @@ export default function SessionReviewPage() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const { patients, getPatient } = usePatients();
+
   useEffect(() => {
     if (patientId) {
       // Fetch specific patient by ID
       getPatient(patientId)
-        .then((patient) => {
-          if (!patient) throw new Error("Failed to fetch patient data");
-          setPatient(patient);
+        .then((result) => {
+          if (!result.success || !result.data)
+            throw new Error("Failed to fetch patient data");
+          setPatient(result.data);
           setLoading(false);
         })
         .catch((error) => {
@@ -34,20 +32,15 @@ export default function SessionReviewPage() {
           setLoading(false);
         });
     } else {
-      // Fetch all patients and select one randomly
-      getAllPatients()
-        .then((patients) => {
-          if (!patients) throw new Error("Failed to fetch patients");
-          const randomPatient =
-            patients[Math.floor(Math.random() * patients.length)];
-          setPatient(randomPatient);
-        })
-        .catch((error) => {
-          console.error("Error fetching patients:", error);
-          setLoading(false);
-        });
+      // Use first available patient if no ID specified
+      if (patients.length > 0) {
+        const randomPatient =
+          patients[Math.floor(Math.random() * patients.length)];
+        setPatient(randomPatient);
+        setLoading(false);
+      }
     }
-  }, [patientId]);
+  }, [patientId, getPatient, patients]);
 
   if (loading) {
     return <div>Loading...</div>;
@@ -60,7 +53,7 @@ export default function SessionReviewPage() {
   return (
     <div className="bg-gray-50 min-h-screen">
       <Header patientId={patientId} />
-      <SessionReview initialPatient={patient} />
+      <SessionReview />
       <Footer />
     </div>
   );

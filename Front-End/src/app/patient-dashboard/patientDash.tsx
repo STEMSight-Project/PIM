@@ -2,54 +2,41 @@
 import { useEffect, useState } from "react";
 import Header from "@/components/Header"; // Import the Header component
 import Footer from "@/components/Footer";
-import { api } from "@/services/api";
+import { usePatients } from "@/hooks";
+import type { Patient as BasePatient } from "@/types";
 
-type Patient = {
-  id: string; // UUID from Supabase
-  first_name: string;
-  last_name: string;
+type Patient = BasePatient & {
   isLive: boolean; // Determines the live/offline status
-  created_at: string;
   stationNumber?: number; // Optional station number field
 };
 
 export default function PatientDashboard() {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [displayPatients, setDisplayPatients] = useState<Patient[]>([]);
+
+  const { patients, isLoading: loading, error } = usePatients();
 
   useEffect(() => {
-    api
-      .get<Patient[]>("/patients/")
-      .then((patients) => {
-        if (!patients) {
-          console.error("No data received from API");
-          setLoading(false);
-          return;
-        }
-        const updatedPatients = patients.map((patient: Patient) => {
-          const isLive = Math.random() < 0.1; // Randomly set isLive to true for ~10% of patients
-          return {
-            ...patient,
-            isLive,
-            stationNumber: Math.floor(Math.random() * 10) + 1, // Assign a random station number (1-10) to all patients
-          };
-        });
-        setPatients(updatedPatients);
-        setLoading(false);
-      })
-      .catch((error) => {
-        console.error("Error fetching patients:", error);
-        setLoading(false);
+    if (patients.length > 0) {
+      // Add random isLive status and station numbers for display
+      const updatedPatients = patients.map((patient: BasePatient): Patient => {
+        const isLive = Math.random() < 0.1; // Randomly set isLive to true for ~10% of patients
+        return {
+          ...patient,
+          isLive,
+          stationNumber: Math.floor(Math.random() * 10) + 1, // Assign a random station number (1-10) to all patients
+        };
       });
-  }, []);
+      setDisplayPatients(updatedPatients);
+    }
+  }, [patients]);
 
   if (loading) {
     return <div>Loading...</div>;
   }
 
   // Separate active and inactive patients
-  const activePatients = patients.filter((patient) => patient.isLive);
-  const inactivePatients = patients.filter((patient) => !patient.isLive);
+  const activePatients = displayPatients.filter((patient) => patient.isLive);
+  const inactivePatients = displayPatients.filter((patient) => !patient.isLive);
 
   return (
     <div className="min-h-screen bg-gray-100">

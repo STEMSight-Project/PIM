@@ -1,6 +1,6 @@
 import React from "react";
 import { Edit3, Clock, CheckCircle, Trash2 } from "lucide-react";
-import { Note } from "@/services/noteService";
+import { Note } from "@/hooks";
 
 interface NoteItemProps {
   note: Note;

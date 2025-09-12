@@ -1,57 +1,56 @@
 import { api } from "@/services/api";
+import type { MedicalHistory } from "@/types";
 
-interface MedicalHistory {
-  id: string;
+interface CreateMedicalHistoryRequest {
   patient_id: string;
   doctor_id: string;
   diagnosis: string;
   note?: string;
-  created_at: Date;
-  updated_at: Date;
+}
+
+interface UpdateMedicalHistoryRequest {
+  diagnosis?: string;
+  note?: string;
 }
 
 export const getAllMedicalHistories = async (): Promise<MedicalHistory[]> => {
-  const medicalHistories = await api.get<MedicalHistory[]>("/medical_history/");
-  return medicalHistories;
+  const response = await api.get<MedicalHistory[]>("/medical_history/");
+  return response.data || [];
 };
 
 export const getMedicalHistoryById = async (
   medicalHistoryId: string
-): Promise<MedicalHistory> => {
-  const medicalHistory = await api.get<MedicalHistory>(
+): Promise<MedicalHistory | null> => {
+  const response = await api.get<MedicalHistory>(
     `/medical_history/${medicalHistoryId}`
   );
-  return medicalHistory;
+  return response.data;
 };
 
 export const createMedicalHistory = async (
-  medicalHistory: Omit<MedicalHistory, "id" | "created_at" | "updated_at">
-): Promise<MedicalHistory> => {
-  const newMedicalHistory = await api.post<MedicalHistory>(
+  medicalHistory: CreateMedicalHistoryRequest
+): Promise<MedicalHistory | null> => {
+  const response = await api.post<MedicalHistory>(
     "/medical_history/",
     medicalHistory
   );
-  return newMedicalHistory;
+  return response.data;
 };
 
 export const updateMedicalHistory = async (
   medicalHistoryId: string,
-  medicalHistory: Partial<
-    Omit<
-      MedicalHistory,
-      "id" | "created_at" | "updated_at" | "patient_id" | "doctor_id"
-    >
-  >
-): Promise<MedicalHistory> => {
-  const updatedMedicalHistory = await api.patch<MedicalHistory>(
+  medicalHistory: UpdateMedicalHistoryRequest
+): Promise<MedicalHistory | null> => {
+  const response = await api.patch<MedicalHistory>(
     `/medical_history/${medicalHistoryId}/`,
     medicalHistory
   );
-  return updatedMedicalHistory;
+  return response.data;
 };
 
 export const deleteMedicalHistory = async (
   medicalHistoryId: string
-): Promise<void> => {
-  await api.delete(`/medical_history/${medicalHistoryId}/`);
+): Promise<boolean> => {
+  const response = await api.delete(`/medical_history/${medicalHistoryId}/`);
+  return !response.error;
 };

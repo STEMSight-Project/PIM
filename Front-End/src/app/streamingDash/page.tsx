@@ -1,132 +1,192 @@
 "use client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Maximize2, ArrowLeft, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import { getPatient } from "@/services/patientService";
-import { createNewConnection } from "@/services/streamingVideoServices";
+import { DashboardLayout } from "@/components/layouts/DashboardLayout";
+import { Card } from "@/components/ui/Card";
+import { Loading } from "@/components/ui/Loading";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { useStreaming, usePatients } from "@/hooks";
 import ScriptLog from "./ScriptLog";
+import type { Patient } from "@/types";
 
-export default function Page() {
+export default function StreamingDashPage() {
   const params = useSearchParams();
   const patientId = params.get("patientId") ?? "test_patient";
 
-  const [patient, setPatient] = useState<{
-    first_name: string;
-    last_name: string;
-  } | null>(null);
   const [showLog, setShowLog] = useState(true);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const {
+    isConnected,
+    isConnecting,
+    error: streamingError,
+    connectionQuality,
+    videoRef,
+    startStreaming,
+    stopStreaming,
+    clearError: clearStreamingError,
+    toggleFullscreen,
+  } = useStreaming();
+
+  const { patients, isLoading: loading, error, getPatient } = usePatients();
+
+  const [patient, setPatient] = useState<Patient | null>(null);
 
   useEffect(() => {
-    getPatient(patientId)
-      .then((patient) => {
-        if (patient) {
-          setPatient({
-            first_name: patient.first_name,
-            last_name: patient.last_name,
-          });
+    async function fetchPatientData() {
+      if (patientId) {
+        const result = await getPatient(patientId);
+        if (result.success && result.data) {
+          setPatient(result.data);
         }
-      })
-      .catch(console.error);
-  }, [patientId]);
+      }
+    }
+    fetchPatientData();
+  }, [patientId, getPatient]);
 
   useEffect(() => {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
+    // Auto-start streaming when component mounts
+    if (patientId) {
+      startStreaming(patientId);
+    }
 
-    pc.ontrack = (ev) => {
-      if (videoRef.current) {
-        videoRef.current.srcObject = ev.streams[0];
-        videoRef.current
-          .play()
-          .catch((err) => console.error("Autoplay error:", err));
-      }
+    return () => {
+      stopStreaming();
     };
+  }, [patientId, startStreaming, stopStreaming]);
 
-    pcRef.current = pc;
-    createNewConnection(patientId, pc);
-    return () => pcRef.current?.close();
-  }, [patientId]);
-
-  const toggleFS = () => {
-    const el = containerRef.current;
-    if (!el) return;
-    document.fullscreenElement
-      ? document.exitFullscreen()
-      : el.requestFullscreen();
+  const handleStartStreaming = () => {
+    clearStreamingError();
+    startStreaming(patientId);
   };
 
+  const handleStopStreaming = () => {
+    stopStreaming();
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loading />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
-    <div className="flex flex-col min-h-screen bg-black overflow-hidden">
-      <Header patientId={null} />
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Live Stream</h1>
+            <p className="text-gray-600">
+              Viewing live stream for{" "}
+              {patient
+                ? `${patient.first_name} ${patient.last_name}`
+                : patientId}
+            </p>
+          </div>
 
-      <main className="flex flex-1 flex-col items-center justify-center relative px-4 py-6">
-        <p className="text-lg text-gray-300 mb-4 text-center">
-          Viewing live stream for&nbsp;
-          {patient ? `${patient.first_name} ${patient.last_name}` : patientId}
-        </p>
+          <div className="flex items-center gap-3">
+            {connectionQuality && (
+              <div
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  connectionQuality === "excellent"
+                    ? "bg-green-100 text-green-800"
+                    : connectionQuality === "good"
+                    ? "bg-blue-100 text-blue-800"
+                    : connectionQuality === "fair"
+                    ? "bg-yellow-100 text-yellow-800"
+                    : "bg-red-100 text-red-800"
+                }`}
+              >
+                {connectionQuality} connection
+              </div>
+            )}
 
-        <div
-          ref={containerRef}
-          className="relative w-full max-w-5xl aspect-video border-4 border-gray-700 rounded-xl overflow-hidden shadow-lg"
-        >
-          <video
-            ref={videoRef}
-            className="w-full h-full bg-black"
-            controls
-            muted={false}
-            autoPlay
-            playsInline
-          />
-
-          <button
-            onClick={toggleFS}
-            className="absolute top-3 right-3 bg-gray-800 text-white p-2 rounded-md hover:bg-gray-700 z-10"
-          >
-            <Maximize2 className="w-5 h-5" />
-          </button>
+            {isConnected ? (
+              <Button onClick={handleStopStreaming} variant="outline">
+                Stop Stream
+              </Button>
+            ) : (
+              <Button
+                onClick={handleStartStreaming}
+                isLoading={isConnecting}
+                disabled={isConnecting}
+              >
+                {isConnecting ? "Connecting..." : "Start Stream"}
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Toggle button and log panel */}
-        <div className="absolute right-0 bottom-4 flex items-end pr-4 gap-2 z-20">
-          {/* Toggle button slides with log */}
-          <motion.div
-            animate={{ x: showLog ? 0 : 300 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          >
-            <motion.button
-              onClick={() => setShowLog((prev) => !prev)}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              className="bg-blue-600 text-white p-3 rounded-full shadow-md hover:bg-blue-500"
+        {(error || streamingError) && (
+          <Alert variant="error">{error || streamingError}</Alert>
+        )}
+
+        <Card className="p-6">
+          <div className="relative w-full aspect-video border-2 border-gray-200 rounded-lg overflow-hidden bg-black">
+            <video
+              ref={videoRef}
+              className="w-full h-full"
+              controls
+              muted={false}
+              autoPlay
+              playsInline
+            />
+
+            {!isConnected && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white">
+                <div className="text-center">
+                  {isConnecting ? (
+                    <>
+                      <Loading />
+                      <p className="mt-2">Connecting to stream...</p>
+                    </>
+                  ) : (
+                    <p>No video stream available</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={toggleFullscreen}
+              className="absolute top-3 right-3 bg-gray-800 text-white p-2 rounded-md hover:bg-gray-700 transition-colors"
             >
-              {showLog ? <ArrowRight /> : <ArrowLeft />}
-            </motion.button>
-          </motion.div>
+              <Maximize2 className="w-5 h-5" />
+            </button>
+          </div>
+        </Card>
 
-          {/* ScriptLog always mounted — just slides in/out */}
+        {/* Log Panel */}
+        <div className="fixed right-4 bottom-4 flex items-end gap-2 z-20">
+          <motion.button
+            onClick={() => setShowLog((prev) => !prev)}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            className="bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-500 transition-colors"
+          >
+            {showLog ? <ArrowRight /> : <ArrowLeft />}
+          </motion.button>
+
           <motion.div
             animate={{ x: showLog ? 0 : 300 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="w-[22rem] max-w-[90vw] h-[32rem] bg-black/70 backdrop-blur-md text-white rounded-xl shadow-xl overflow-hidden"
-            style={{
-              pointerEvents: showLog ? "auto" : "none",
-              opacity: showLog ? 1 : 0.3,
-            }}
+            className="w-96 h-96"
           >
-            <ScriptLog />
+            <Card className="h-full p-4 bg-gray-900 text-white">
+              <h3 className="text-lg font-semibold mb-4">Analysis Log</h3>
+              <div className="h-full overflow-hidden">
+                <ScriptLog />
+              </div>
+            </Card>
           </motion.div>
         </div>
-      </main>
-
-      <Footer />
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

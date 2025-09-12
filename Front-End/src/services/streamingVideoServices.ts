@@ -4,35 +4,40 @@ export async function createNewConnection(
   patient_id: string,
   pc: RTCPeerConnection
 ): Promise<void> {
-  pc.addTransceiver("video", { direction: "recvonly" });
-  pc.addTransceiver("audio", { direction: "recvonly" });
+  try {
+    pc.addTransceiver("video", { direction: "recvonly" });
+    pc.addTransceiver("audio", { direction: "recvonly" });
 
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
 
-  await new Promise<void>((r) => {
-    if (pc.iceGatheringState === "complete") return r();
-    const check = () =>
-      pc.iceGatheringState === "complete" &&
-      (pc.removeEventListener("icegatheringstatechange", check), r());
-    pc.addEventListener("icegatheringstatechange", check);
-  });
-
-  //MARK: Need to change test_patient to patient_id
-  await api
-    .post<RTCSessionDescriptionInit>(`/streaming/rooms/test_patient/viewer`, {
-      sdp: pc.localDescription!.sdp,
-      type: pc.localDescription!.type,
-    })
-    .then(async (res) => {
-      console.log("SDP sent to server", pc.localDescription);
-      const answerJson = res as RTCSessionDescriptionInit;
-      await pc.setRemoteDescription(new RTCSessionDescription(answerJson));
-    })
-    .finally(() => {
-      console.log("SDP sent to server", pc.localDescription);
-    })
-    .catch((err) => {
-      console.error("Error sending SDP to server", err);
+    await new Promise<void>((resolve) => {
+      if (pc.iceGatheringState === "complete") return resolve();
+      const check = () =>
+        pc.iceGatheringState === "complete" &&
+        (pc.removeEventListener("icegatheringstatechange", check), resolve());
+      pc.addEventListener("icegatheringstatechange", check);
     });
+
+    // Use the actual patient_id instead of hardcoded "test_patient"
+    const response = await api.post<RTCSessionDescriptionInit>(
+      `/streaming/rooms/${patient_id}/viewer`,
+      {
+        sdp: pc.localDescription!.sdp,
+        type: pc.localDescription!.type,
+      }
+    );
+
+    console.log("SDP sent to server", pc.localDescription);
+
+    if (response.data) {
+      await pc.setRemoteDescription(new RTCSessionDescription(response.data));
+      console.log("Remote description set successfully");
+    } else {
+      throw new Error("No SDP answer received from server");
+    }
+  } catch (err) {
+    console.error("Error creating streaming connection", err);
+    throw err;
+  }
 }

@@ -1,35 +1,25 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { change_password } from "@/services/authServices";
+import { usePasswordReset } from "@/hooks";
 import Modal from "@/components/ModalPopUp/Modal";
 
 export default function ResetPassword() {
   const router = useRouter(); //The useRouter initialized to handle page navigation
 
+  const {
+    resetPassword,
+    isLoading,
+    error: hookError,
+    success: hookSuccess,
+  } = usePasswordReset();
+
   //The state variables for managing the inputs and messages of this page
-  const [access_token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [popUp, setPopUp] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const hash = window.location.hash.substring(1);
-      console.log(hash); //Logs the hash to the console for debugging purposes
-      const params = new URLSearchParams(hash);
-      const token = params.get("access_token");
-
-      if (token) {
-        setToken(token);
-        console.log(token); //Logs the token to the console for debugging purposes
-      }
-      // 🔥 Remove token from URL bar (important!)
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }, []);
 
   const handleBackToLogin = () => {
     setPopUp(false); //Closes the pop up
@@ -39,29 +29,22 @@ export default function ResetPassword() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    // Will check to see existence and validity of access token
-    if (!access_token) {
-      setError("Missing access token."); //Will rise error for missing token
-      return;
-    }
-
     if (password !== confirmPassword) {
       setError("Passwords do not match."); //will rise error if password fields do not match each other
       return;
     }
 
     // will send a request to backend to reset password
-    await change_password(access_token, password)
-      .then((res) => {
-        setSuccess(res.message);
-        setError("");
-        setConfirmPassword("");
-        setPopUp(true);
-      })
-      .catch((error) => {
-        setError("Unable to reset your password. Please try again!");
-        console.log(error, error.response.data);
-      });
+    const success = await resetPassword(password, confirmPassword);
+    if (success) {
+      setSuccess("Password reset successful!");
+      setError("");
+      setConfirmPassword("");
+      setPassword("");
+      setPopUp(true);
+    } else {
+      setError(hookError || "Unable to reset your password. Please try again!");
+    }
     //The form will be reset and show success message below
   };
 

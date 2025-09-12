@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Suspense } from "react";
+import { AuthProvider } from "@/hooks/useAuth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "STEMSight App",
-  description: "Hospital Private Networking App",
+  title: "STEMSight PIM",
+  description: "Posture and Movement Analysis Platform",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
@@ -33,7 +34,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Suspense>{children}</Suspense>
+        <AuthProvider>
+          <Suspense>{children}</Suspense>
+        </AuthProvider>
       </body>
     </html>
   );
