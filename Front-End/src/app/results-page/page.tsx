@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation"; // To get query parameters
-import "./styles.css"; // Import the styles.css file
-import Header from "@/components/Header"; // Import the Header component
 import Footer from "@/components/Footer"; // Import the Footer component
+import Header from "@/components/Header"; // Import the Header component
 import Image from "next/image";
+import { useSearchParams } from "next/navigation"; // To get query parameters
+import { Suspense, useEffect, useState } from "react";
+import "./styles.css"; // Import the styles.css file
 
 interface EventData {
   time: string;
@@ -32,6 +32,7 @@ function Page() {
 
   // Fetch patient details based on patientId
   useEffect(() => {
+    console.log("Fetching data for patientId:", patientId);
     if (patientId) {
       fetch(`http://127.0.0.1:8000/patients/${patientId}`)
         .then((response) => {

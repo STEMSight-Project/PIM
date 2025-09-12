@@ -1,0 +1,54 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Front-End (Next.js)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/Front-End/node_modules/.bin/next",
+      "args": ["dev"],
+      "cwd": "${workspaceFolder}/Front-End",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Debug Back-End (FastAPI)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/Back-End/main.py",
+      "cwd": "${workspaceFolder}/Back-End",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/Back-End"
+      },
+      "args": [],
+      "justMyCode": true
+    },
+    {
+      "name": "Debug Back-End (uvicorn)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"],
+      "cwd": "${workspaceFolder}/Back-End",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/Back-End"
+      },
+      "justMyCode": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Full Stack",
+      "configurations": [
+        "Debug Front-End (Next.js)",
+        "Debug Back-End (uvicorn)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

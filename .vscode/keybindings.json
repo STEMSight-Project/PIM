@@ -1,0 +1,16 @@
+[
+  {
+    "key": "ctrl+shift+b",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Start Full Stack (FE + BE)"
+  },
+  {
+    "key": "ctrl+shift+f5",
+    "command": "workbench.action.debug.start",
+    "args": "Debug Full Stack"
+  },
+  {
+    "key": "ctrl+shift+t",
+    "command": "workbench.action.tasks.terminate"
+  }
+]

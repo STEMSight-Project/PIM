@@ -35,7 +35,6 @@ async function request<T>(
     const res = await fetch(url, {
       method,
       headers,
-      credentials: "include",
       body:
         body instanceof FormData
           ? body
@@ -60,7 +59,6 @@ async function request<T>(
           const retryRes = await fetch(url, {
             method,
             headers,
-            credentials: "include",
             body:
               body instanceof FormData
                 ? body
@@ -120,9 +118,17 @@ async function request<T>(
 
 async function refreshAccessToken(): Promise<boolean> {
   try {
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (!refreshToken) return false;
+
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
       method: "POST",
-      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+      }),
     });
 
     if (!res.ok) return false;
@@ -180,7 +186,6 @@ export const apiHelpers = {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("access_token")}`,
           },
-          credentials: "include",
         }
       );
 

@@ -1,15 +1,16 @@
 "use client";
 
-import {
-  useState,
-  useEffect,
-  createContext,
-  useContext,
-  ReactNode,
-} from "react";
-import { useRouter } from "next/navigation";
-import type { User, LoginRequest, LoginResponse, AuthState } from "@/types";
 import { api } from "@/services/api";
+import type { AuthState, LoginRequest, LoginResponse, User } from "@/types";
+import { useRouter } from "next/navigation";
+import {
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import { useIsClient } from "./useClientSide";
 
 interface AuthContextType extends AuthState {
   login: (
@@ -36,6 +37,7 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isClient = useIsClient();
   const router = useRouter();
 
   const login = async (credentials: LoginRequest) => {
@@ -50,8 +52,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return { success: false, error: error || "Login failed" };
       }
 
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("access_token", data.access_token);
+        localStorage.setItem("refresh_token", data.refresh_token);
+      }
       setUser(data.user);
 
       return { success: true };
@@ -72,8 +76,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch (err) {
       console.error("Logout error:", err);
     } finally {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+      }
       setUser(null);
       setIsLoading(false);
       router.push("/");
@@ -87,28 +93,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(data);
       } else {
         setUser(null);
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("refresh_token");
+        }
       }
     } catch (err) {
       console.error("Failed to refresh user:", err);
       setUser(null);
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+      }
     }
   };
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem("access_token");
-      if (token) {
-        await refreshUser();
+      // Only run on client side
+      if (typeof window !== "undefined" && isClient) {
+        const token = localStorage.getItem("access_token");
+        if (token) {
+          await refreshUser();
+        }
       }
       setIsLoading(false);
     };
 
-    initAuth();
-  }, []);
+    // Only initialize auth after we're on the client side
+    if (isClient) {
+      initAuth();
+    }
+  }, [isClient]);
 
   const value: AuthContextType = {
     user,

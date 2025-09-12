@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
 import { cn } from "@/utils/cn";
+import React from "react";
 
 type ButtonVariant =
   | "primary"
@@ -64,6 +64,7 @@ export function Button({
       )}
       disabled={isLoading || disabled}
       {...props}
+      suppressHydrationWarning
     >
       {isLoading && (
         <svg

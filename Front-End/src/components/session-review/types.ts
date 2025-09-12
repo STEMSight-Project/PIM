@@ -1,4 +1,4 @@
-import { Video } from "@/services/videoService";
+import { Video } from "@/hooks";
 export interface Patient {
   id: string;
   first_name: string;

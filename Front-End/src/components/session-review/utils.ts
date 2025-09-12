@@ -1,4 +1,4 @@
-import { PatientEvent } from "@/services/patientEventService";
+import { PatientEvent } from "@/hooks";
 
 export const mapEventToDetection = (event: PatientEvent) => {
   const colorMap: { [key: string]: string } = {
