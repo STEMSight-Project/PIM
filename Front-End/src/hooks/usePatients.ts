@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { api } from "@/services/api";
 import type {
   Patient,
   PatientCreateRequest,
   PatientUpdateRequest,
 } from "@/types";
-import { api } from "@/services/api";
+import { useEffect, useState } from "react";
 
 export function usePatients() {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -103,7 +103,9 @@ export function usePatients() {
   const getPatient = async (patientId: string) => {
     try {
       const { data, error } = await api.get<Patient>(`/patients/${patientId}`);
-
+      console.log("Authorization header:", {
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      });
       if (error) {
         throw new Error(error);
       }

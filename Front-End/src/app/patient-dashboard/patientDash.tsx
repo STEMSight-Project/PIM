@@ -1,170 +1,149 @@
 "use client";
-import { useEffect, useState } from "react";
-import Header from "@/components/Header"; // Import the Header component
-import Footer from "@/components/Footer";
-import { usePatients } from "@/hooks";
-import type { Patient as BasePatient } from "@/types";
 
-type Patient = BasePatient & {
-  isLive: boolean; // Determines the live/offline status
-  stationNumber?: number; // Optional station number field
-};
+import Footer from "@/components/Footer";
+import Header from "@/components/Header";
+import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import { Loading } from "@/components/ui/Loading";
+import { usePatients } from "@/hooks";
+import { DashboardStats, PatientCard } from "./components";
 
 export default function PatientDashboard() {
-  const [displayPatients, setDisplayPatients] = useState<Patient[]>([]);
+  const { patients, isLoading, error } = usePatients();
 
-  const { patients, isLoading: loading, error } = usePatients();
-
-  useEffect(() => {
-    if (patients.length > 0) {
-      // Add random isLive status and station numbers for display
-      const updatedPatients = patients.map((patient: BasePatient): Patient => {
-        const isLive = Math.random() < 0.1; // Randomly set isLive to true for ~10% of patients
-        return {
-          ...patient,
-          isLive,
-          stationNumber: Math.floor(Math.random() * 10) + 1, // Assign a random station number (1-10) to all patients
-        };
-      });
-      setDisplayPatients(updatedPatients);
-    }
-  }, [patients]);
-
-  if (loading) {
-    return <div>Loading...</div>;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header patientId={null} />
+        <main className="flex-grow flex items-center justify-center">
+          <Loading size="lg" text="Loading patients..." />
+        </main>
+        <Footer />
+      </div>
+    );
   }
 
-  // Separate active and inactive patients
-  const activePatients = displayPatients.filter((patient) => patient.isLive);
-  const inactivePatients = displayPatients.filter((patient) => !patient.isLive);
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header patientId={null} />
+        <main className="flex-grow flex items-center justify-center">
+          <Card className="max-w-md">
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                  <svg
+                    className="w-8 h-8 text-red-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 15.5c-.77.833.192 2.5 1.732 2.5z"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Error Loading Patients
+                </h3>
+                <p className="text-gray-600">{error}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
+    <div className="min-h-screen flex flex-col bg-gray-50">
       <Header patientId={null} />
 
-      <div className="p-6">
-        <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg p-6">
-          <h1 className="text-2xl font-bold mb-4">
-            🩺 Patient Monitoring Dashboard
-          </h1>
-
-          {/* Active Patients (Live) */}
-          <div>
-            <h2 className="text-xl font-semibold mb-4">🟢 Active Patients</h2>
-            <ul className="space-y-3">
-              {activePatients.length > 0 ? (
-                activePatients.map((patient) => (
-                  <PatientCard key={patient.id} patient={patient} />
-                ))
-              ) : (
-                <p className="text-gray-500 text-center">
-                  No active patients under observation.
-                </p>
-              )}
-            </ul>
+      <main className="flex-grow">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Page Header */}
+          <div className="mb-8">
+            <div className="flex items-center space-x-3 mb-2">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg
+                  className="w-6 h-6 text-blue-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+                Patient Dashboard
+              </h1>
+            </div>
+            <p className="text-gray-600">
+              Monitor and manage patient records and analysis results
+            </p>
           </div>
 
-          {/* Inactive Patients (Recorded) */}
-          <div className="mt-6">
-            <h2 className="text-xl font-semibold mb-4">⚪ Inactive Patients</h2>
-            <ul className="space-y-3">
-              {inactivePatients.length > 0 ? (
-                inactivePatients.map((patient) => (
-                  <PatientCard key={patient.id} patient={patient} />
-                ))
+          {/* Dashboard Statistics */}
+          <DashboardStats patients={patients} />
+
+          {/* Patients List */}
+          <Card className="mt-8">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  All Patients
+                </h2>
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <span>{patients.length} total patients</span>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {patients.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                    <svg
+                      className="w-8 h-8 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    No Patients Found
+                  </h3>
+                  <p className="text-gray-500">
+                    No patient records are currently available in the system.
+                  </p>
+                </div>
               ) : (
-                <p className="text-gray-500 text-center">
-                  No inactive patients.
-                </p>
+                <div className="space-y-4">
+                  {patients.map((patient) => (
+                    <PatientCard key={patient.id} patient={patient} />
+                  ))}
+                </div>
               )}
-            </ul>
-          </div>
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      </main>
+
       <Footer />
     </div>
   );
 }
-
-const PatientCard = ({ patient }: { patient: Patient }) => {
-  const currentDate = new Date().toLocaleDateString();
-
-  const liveLink = patient.isLive
-    ? `/streamingDash?patientId=${patient.id}`
-    : null;
-  const sessionReviewLink = !patient.isLive
-    ? `/video-playback?patientId=${patient.id}`
-    : null;
-  const medicalHistoryLink = `/patient-medical-history?patientId=${patient.id}`;
-
-  return (
-    <li
-      className={`flex items-center justify-between p-4 bg-gray-50 rounded-lg shadow-sm hover:bg-gray-100 transition ${
-        liveLink || sessionReviewLink ? "cursor-pointer" : ""
-      }`}
-      onClick={() => {
-        if (liveLink) {
-          window.location.href = liveLink;
-        } else if (sessionReviewLink) {
-          window.location.href = sessionReviewLink;
-        }
-      }}
-    >
-      <div className="flex items-center space-x-3">
-        <div
-          className={`w-4 h-4 rounded-full ${
-            patient.isLive ? "bg-green-600 animate-pulse" : "bg-red-500"
-          }`}
-          aria-hidden="true"
-        />
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">
-            {patient.first_name} {patient.last_name}
-            {patient.stationNumber && (
-              <span className="ml-2 text-sm text-gray-500">
-                Station: {patient.stationNumber}
-              </span>
-            )}
-          </h3>
-          <p className="text-gray-600 text-sm">
-            {patient.isLive
-              ? `Current Date: ${currentDate}`
-              : `Recorded On: ${patient.created_at}`}
-          </p>
-        </div>
-      </div>
-
-      {/* Buttons */}
-      <div className="flex space-x-2">
-        <a
-          href={medicalHistoryLink}
-          className="px-4 py-2 text-sm bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 flex items-center gap-2"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12h6m2 0a2 2 0 100-4H7a2 2 0 100 4m0 0v6m0-6h10"
-            />
-          </svg>
-          Medical History
-        </a>
-
-        <a
-          href={`/results-page?patientId=${patient.id}`} // Pass patientId as a query parameter
-          className="px-4 py-2 text-sm bg-blue-800 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2"
-        >
-          View Results
-        </a>
-      </div>
-    </li>
-  );
-};
