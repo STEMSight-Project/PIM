@@ -1,0 +1,14 @@
+{
+  "resolution": [1920, 1080],
+  "framerate": 30,
+  "exposure_mode": "auto",
+  "white_balance": "auto",
+  "rotation": 0,
+  "preview_enabled": false,
+  "capture_timeout": 5000,
+  "image_quality": 85,
+  "video_stabilization": true,
+  "sensor_mode": 0,
+  "awb_mode": "auto",
+  "meter_mode": "average"
+}

@@ -1,75 +1,72 @@
 "use client";
 
-import React, { useState } from "react";
+import { useNotes } from "@/hooks";
+import { Note } from "@/services";
 import { MessageSquare } from "lucide-react";
+import React, { useState } from "react";
 import NoteForm from "./NoteForm";
 import NotesList from "./NoteList";
-import { Note, NotesProps } from "./types";
+import { NotesProps } from "./types";
 
 /**
  * For the notes tab, handling note creation via NoteForm and displaying/editing notes in NotesList.
  */
 const Notes: React.FC<NotesProps> = ({
+  notes,
+  setNotes,
   setCurrentTimestamp,
   currentVideoTime,
+  patientId,
+  videoId,
 }) => {
-  // Mock data for notes with timestamps
-  const [notes, setNotes] = useState<Note[]>([
-    {
-      id: "1",
-      content:
-        "Patient was agitated during transport which could affect detection accuracy. However, the decerebrate posturing is clearly visible in the video and consistent with potential brainstem involvement. Tremor detection appears accurate and may indicate extension of the ischemic area. Recommend immediate CT upon arrival, with neurology consultation and preparation for potential thrombectomy.",
-      created_time: "10:30 AM",
-      videoTimeSeconds: 45, // 0:45 timestamp
-      author: "Dr. Sarah Johnson",
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: "2",
-      content:
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum",
-      created_time: "10:35 AM",
-      videoTimeSeconds: 120, // 2:00 timestamp
-      author: "Dr. Sarah Johnson",
-      created_at: new Date().toISOString(),
-    },
-  ]);
-
   const [newNote, setNewNote] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [currentTime, setCurrentTime] = useState<number | undefined>(undefined);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
 
-  const handleUpdateTimestamp = (noteId: string, newTime: number) => {
-    setNotes(
-      notes.map((note) =>
-        note.id === noteId ? { ...note, videoTimeSeconds: newTime } : note
-      )
-    );
+  const { createNote, updateNote, deleteNote } = useNotes();
+
+  const handleUpdateTimestamp = async (noteId: string, newTime: number) => {
+    const updatedNote = await updateNote(noteId, {
+      timestamp_seconds: newTime,
+    });
+    if (updatedNote) {
+      console.log("Note updated successfully:", updatedNote);
+      setNotes(
+        notes.map((n) => {
+          if (n.id === noteId) {
+            return { ...n, timestamp_seconds: newTime };
+          }
+          return n;
+        })
+      );
+    } else {
+      console.error("Failed to update note");
+    }
   };
 
   // Add a new note
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     if (newNote.trim() === "") return;
 
-    const now = new Date();
-    const newNoteObj: Note = {
-      id: `note-${Date.now()}`,
+    const notePayload = {
       content: newNote,
-      created_time: now.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      videoTimeSeconds: currentTime,
-      author: "Dr. Sarah Johnson",
-      created_at: now.toISOString(),
+      timestamp_seconds: currentTime,
+      author: "d86f06ec-fd0a-42a7-872c-e8224a4b18f1",
+      video_id: videoId,
+      patient_id: patientId,
     };
 
-    setNotes([newNoteObj, ...notes]);
-    setNewNote("");
-    setIsAdding(false);
-    setCurrentTime(undefined);
+    const note = await createNote(notePayload);
+    if (note) {
+      setNotes([note, ...notes]);
+      setNewNote("");
+      setIsAdding(false);
+      setCurrentTime(undefined);
+    } else {
+      console.error("Failed to create note");
+    }
   };
 
   // Start editing a note
@@ -78,25 +75,32 @@ const Notes: React.FC<NotesProps> = ({
     setEditContent(note.content);
   };
 
-  // Save edited note
-  const handleSaveEdit = (id: string) => {
+  const handleSaveEdit = async (id: string) => {
     if (editContent.trim() === "") return;
 
-    setNotes(
-      notes.map((note) =>
-        note.id === id ? { ...note, content: editContent } : note
-      )
-    );
-
-    setEditingNoteId(null);
-    setEditContent("");
+    const updatedNote = await updateNote(id, { content: editContent });
+    if (updatedNote) {
+      setNotes(
+        notes.map((note) =>
+          note.id === id ? { ...note, content: editContent } : note
+        )
+      );
+      setEditingNoteId(null);
+      setEditContent("");
+    } else {
+      console.error("Failed to update note");
+    }
   };
 
   // Delete a note
-  const handleDeleteNote = (id: string) => {
-    setNotes(notes.filter((note) => note.id !== id));
+  const handleDeleteNote = async (id: string) => {
+    const success = await deleteNote(id);
+    if (success) {
+      setNotes(notes.filter((note) => note.id !== id));
+    } else {
+      console.error("Failed to delete note");
+    }
   };
-
   // Cancel form
   const handleCancelForm = () => {
     setIsAdding(false);
@@ -117,30 +121,37 @@ const Notes: React.FC<NotesProps> = ({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-medium text-gray-800">Session Notes</h3>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Session Notes</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            {notes.length} {notes.length === 1 ? "note" : "notes"} recorded
+          </p>
+        </div>
         <button
-          className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center"
+          className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md"
           onClick={() => setIsAdding(!isAdding)}
         >
           <MessageSquare className="w-4 h-4 mr-2" />
-          Add Note
+          {isAdding ? "Cancel" : "Add Note"}
         </button>
       </div>
 
       {/* Add note form */}
       {isAdding && (
-        <NoteForm
-          newNote={newNote}
-          setNewNote={setNewNote}
-          currentTime={currentTime}
-          setCurrentTime={setCurrentTime}
-          currentVideoTime={currentVideoTime}
-          onCancel={handleCancelForm}
-          onSave={handleAddNote}
-          onUpdateTimestamp={handleUpdateTimestamp}
-        />
+        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+          <NoteForm
+            newNote={newNote}
+            setNewNote={setNewNote}
+            currentTime={currentTime}
+            setCurrentTime={setCurrentTime}
+            currentVideoTime={currentVideoTime}
+            onCancel={handleCancelForm}
+            onSave={handleAddNote}
+            onUpdateTimestamp={handleUpdateTimestamp}
+          />
+        </div>
       )}
 
       {/* Notes list */}

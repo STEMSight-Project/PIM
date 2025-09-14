@@ -1,11 +1,14 @@
 "use client";
-import React, { useState } from 'react';
-import TextField from "@/components/TextField"; 
+import React, { useState } from "react";
+import TextField from "@/components/TextField";
+import { usePasswordReset } from "@/hooks";
 
 export default function PatientDashboard() {
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(''); 
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const { requestPasswordReset } = usePasswordReset();
 
   const handleEmailChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(event.currentTarget.value);
@@ -15,11 +18,25 @@ export default function PatientDashboard() {
     event.preventDefault();
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(email)) {
-      setError('Please enter a valid email address.');
+      setError("Please enter a valid email address.");
+      setSuccess("");
       return;
     }
-    setError('');
-    setSuccess('A reset link has been sent to your email address.'); // Success message
+
+    try {
+      const success = await requestPasswordReset(email);
+      if (success) {
+        setSuccess("A reset link has been sent to your email address.");
+        setError("");
+      } else {
+        setError("Request failed. Please try again.");
+        setSuccess("");
+      }
+    } catch (error) {
+      console.error("Error during password reset request:", error);
+      setError("Unable to send request. Please try again later.");
+      setSuccess("");
+    }
   };
 
   return (
@@ -27,11 +44,13 @@ export default function PatientDashboard() {
       <div className="bg-white px-8 py-8 rounded-2xl">
         <div className="flex-row space-y-10">
           <h2 className="font-bold font-serif px-16 text-2xl text-black">
-            Forgot Password</h2>
+            Forgot Password
+          </h2>
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700">
-                Email Address</label>
+                Email Address
+              </label>
               <TextField
                 type="email"
                 value={email}
@@ -39,7 +58,8 @@ export default function PatientDashboard() {
               />
             </div>
             {error && <p className="text-red-500">{error}</p>}
-            {success && <p className="text-green-500">{success}</p>} {/* Display success message */}
+            {success && <p className="text-green-500">{success}</p>}{" "}
+            {/* Display success message */}
             <button
               type="submit"
               className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-500"
@@ -51,5 +71,4 @@ export default function PatientDashboard() {
       </div>
     </div>
   );
-};
-
+}
