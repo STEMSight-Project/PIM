@@ -2,7 +2,7 @@
 
 ## Overview
 
-The STEMSight PIM frontend is a **Next.js 15** application designed for healthcare providers to monitor patients through real-time streaming from Raspberry Pi 4 devices. It provides dashboards for viewing live patient movements, reviewing AI-detected postures, and managing patient data.
+The STEMSight PIM frontend is a **Next.js 15** application designed for monitoring camera AI performance and analyzing movement detection data from Raspberry Pi 4 devices. It provides dashboards for viewing live camera feeds, reviewing AI-detected postures and movements, and managing camera device configurations.
 
 ## 🏗️ Project Structure
 
@@ -12,11 +12,15 @@ Front-End/
 │   ├── app/                    # Next.js App Router (Pages)
 │   │   ├── layout.tsx         # Root layout
 │   │   ├── page.tsx           # Login page
-│   │   ├── dashboard/         # Main healthcare provider dashboard
-│   │   ├── patient-dashboard/ # Patient-specific views
-│   │   ├── patient-medical-history/ # Medical records management
+│   │   ├── dashboard/         # Main AI monitoring dashboard
+│   │   ├── patient-dashboard/ # Subject-specific views
+│   │   ├── patients/          # Patient management
+│   │   │   └── [slug]/        # Dynamic patient detail pages
+│   │   │       ├── page.tsx   # Patient overview with tabs
+│   │   │       └── (tabs)     # Medical History, Detection History, Video Sessions
+│   │   ├── recent-live-session/ # RPi camera session monitoring
 │   │   ├── password-reset/    # Password reset flow
-│   │   ├── streamingDash/     # Live streaming dashboard
+│   │   ├── streamingDash/     # Live camera streaming dashboard
 │   │   └── video-playback/    # Video review and analysis
 │   │
 │   ├── components/            # Reusable UI Components
@@ -24,7 +28,7 @@ Front-End/
 │   │   ├── layouts/          # Layout components
 │   │   │   ├── AuthLayout.tsx
 │   │   │   └── DashboardLayout.tsx
-│   │   ├── session-review/   # Video session analysis
+│   │   ├── session-review/   # Video session analysis with AI detection
 │   │   └── ModalPopUp/       # Modal dialogs
 │   │
 │   ├── hooks/                # Custom React Hooks
@@ -109,25 +113,42 @@ Front-End/
 
 ## 🎯 Core Features
 
-### 1. **Live Patient Monitoring**
+### 1. **Recent Live Session Monitoring**
+
+- **Centralized Session Dashboard**: View all RPi 4 camera sessions in one place (`/recent-live-session`)
+- **Session Statistics**: Real-time metrics on active sessions, total detections, and confidence scores
+- **Session History**: Complete timeline of camera monitoring sessions with status tracking
+- **RPi Integration**: Automatic session detection from Raspberry Pi 4 devices (no manual start required)
+
+### 2. **Enhanced Patient Management**
+
+- **Dynamic Patient Routes**: RESTful URLs with `/patients/[patientId]` structure
+- **Tabbed Patient Interface**:
+  - **Overview**: Personal information and monitoring statistics
+  - **Medical History**: Clinical records and medical notes
+  - **Detection History**: AI-detected movements and postures from recent sessions
+  - **Video Sessions**: Recorded sessions and camera feeds
+- **Patient-Specific Detection Analytics**: Detailed view of AI detection events per patient
+
+### 3. **Live Patient Monitoring**
 
 - Real-time video streams from Raspberry Pi 4 devices
 - AI-powered posture and movement detection alerts
 - Multi-patient dashboard view
 
-### 2. **Medical Records Management**
+### 4. **Medical Records Management**
 
 - Patient information and demographics
 - Medical history tracking
 - Notes and annotations system
 
-### 3. **Video Analysis**
+### 5. **Video Analysis**
 
 - Session review and playback
 - AI detection timeline
 - Annotation and note-taking tools
 
-### 4. **Role-Based Access**
+### 6. **Role-Based Access**
 
 - Healthcare provider dashboard (`/dashboard`)
 - Patient-specific views (`/patient-dashboard`)
@@ -201,7 +222,52 @@ export default function Dashboard() {
 }
 ```
 
-## 🔗 API Integration
+## �️ Routing & Navigation
+
+### Updated Navigation Structure
+
+The application features an updated navigation with improved organization:
+
+```typescript
+// DashboardLayout navigation
+const navigation = [
+  { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
+  { name: "Subjects", href: "/patients", icon: UserGroupIcon },
+  {
+    name: "Recent Live Session",
+    href: "/recent-live-session",
+    icon: DocumentTextIcon,
+  },
+  { name: "Live Cameras", href: "/streamingDash", icon: VideoCameraIcon },
+];
+```
+
+### Dynamic Patient Routing
+
+Patient pages use RESTful dynamic routing patterns:
+
+```
+/patients/[patientId]           # Patient detail page with tabs
+├── Overview Tab                # Personal info + monitoring stats
+├── Medical History Tab         # Clinical records
+├── Detection History Tab       # AI detection events
+└── Video Sessions Tab          # Recorded camera sessions
+```
+
+**Key Benefits:**
+
+- **SEO-friendly URLs**: `/patients/123` instead of `/patients?id=123`
+- **Browser navigation**: Proper back/forward button support
+- **Bookmarkable links**: Direct links to specific patients
+- **RESTful structure**: Follows standard web conventions
+
+### Session Management
+
+- **RPi-Initiated Sessions**: Camera sessions are automatically started by Raspberry Pi devices
+- **Frontend Monitoring**: Dashboard displays and manages existing sessions (no manual start controls)
+- **Session Analytics**: Comprehensive view in `/recent-live-session` page
+
+## �🔗 API Integration
 
 ### Base API Client
 

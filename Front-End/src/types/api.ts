@@ -29,12 +29,30 @@ export interface StreamingRoom {
   updated_at: string;
 }
 
+// Updated StreamingSession to match backend implementation
 export interface StreamingSession {
   id: string;
+  patient_id: string;
   room_id: string;
-  viewer_count: number;
+  device_name?: string;
+  is_live: boolean;
+  status: "active" | "ended" | "error" | "disconnected";
   started_at: string;
   ended_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StreamingSessionCreate {
+  patient_id: string;
+  room_id: string;
+  device_name?: string;
+}
+
+export interface StreamingSessionUpdate {
+  is_live?: boolean;
+  status?: "active" | "ended" | "error" | "disconnected";
+  device_name?: string;
 }
 
 export interface VideoAnalysis {

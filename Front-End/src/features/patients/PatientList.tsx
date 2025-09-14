@@ -133,7 +133,7 @@ export function PatientList() {
                   </TableCell>
                   <TableCell>{formatDate(patient.date_of_birth)}</TableCell>
                   <TableCell>
-                    <span className="capitalize">{patient.gender}</span>
+                    <span className="capitalize">{patient.gender || "-"}</span>
                   </TableCell>
                   <TableCell>{patient.email || "-"}</TableCell>
                   <TableCell>{patient.phone || "-"}</TableCell>

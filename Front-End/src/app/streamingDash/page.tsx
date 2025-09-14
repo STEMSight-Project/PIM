@@ -14,7 +14,8 @@ import ScriptLog from "./ScriptLog";
 
 export default function StreamingDashPage() {
   const params = useSearchParams();
-  const patientId = params.get("patientId") ?? "test_patient";
+  const patientId =
+    params.get("patientId") ?? "0cabaa76-b0cb-4785-ae2a-9b5e96739ae3";
 
   const [showLog, setShowLog] = useState(true);
 
@@ -44,7 +45,7 @@ export default function StreamingDashPage() {
       }
     }
     fetchPatientData();
-  }, [patientId, getPatient]);
+  }, [patientId]);
 
   useEffect(() => {
     // Auto-start streaming when component mounts
@@ -55,7 +56,7 @@ export default function StreamingDashPage() {
     return () => {
       stopStreaming();
     };
-  }, [patientId, startStreaming, stopStreaming]);
+  }, [patientId]);
 
   const handleStartStreaming = () => {
     clearStreamingError();

@@ -1,60 +1,50 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
-import Image from "next/image";
-import { cn } from "@/utils/cn";
 import { Button } from "@/components/ui";
+import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/utils/cn";
 import {
-  HomeIcon,
-  UserGroupIcon,
-  DocumentTextIcon,
-  VideoCameraIcon,
-  Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
   Bars3Icon,
-  XMarkIcon,
+  DocumentTextIcon,
+  HomeIcon,
+  UserGroupIcon,
   UserIcon,
+  VideoCameraIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 const navigation = [
-  { name: "Dashboard", href: "/patient-dashboard", icon: HomeIcon },
-  { name: "Patients", href: "/patients", icon: UserGroupIcon },
+  { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
+  { name: "Subjects", href: "/patients", icon: UserGroupIcon },
   {
-    name: "Medical History",
-    href: "/patient-medical-history",
+    name: "Recent Live Session",
+    href: "/recent-live-session",
     icon: DocumentTextIcon,
   },
-  { name: "Video Sessions", href: "/streamingDash", icon: VideoCameraIcon },
-  { name: "Settings", href: "/settings", icon: Cog6ToothIcon },
+  { name: "Live Cameras", href: "/streamingDash", icon: VideoCameraIcon },
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const { logout } = useAuth();
 
   const handleLogout = async () => {
     try {
-      // Call logout API
-      await fetch("/api/auth/logout", { method: "POST" });
-
-      // Clear local storage
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-
-      // Redirect to login
-      router.push("/");
+      await logout();
     } catch (error) {
       console.error("Logout error:", error);
-      // Force logout anyway
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
+      // Force redirect even if logout fails
       router.push("/");
     }
   };
@@ -166,7 +156,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
             <div className="flex-1 lg:flex lg:items-center lg:justify-between">
               <h1 className="text-xl font-semibold text-gray-900">
-                Patient Information Management
+                Camera AI Monitoring System
               </h1>
 
               <div className="hidden lg:flex items-center space-x-4">

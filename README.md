@@ -1,4 +1,4 @@
-# STEMSight PIM - Patient Intelligence Monitoring System
+# STEMSight PIM - Posture Intelligence Monitoring
 
 ![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
@@ -9,9 +9,9 @@
 ![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
 ![OpenCV](https://img.shields.io/badge/opencv-%23white.svg?style=for-the-badge&logo=opencv&logoColor=white)
 
-## 🏥 Project Overview
+## � Project Overview
 
-STEMSight PIM is an **AI-powered medical monitoring system** designed to detect abnormal postures and involuntary movements in ambulance patients using computer vision and edge computing. The system combines real-time streaming from Raspberry Pi 4 devices with advanced machine learning models to provide healthcare providers with immediate insights into patient conditions.
+STEMSight PIM is a **Camera AI Service** for detecting and tracking postures and movements using computer vision technology. The system combines real-time streaming from Raspberry Pi 4 devices with advanced machine learning models to provide AI-powered pose detection and movement analysis capabilities.
 
 ## 🏗️ System Architecture
 
@@ -20,20 +20,20 @@ STEMSight PIM is an **AI-powered medical monitoring system** designed to detect 
 │   Raspberry     │    │   FastAPI       │    │   Next.js       │
 │   Pi 4 Devices  │───▶│   Backend       │───▶│   Frontend      │
 │                 │    │                 │    │                 │
-│ • Camera Module │    │ • REST APIs     │    │ • Dashboard UI  │
+│ • Camera Module │    │ • REST APIs     │    │ • AI Dashboard  │
 │ • Edge AI       │    │ • ML Models     │    │ • Live Streaming│
-│ • Live Stream   │    │ • WebRTC        │    │ • Patient Mgmt  │
-│ • Pose Detection│    │ • Database      │    │ • Video Review  │
+│ • Live Stream   │    │ • WebRTC        │    │ • Camera Mgmt   │
+│ • Pose Detection│    │ • Database      │    │ • Video Analysis│
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 ### 🎯 Core Components
 
-| Component              | Technology                      | Purpose                                                   |
-| ---------------------- | ------------------------------- | --------------------------------------------------------- |
-| **RPi 4 Edge Devices** | Python + MediaPipe + PyTorch    | Real-time patient monitoring with local AI processing     |
-| **Backend API**        | FastAPI + Supabase + PostgreSQL | Central data processing, ML models, and API services      |
-| **Frontend Dashboard** | Next.js 15 + React + TypeScript | Healthcare provider interface for monitoring and analysis |
+| Component              | Technology                      | Purpose                                                    |
+| ---------------------- | ------------------------------- | ---------------------------------------------------------- |
+| **RPi 4 Edge Devices** | Python + MediaPipe + PyTorch    | Real-time movement detection with local AI processing      |
+| **Backend API**        | FastAPI + Supabase + PostgreSQL | Central data processing, ML models, and API services       |
+| **Frontend Dashboard** | Next.js 15 + React + TypeScript | AI monitoring interface for camera management and analysis |
 
 ## 🚀 Quick Start Guide
 
@@ -112,10 +112,12 @@ python3 pose_model_capture.py --device camera_module --config config/
 
 ### 📱 **Healthcare Provider Dashboard**
 
-- **Live Streaming View**: Monitor multiple patients simultaneously
-- **Historical Analysis**: Review past sessions and detection events
-- **Medical Records**: Comprehensive patient information management
-- **Notes & Annotations**: Timestamped observations and comments
+- **Recent Live Sessions**: Monitor and review all camera sessions from RPi 4 devices
+- **Patient Management**: Comprehensive subject profiles with tabbed interface (Overview, Medical History, Detection History, Video Sessions)
+- **Live Streaming View**: Real-time video feeds from multiple RPi 4 cameras simultaneously
+- **Detection Analytics**: Review AI-detected movements and postures with confidence scores
+- **Medical Records**: Comprehensive patient information and clinical history management
+- **Session Insights**: Detailed analysis of detection events, alerts, and session statistics
 
 ### 🔒 **Security & Access Control**
 
@@ -142,6 +144,11 @@ PIM/
 ├── 🎨 Front-End/                   # Next.js frontend application
 │   ├── 📖 README.md               # Frontend documentation
 │   ├── src/app/                   # Next.js pages (App Router)
+│   │   ├── dashboard/             # Main healthcare provider dashboard
+│   │   ├── patients/              # Patient management
+│   │   │   └── [slug]/            # Dynamic patient detail pages
+│   │   ├── recent-live-session/   # RPi camera session monitoring
+│   │   └── streamingDash/         # Live camera feeds
 │   ├── src/components/            # Reusable UI components
 │   ├── src/hooks/                 # Custom React hooks
 │   ├── src/services/              # API service layer
@@ -164,11 +171,15 @@ PIM/
 
 ````
 
-1. RPi 4 Camera → MediaPipe Pose Detection → Local AI Processing
+1. **RPi 4 Auto-Initiation**: Camera modules automatically start monitoring sessions
    ↓
-2. Detection Results + Video Stream → FastAPI Backend → Database Storage
+2. **Real-time Processing**: MediaPipe Pose Detection → Local AI Processing → Detection Results
    ↓
-3. Real-time Streaming → WebRTC → Frontend Dashboard → Healthcare Provider
+3. **Data Transmission**: Detection Results + Video Stream → FastAPI Backend → Database Storage
+   ↓
+4. **Dashboard Display**: WebRTC Streaming → Frontend Dashboard → Healthcare Provider Monitoring
+
+**Note**: Sessions are automatically initiated by RPi 4 devices. Frontend provides monitoring and analysis, not manual session control.
 
 ````
 
@@ -444,14 +455,6 @@ python ./Back-End/Testing_files/broadcaster.py --room {room_id} --video_device {
   - MacOS `0` for Macbook microphone
 
 ---
-
-# Documentation
-
-## Testing
-
-## Deployment
-
-## Developer Instructions
 
 # Timeline
 

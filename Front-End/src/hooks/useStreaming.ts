@@ -118,11 +118,18 @@ export function useStreaming(): UseStreamingReturn {
             setIsConnecting(false);
             setError(null);
             break;
+          case "connecting":
+            setIsConnecting(true);
+            break;
           case "disconnected":
+            setIsConnected(false);
+            setIsConnecting(false);
+            setError("Connection lost - attempting to reconnect...");
+            break;
           case "failed":
             setIsConnected(false);
             setIsConnecting(false);
-            setError("Connection failed or disconnected");
+            setError("Connection failed - please check your network and try again");
             break;
           case "closed":
             setIsConnected(false);
@@ -139,8 +146,17 @@ export function useStreaming(): UseStreamingReturn {
       pc.oniceconnectionstatechange = () => {
         console.log("ICE connection state:", pc.iceConnectionState);
 
-        if (pc.iceConnectionState === "connected") {
-          monitorConnectionQuality(pc);
+        switch (pc.iceConnectionState) {
+          case "connected":
+          case "completed":
+            monitorConnectionQuality(pc);
+            break;
+          case "failed":
+            setError("Network connection failed - please check your internet connection");
+            break;
+          case "disconnected":
+            setError("Network connection lost - trying to reconnect...");
+            break;
         }
       };
 
@@ -152,9 +168,16 @@ export function useStreaming(): UseStreamingReturn {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
+      console.log("Created offer:", offer.type);
+
       // Wait for ICE gathering to complete
-      await new Promise<void>((resolve) => {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("ICE gathering timeout"));
+        }, 10000); // 10 second timeout
+
         if (pc.iceGatheringState === "complete") {
+          clearTimeout(timeout);
           resolve();
           return;
         }
@@ -165,6 +188,7 @@ export function useStreaming(): UseStreamingReturn {
               "icegatheringstatechange",
               handleICEGatheringStateChange
             );
+            clearTimeout(timeout);
             resolve();
           }
         };
@@ -182,18 +206,28 @@ export function useStreaming(): UseStreamingReturn {
           type: pc.localDescription!.type,
         });
 
-        if (response.data) {
+        if (response.data && response.data.sdp && response.data.type) {
+          // Validate that the type is a valid RTCSdpType
+          const validTypes: RTCSdpType[] = ["answer", "offer", "pranswer", "rollback"];
+          const responseType = response.data.type as RTCSdpType;
+          
+          if (!validTypes.includes(responseType)) {
+            throw new Error(`Invalid SDP type received: ${response.data.type}`);
+          }
+
           await pc.setRemoteDescription(
             new RTCSessionDescription({
               sdp: response.data.sdp,
-              type: response.data.type as RTCSdpType,
+              type: responseType,
             })
           );
           console.log("Remote description set successfully");
         } else {
-          throw new Error("No SDP answer received from server");
+          const errorMessage = response.error || "No SDP answer received from server";
+          throw new Error(errorMessage);
         }
       } catch (err) {
+        console.error("Failed to set remote description:", err);
         pc.close();
         throw err;
       }
@@ -207,6 +241,11 @@ export function useStreaming(): UseStreamingReturn {
     async (patientId: string): Promise<void> => {
       if (isConnecting || isConnected) {
         console.warn("Streaming already in progress");
+        return;
+      }
+
+      if (!patientId) {
+        setError("Patient ID is required for streaming");
         return;
       }
 
@@ -224,8 +263,18 @@ export function useStreaming(): UseStreamingReturn {
 
         console.log("Streaming connection established");
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to start streaming";
+        let message = "Failed to start streaming";
+        
+        if (err instanceof Error) {
+          if (err.message.includes("Invalid SDP type")) {
+            message = "Server returned invalid session data. Please try again.";
+          } else if (err.message.includes("No SDP answer")) {
+            message = "Server did not respond with streaming data. Check if the camera is available.";
+          } else {
+            message = err.message;
+          }
+        }
+        
         setError(message);
         console.error("Error starting streaming:", err);
         setIsConnecting(false);

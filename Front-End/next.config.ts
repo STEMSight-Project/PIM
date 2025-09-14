@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "export",
+  // Removed static export for dynamic patient routes
   trailingSlash: true,
   images: {
     unoptimized: true,

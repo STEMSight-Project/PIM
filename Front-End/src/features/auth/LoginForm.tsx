@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Button, Input, Alert } from "@/components/ui";
+import { Alert, Button, Input } from "@/components/ui";
 import { useAuth } from "@/hooks";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
@@ -34,7 +34,7 @@ export function LoginForm() {
     const result = await login({ email, password });
 
     if (result.success) {
-      router.push("/patient-dashboard");
+      router.push("/dashboard");
     } else {
       setError(result.error || "Login failed. Please try again.");
     }

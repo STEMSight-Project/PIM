@@ -2,7 +2,9 @@
 
 ## Overview
 
-The STEMSight PIM backend is a **FastAPI-based** medical AI system designed to detect abnormal postures and involuntary movements in ambulance patients. It provides REST APIs for patient management, real-time streaming, AI-powered pose detection, and integration with Raspberry Pi 4 edge devices.
+The STEMSight PIM backend is a **FastAPI-based** Camera AI Service designed to detect and track postures and movements using computer vision technology. It provides REST APIs for camera management, real-time streaming, AI-powered pose detection, and integration with Raspberry Pi 4 edge devices.
+
+**Session Management**: The backend receives and manages camera sessions that are automatically initiated by Raspberry Pi 4 devices. The system focuses on processing and storing detection data rather than manual session control.
 
 ## 🏗️ Project Structure
 
@@ -21,11 +23,11 @@ Back-End/
 │   ├── __init__.py
 │   ├── router.py              # Main router configuration
 │   ├── auth.py                # Authentication endpoints
-│   ├── patient.py             # Patient CRUD operations
-│   ├── doctor.py              # Doctor management
-│   ├── medical_history.py     # Medical records
+│   ├── patient.py             # Subject management (camera targets)
+│   ├── doctor.py              # User management
+│   ├── medical_history.py     # Detection history and records
 │   ├── note.py                # Notes and annotations
-│   ├── patient_event.py       # Patient events tracking
+│   ├── patient_event.py       # Detection events tracking
 │   ├── streaming.py           # WebRTC streaming
 │   └── video.py               # Video management
 │
