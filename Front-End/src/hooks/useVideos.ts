@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { api } from "@/services/api";
+import { Video as ServiceVideo, videoService } from "@/services";
+import { api } from "@/services/api"; // Keep for FormData uploads
+import { useCallback, useState } from "react";
 
 export interface Video {
   id: string;
@@ -10,6 +11,18 @@ export interface Video {
   file_path: string;
   public_video_url: string;
   created_at: string;
+}
+
+// Helper function to map service Video to hook Video
+function mapServiceVideoToHookVideo(serviceVideo: ServiceVideo): Video {
+  return {
+    id: serviceVideo.id,
+    patient_id: serviceVideo.patient_id,
+    description: serviceVideo.description || null,
+    file_path: serviceVideo.file_path,
+    public_video_url: serviceVideo.public_video_url,
+    created_at: serviceVideo.created_at,
+  };
 }
 
 interface UseVideosReturn {
@@ -47,8 +60,12 @@ export function useVideos(): UseVideosReturn {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<Video[]>("/videos/");
-      setVideos(response.data || []);
+      const { data, error } = await videoService.getAll();
+      if (error) {
+        throw new Error(error);
+      }
+      const mappedVideos = (data || []).map(mapServiceVideoToHookVideo);
+      setVideos(mappedVideos);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to fetch videos";
@@ -63,8 +80,12 @@ export function useVideos(): UseVideosReturn {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<Video[]>(`/videos/${patientId}/videos`);
-      setVideos(response.data || []);
+      const { data, error } = await videoService.getByPatientId(patientId);
+      if (error) {
+        throw new Error(error);
+      }
+      const mappedVideos = (data || []).map(mapServiceVideoToHookVideo);
+      setVideos(mappedVideos);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to fetch patient videos";
@@ -80,10 +101,13 @@ export function useVideos(): UseVideosReturn {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.post<Video>("/videos/", data);
+        // For FormData uploads, we'll continue using direct API call
+        // as the service upload methods expect structured data
+        const response = await api.post<ServiceVideo>("/videos/", data);
         if (response.data) {
-          setVideos((prev) => [response.data!, ...prev]);
-          return response.data;
+          const mappedVideo = mapServiceVideoToHookVideo(response.data);
+          setVideos((prev) => [mappedVideo, ...prev]);
+          return mappedVideo;
         }
         return null;
       } catch (err) {
@@ -104,7 +128,7 @@ export function useVideos(): UseVideosReturn {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.delete(`/videos/${id}`);
+        const response = await videoService.delete(id);
         if (!response.error) {
           setVideos((prev) => prev.filter((video) => video.id !== id));
           if (selectedVideo?.id === id) {

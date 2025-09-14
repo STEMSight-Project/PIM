@@ -1,9 +1,9 @@
 "use client";
 
+import { Note } from "@/services";
 import React, { useState } from "react";
-import Timeline from "./Timeline";
 import Notes from "./Notes";
-import { Note } from "@/hooks";
+import Timeline from "./Timeline";
 
 type TabType = "timeline" | "notes";
 

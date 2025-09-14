@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Optional, List
-from common import supabase, logger
+from core.common import supabase, logger
 from pydantic import BaseModel, EmailStr, ValidationError
 from enum import Enum
 from datetime import datetime

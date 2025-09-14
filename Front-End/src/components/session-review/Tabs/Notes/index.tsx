@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import { useNotes } from "@/hooks";
+import { Note } from "@/services";
 import { MessageSquare } from "lucide-react";
+import React, { useState } from "react";
 import NoteForm from "./NoteForm";
 import NotesList from "./NoteList";
 import { NotesProps } from "./types";
-import { useNotes, Note } from "@/hooks";
 
 /**
  * For the notes tab, handling note creation via NoteForm and displaying/editing notes in NotesList.
@@ -24,12 +25,7 @@ const Notes: React.FC<NotesProps> = ({
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
 
-  const {
-    createNote,
-    updateNote,
-    deleteNote,
-    loading: notesLoading,
-  } = useNotes();
+  const { createNote, updateNote, deleteNote } = useNotes();
 
   const handleUpdateTimestamp = async (noteId: string, newTime: number) => {
     const updatedNote = await updateNote(noteId, {

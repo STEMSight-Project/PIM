@@ -1,6 +1,6 @@
+import { Note } from "@/services";
+import { CheckCircle, Clock, Edit3, Trash2 } from "lucide-react";
 import React from "react";
-import { Edit3, Clock, CheckCircle, Trash2 } from "lucide-react";
-import { Note } from "@/hooks";
 
 interface NoteItemProps {
   note: Note;

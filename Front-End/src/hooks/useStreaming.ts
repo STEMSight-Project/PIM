@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import { api } from "@/services/api";
+import { streamingService } from "@/services";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UseStreamingReturn {
   // State
@@ -177,17 +177,17 @@ export function useStreaming(): UseStreamingReturn {
 
       // Send offer to server and get answer
       try {
-        const response = await api.post<RTCSessionDescriptionInit>(
-          `/streaming/rooms/${patientId}/viewer`,
-          {
-            sdp: pc.localDescription!.sdp,
-            type: pc.localDescription!.type,
-          }
-        );
+        const response = await streamingService.publishViewer(patientId, {
+          sdp: pc.localDescription!.sdp,
+          type: pc.localDescription!.type,
+        });
 
         if (response.data) {
           await pc.setRemoteDescription(
-            new RTCSessionDescription(response.data)
+            new RTCSessionDescription({
+              sdp: response.data.sdp,
+              type: response.data.type as RTCSdpType,
+            })
           );
           console.log("Remote description set successfully");
         } else {

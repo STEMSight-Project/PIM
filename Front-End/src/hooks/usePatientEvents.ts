@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useCallback } from "react";
 import { api } from "@/services/api";
+import { useCallback, useState } from "react";
 
+// Patient Event interface - matching backend
 export interface PatientEvent {
   id: string;
-  type: string;
-  timestamp: string;
-  confidence: number;
-  validation_status: string;
-  created_at: string;
+  patient_id: string;
   video_id: string;
+  type: string;
+  timestamp: number;
+  confidence?: number;
+  validation_status: "pending" | "confirmed" | "dismissed";
+  created_at: string;
 }
 
 interface UsePatientEventsReturn {
@@ -51,7 +53,7 @@ export function usePatientEvents(): UsePatientEventsReturn {
       setLoading(true);
       setError(null);
       const response = await api.get<PatientEvent[]>(
-        `/patient-events/patient/${patientId}`
+        `/patient_event/patient/${patientId}`
       );
       setEvents(response.data || []);
     } catch (err) {
@@ -69,7 +71,7 @@ export function usePatientEvents(): UsePatientEventsReturn {
       setLoading(true);
       setError(null);
       const response = await api.get<PatientEvent[]>(
-        `/patient-events/video/${videoId}`
+        `/patient_event/video/${videoId}`
       );
       setEvents(response.data || []);
     } catch (err) {
@@ -91,10 +93,8 @@ export function usePatientEvents(): UsePatientEventsReturn {
         setLoading(true);
         setError(null);
         const response = await api.patch<PatientEvent>(
-          `/patient-events/${eventId}`,
-          {
-            validation_status: status,
-          }
+          `/patient_event/${eventId}/status`,
+          { validation_status: status }
         );
 
         if (response.data) {

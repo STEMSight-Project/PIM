@@ -1,20 +1,12 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { api } from "@/services/api";
-import type { MedicalHistory } from "@/types";
-
-interface CreateMedicalHistoryRequest {
-  patient_id: string;
-  doctor_id: string;
-  diagnosis: string;
-  note?: string;
-}
-
-interface UpdateMedicalHistoryRequest {
-  diagnosis?: string;
-  note?: string;
-}
+import type {
+  MedicalHistory,
+  MedicalHistoryCreateRequest,
+  MedicalHistoryUpdateRequest,
+} from "@/services";
+import { medicalHistoryService } from "@/services";
+import { useCallback, useState } from "react";
 
 interface UseMedicalHistoryReturn {
   medicalHistories: MedicalHistory[];
@@ -27,11 +19,11 @@ interface UseMedicalHistoryReturn {
   fetchMedicalHistoryById: (id: string) => Promise<void>;
   fetchMedicalHistoriesByPatient: (patientId: string) => Promise<void>;
   createMedicalHistory: (
-    data: CreateMedicalHistoryRequest
+    data: MedicalHistoryCreateRequest
   ) => Promise<MedicalHistory | null>;
   updateMedicalHistory: (
     id: string,
-    data: UpdateMedicalHistoryRequest
+    data: MedicalHistoryUpdateRequest
   ) => Promise<MedicalHistory | null>;
   deleteMedicalHistory: (id: string) => Promise<boolean>;
   clearError: () => void;
@@ -56,7 +48,7 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<MedicalHistory[]>("/medical_history/");
+      const response = await medicalHistoryService.getAll();
       setMedicalHistories(response.data || []);
     } catch (err) {
       const message =
@@ -74,7 +66,7 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<MedicalHistory>(`/medical_history/${id}`);
+      const response = await medicalHistoryService.getById(id);
       if (response.data) {
         setSelectedHistory(response.data);
       } else {
@@ -95,9 +87,7 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.get<MedicalHistory[]>(
-          `/medical_history/patient/${patientId}/`
-        );
+        const response = await medicalHistoryService.getByPatientId(patientId);
         setMedicalHistories(response.data || []);
       } catch (err) {
         const message =
@@ -115,15 +105,12 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
 
   const createMedicalHistory = useCallback(
     async (
-      data: CreateMedicalHistoryRequest
+      data: MedicalHistoryCreateRequest
     ): Promise<MedicalHistory | null> => {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.post<MedicalHistory>(
-          "/medical_history/",
-          data
-        );
+        const response = await medicalHistoryService.create(data);
         if (response.data) {
           setMedicalHistories((prev) => [...prev, response.data!]);
           return response.data;
@@ -147,15 +134,12 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
   const updateMedicalHistory = useCallback(
     async (
       id: string,
-      data: UpdateMedicalHistoryRequest
+      data: MedicalHistoryUpdateRequest
     ): Promise<MedicalHistory | null> => {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.patch<MedicalHistory>(
-          `/medical_history/${id}/`,
-          data
-        );
+        const response = await medicalHistoryService.update(id, data);
         if (response.data) {
           setMedicalHistories((prev) =>
             prev.map((history) =>
@@ -188,7 +172,7 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.delete(`/medical_history/${id}/`);
+        const response = await medicalHistoryService.delete(id);
         if (!response.error) {
           setMedicalHistories((prev) =>
             prev.filter((history) => history.id !== id)

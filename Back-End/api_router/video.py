@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
-from common import supabase, logger
+from core.common import supabase, logger
 from fastapi import APIRouter, Depends, HTTPException
 from security.jwt_verify import current_user
 

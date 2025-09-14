@@ -2,7 +2,7 @@ from fastapi import Request, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
 from typing import Annotated
 from jwt import InvalidAudienceError, ExpiredSignatureError, InvalidTokenError
-from common import supabase_auth, logger
+from core.common import supabase_auth, logger
 
 # OAuth2 scheme for FastAPI docs integration
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)

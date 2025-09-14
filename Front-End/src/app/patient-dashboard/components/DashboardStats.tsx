@@ -26,12 +26,6 @@ export function DashboardStats({ patients }: DashboardStatsProps) {
     { children: 0, adults: 0, seniors: 0 }
   );
 
-  // Calculate gender distribution
-  const genderStats = patients.reduce((acc, patient) => {
-    acc[patient.gender] = (acc[patient.gender] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
   const stats = [
     {
       label: "Total Patients",

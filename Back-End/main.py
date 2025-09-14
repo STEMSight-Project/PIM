@@ -4,7 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from api_router.router import api_router
-from common import logger, supabase
+from core.common import logger, supabase
 
 app = FastAPI(
     title="STEMSight API",

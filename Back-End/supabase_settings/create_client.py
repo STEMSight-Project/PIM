@@ -1,6 +1,6 @@
 from supabase import create_client, Client
 from supabase.lib.client_options import ClientOptions
-from env import ENVIRONMENT
+from core.env import ENVIRONMENT
 
 # Client for auth operations - needs session management
 SUPABASE_AUTH: Client = create_client(

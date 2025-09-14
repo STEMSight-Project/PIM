@@ -1,6 +1,6 @@
+import { Note } from "@/services";
 import React from "react";
 import NoteItem from "./NoteItem";
-import { Note } from "@/hooks";
 
 /*
     Renders the list of notes that can be created, updated, and deleted passes the props to the NoteItem

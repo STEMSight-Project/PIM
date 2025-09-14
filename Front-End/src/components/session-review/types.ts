@@ -1,8 +1,17 @@
 import { Video } from "@/hooks";
+
 export interface Patient {
   id: string;
   first_name: string;
   last_name: string;
+  date_of_birth: string;
+  gender: "male" | "female" | "other";
+  email?: string;
+  phone?: string;
+  address?: string;
+  emergency_contact?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SessionData {
@@ -16,14 +25,27 @@ export interface SessionData {
 }
 
 export interface Detection {
+  id: string;
   type: string;
-  color: string;
+  timestamp: string;
+  confidence: number;
+  validation_status: string;
+  created_at: string;
+  video_id: string;
+  color?: string;
 }
 
+// Updated to match what the component expects
 export interface SessionWithPatient {
-  session: SessionData;
-  patient?: Patient;
+  patient: Patient;
+  videos: Video[];
   detections: Detection[];
+  startTime: Date;
+  endTime: Date;
+  // Additional session properties that might be used
+  id?: string;
+  sessionDate?: string;
+  stationId?: string;
 }
 
 export interface PatientEvent {

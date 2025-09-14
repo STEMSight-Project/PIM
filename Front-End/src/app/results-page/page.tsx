@@ -4,7 +4,7 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
-import { api } from "@/services/api";
+import { patientService } from "@/services/patientService";
 import type { Patient } from "@/types/medical";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -33,7 +33,7 @@ function Page() {
     if (patientId) {
       const fetchPatient = async () => {
         try {
-          const response = await api.get<Patient>(`patients/${patientId}`);
+          const response = await patientService.getById(patientId);
 
           if (response.error) {
             console.error("Error fetching patient data:", response.error);

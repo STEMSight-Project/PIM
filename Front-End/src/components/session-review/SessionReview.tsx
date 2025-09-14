@@ -25,22 +25,16 @@ const SessionReview: React.FC = () => {
     fetchStitchedSessions,
   } = useSessions();
 
-  const {
-    notes: hookNotes,
-    loading: notesLoading,
-    error: notesError,
-    fetchNotesForPatient,
-    fetchNotesForVideo,
-  } = useNotes();
+  const { notes: hookNotes, fetchNotesForPatient } = useNotes();
 
-  const { patients, isLoading: patientsLoading } = usePatients();
+  const { isLoading: patientsLoading } = usePatients();
 
   useEffect(() => {
     fetchStitchedSessions();
   }, [fetchStitchedSessions]);
 
   useEffect(() => {
-    if (selectedSession) {
+    if (selectedSession?.patient) {
       fetchNotesForPatient(selectedSession.patient.id);
     }
   }, [selectedSession, fetchNotesForPatient]);

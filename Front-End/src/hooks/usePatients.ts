@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/services/api";
+import { patientService } from "@/services";
 import type {
   Patient,
   PatientCreateRequest,
@@ -17,7 +17,7 @@ export function usePatients() {
     try {
       setIsLoading(true);
       setError(null);
-      const { data, error } = await api.get<Patient[]>("/patients/");
+      const { data, error } = await patientService.getAll();
 
       if (error) {
         throw new Error(error);
@@ -36,10 +36,7 @@ export function usePatients() {
 
   const createPatient = async (patientData: PatientCreateRequest) => {
     try {
-      const { data, error } = await api.post<Patient>(
-        "/patients/",
-        patientData
-      );
+      const { data, error } = await patientService.create(patientData);
 
       if (error) {
         throw new Error(error);
@@ -62,8 +59,8 @@ export function usePatients() {
     patientData: PatientUpdateRequest
   ) => {
     try {
-      const { data, error } = await api.patch<Patient>(
-        `/patients/${patientId}`,
+      const { data, error } = await patientService.update(
+        patientId,
         patientData
       );
 
@@ -85,7 +82,7 @@ export function usePatients() {
 
   const deletePatient = async (patientId: string) => {
     try {
-      const { error } = await api.delete(`/patients/${patientId}`);
+      const { error } = await patientService.delete(patientId);
 
       if (error) {
         throw new Error(error);
@@ -102,10 +99,8 @@ export function usePatients() {
 
   const getPatient = async (patientId: string) => {
     try {
-      const { data, error } = await api.get<Patient>(`/patients/${patientId}`);
-      console.log("Authorization header:", {
-        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-      });
+      const { data, error } = await patientService.getById(patientId);
+
       if (error) {
         throw new Error(error);
       }

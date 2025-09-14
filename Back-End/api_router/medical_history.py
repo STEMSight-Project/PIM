@@ -2,7 +2,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
-from common import logger, supabase
+from core.common import logger, supabase
 from security.jwt_verify import current_user
 
 router = APIRouter(dependencies=[Depends(current_user)])

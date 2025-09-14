@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { api } from "@/services/api";
-import type { Doctor } from "@/types";
+import type {
+  Doctor,
+  DoctorCreateRequest,
+  DoctorUpdateRequest,
+} from "@/services";
+import { doctorService } from "@/services";
+import { useCallback, useState } from "react";
 
 export enum Specialization {
   GENERAL_PRACTICE = "General Practice/Family Medicine",
@@ -21,24 +25,6 @@ export enum Specialization {
   UROLOGY = "Urology",
 }
 
-interface CreateDoctorRequest {
-  first_name: string;
-  middle_name?: string;
-  last_name: string;
-  specialization: Specialization;
-  email: string;
-  primary_phone: string;
-}
-
-interface UpdateDoctorRequest {
-  first_name?: string;
-  middle_name?: string;
-  last_name?: string;
-  specialization?: Specialization;
-  email?: string;
-  primary_phone?: string;
-}
-
 interface UseDoctorsReturn {
   doctors: Doctor[];
   selectedDoctor: Doctor | null;
@@ -48,10 +34,10 @@ interface UseDoctorsReturn {
   // Actions
   fetchDoctors: () => Promise<void>;
   fetchDoctor: (id: string) => Promise<void>;
-  createDoctor: (data: CreateDoctorRequest) => Promise<Doctor | null>;
+  createDoctor: (data: DoctorCreateRequest) => Promise<Doctor | null>;
   updateDoctor: (
     id: string,
-    data: UpdateDoctorRequest
+    data: DoctorUpdateRequest
   ) => Promise<Doctor | null>;
   deleteDoctor: (id: string) => Promise<boolean>;
   clearError: () => void;
@@ -72,8 +58,11 @@ export function useDoctors(): UseDoctorsReturn {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<Doctor[]>("/doctors/");
-      setDoctors(response.data || []);
+      const { data, error } = await doctorService.getAll();
+      if (error) {
+        throw new Error(error);
+      }
+      setDoctors(data || []);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to fetch doctors";
@@ -88,9 +77,12 @@ export function useDoctors(): UseDoctorsReturn {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<Doctor>(`/doctors/${id}`);
-      if (response.data) {
-        setSelectedDoctor(response.data);
+      const { data, error } = await doctorService.getById(id);
+      if (error) {
+        throw new Error(error);
+      }
+      if (data) {
+        setSelectedDoctor(data);
       } else {
         setError("Doctor not found");
       }
@@ -105,14 +97,17 @@ export function useDoctors(): UseDoctorsReturn {
   }, []);
 
   const createDoctor = useCallback(
-    async (data: CreateDoctorRequest): Promise<Doctor | null> => {
+    async (data: DoctorCreateRequest): Promise<Doctor | null> => {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.post<Doctor>("/doctors/", data);
-        if (response.data) {
-          setDoctors((prev) => [...prev, response.data!]);
-          return response.data;
+        const { data: newDoctor, error } = await doctorService.create(data);
+        if (error) {
+          throw new Error(error);
+        }
+        if (newDoctor) {
+          setDoctors((prev) => [...prev, newDoctor]);
+          return newDoctor;
         }
         return null;
       } catch (err) {
@@ -129,19 +124,25 @@ export function useDoctors(): UseDoctorsReturn {
   );
 
   const updateDoctor = useCallback(
-    async (id: string, data: UpdateDoctorRequest): Promise<Doctor | null> => {
+    async (id: string, data: DoctorUpdateRequest): Promise<Doctor | null> => {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.patch<Doctor>(`/doctors/${id}/`, data);
-        if (response.data) {
+        const { data: updatedDoctor, error } = await doctorService.update(
+          id,
+          data
+        );
+        if (error) {
+          throw new Error(error);
+        }
+        if (updatedDoctor) {
           setDoctors((prev) =>
-            prev.map((doctor) => (doctor.id === id ? response.data! : doctor))
+            prev.map((doctor) => (doctor.id === id ? updatedDoctor : doctor))
           );
           if (selectedDoctor?.id === id) {
-            setSelectedDoctor(response.data);
+            setSelectedDoctor(updatedDoctor);
           }
-          return response.data;
+          return updatedDoctor;
         }
         return null;
       } catch (err) {
@@ -162,15 +163,15 @@ export function useDoctors(): UseDoctorsReturn {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.delete(`/doctors/${id}/`);
-        if (!response.error) {
-          setDoctors((prev) => prev.filter((doctor) => doctor.id !== id));
-          if (selectedDoctor?.id === id) {
-            setSelectedDoctor(null);
-          }
-          return true;
+        const { error } = await doctorService.delete(id);
+        if (error) {
+          throw new Error(error);
         }
-        return false;
+        setDoctors((prev) => prev.filter((doctor) => doctor.id !== id));
+        if (selectedDoctor?.id === id) {
+          setSelectedDoctor(null);
+        }
+        return true;
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to delete doctor";

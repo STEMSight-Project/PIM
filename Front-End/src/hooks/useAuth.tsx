@@ -1,7 +1,7 @@
 "use client";
 
-import { api } from "@/services/api";
-import type { AuthState, LoginRequest, LoginResponse, User } from "@/types";
+import { authService } from "@/services";
+import type { AuthState, LoginRequest, User } from "@/types";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -43,10 +43,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = async (credentials: LoginRequest) => {
     try {
       setIsLoading(true);
-      const { data, error } = await api.post<LoginResponse>(
-        "/auth/login",
-        credentials
-      );
+      const { data, error } = await authService.login(credentials);
 
       if (error || !data) {
         return { success: false, error: error || "Login failed" };
@@ -72,14 +69,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = async () => {
     try {
       setIsLoading(true);
-      await api.post("/auth/logout");
+      await authService.logout();
     } catch (err) {
       console.error("Logout error:", err);
     } finally {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-      }
       setUser(null);
       setIsLoading(false);
       router.push("/");
@@ -88,15 +81,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const refreshUser = async () => {
     try {
-      const { data, error } = await api.get<User>("/auth/me");
+      const { data, error } = await authService.getCurrentUser();
       if (data && !error) {
         setUser(data);
       } else {
         setUser(null);
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-        }
+        authService.clearTokens();
       }
     } catch (err) {
       console.error("Failed to refresh user:", err);

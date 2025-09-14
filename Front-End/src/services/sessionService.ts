@@ -1,40 +1,72 @@
 // services/sessionService.ts
 
-import { getAllPatients } from "./patientService";
-import { getVideosForPatient } from "./videoService";
-import { getEventsForVideo } from "./patientEventService";
+import { api } from "./api";
+import { patientService } from "./patientService";
+import { videoService } from "./videoService";
 
-import {
-  formatDateTime,
-  mapEventToDetection,
-} from "@/components/session-review/utils";
 import {
   Detection,
   SessionWithPatient,
 } from "@/components/session-review/types";
+import { Video as SessionVideo } from "@/hooks/useVideos"; // Import the expected Video type
+
+// Helper function to map new Video service type to old Video hook type
+function mapVideoToSessionVideo(video: any): SessionVideo {
+  return {
+    id: video.id,
+    patient_id: video.patient_id,
+    description: null, // New video service doesn't have description
+    file_path: video.video_url || video.filename || "", // Map video_url to file_path
+    public_video_url: video.video_url || "", // Use video_url as public_video_url
+    created_at: video.created_at,
+  };
+}
+
+// Helper function to map PatientEvent to Detection
+function mapEventToDetection(event: any): Detection {
+  return {
+    id: event.id,
+    type: event.type,
+    timestamp: event.timestamp,
+    confidence: event.confidence,
+    validation_status: event.validation_status,
+    created_at: event.created_at,
+    video_id: event.video_id,
+  };
+}
 
 export async function fetchStitchedSessions(): Promise<SessionWithPatient[]> {
   const sessions: SessionWithPatient[] = [];
 
-  const patients = await getAllPatients();
-  if (!patients) {
-    console.error("Failed to fetch patients", patients);
+  const patientsResponse = await patientService.getAll();
+  if (!patientsResponse.data) {
+    console.error("Failed to fetch patients", patientsResponse.error);
     return [];
   }
 
-  for (const patient of patients) {
-    const videos = (await getVideosForPatient(patient.id)).sort(
+  for (const patient of patientsResponse.data) {
+    const videosResponse = await videoService.getByPatientId(patient.id);
+    if (!videosResponse.data) continue;
+
+    const videos = videosResponse.data.sort(
       (a, b) =>
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
 
     if (videos.length === 0) continue;
 
+    // Map to the expected Video type for session review
+    const mappedVideos = videos.map(mapVideoToSessionVideo);
+
     const allDetections: Detection[] = [];
     let latestEventTimestamp = 0;
 
     for (const video of videos) {
-      const events = await getEventsForVideo(video.id);
+      // Get events for this video using direct API call
+      const eventsResponse = await api.get<any[]>(
+        `/patient_event/video/${video.id}`
+      );
+      const events = eventsResponse.data || [];
       const detections = events.map(mapEventToDetection) || [];
       allDetections.push(...detections);
 
@@ -58,29 +90,20 @@ export async function fetchStitchedSessions(): Promise<SessionWithPatient[]> {
       endDate = new Date(fallbackEnd.getTime() + 15 * 60 * 1000);
     }
 
-    const { date, time: startTime } = formatDateTime(firstVideo.created_at);
-    const endTime = endDate.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-
     const stationId = `S-${Math.floor(Math.random() * 1000)
       .toString()
       .padStart(3, "0")}`;
 
+    // Return in the format expected by the component
     sessions.push({
-      session: {
-        id: `session-${patient.id}`,
-        patientId: patient.id,
-        sessionDate: date,
-        startTime,
-        endTime,
-        stationId,
-        videos,
-      },
       patient,
+      videos: mappedVideos,
       detections: allDetections,
+      startTime: startDate,
+      endTime: endDate,
+      id: `session-${patient.id}`,
+      sessionDate: firstVideo.created_at.split("T")[0],
+      stationId,
     });
   }
 

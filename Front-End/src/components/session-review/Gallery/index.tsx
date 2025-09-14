@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
-import { Grid, List } from "lucide-react";
 import { SessionWithPatient } from "@/components/session-review/types";
+import { Grid, List } from "lucide-react";
 import Image from "next/image";
+import React, { useState } from "react";
 
 interface ColorConfig {
   bg: string;
@@ -59,8 +59,8 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({
   };
 
   const sortedSessions = [...sessions].sort((a, b) => {
-    const dateA = new Date(`${a.session.sessionDate} ${a.session.startTime}`);
-    const dateB = new Date(`${b.session.sessionDate} ${b.session.startTime}`);
+    const dateA = new Date(`${a.sessionDate} ${a.startTime}`);
+    const dateB = new Date(`${b.sessionDate} ${b.startTime}`);
 
     switch (sortOption) {
       case "latest":
@@ -125,18 +125,22 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({
       <div className="flex-grow overflow-y-auto max-h-[500px]">
         {viewMode === "list" ? (
           <div className="divide-y divide-gray-200">
-            {sortedSessions.map(({ session, patient, detections }) => {
-              const isSelected = session.id === selectedSessionId;
+            {sortedSessions.map((sessionWithPatient) => {
+              const { patient, detections } = sessionWithPatient;
+              const isSelected = sessionWithPatient.id === selectedSessionId;
 
               return (
                 <div
-                  key={session.id}
+                  key={sessionWithPatient.id}
                   className={`p-3 cursor-pointer ${
                     isSelected
                       ? "bg-blue-50 border-l-4 border-blue-500"
                       : "hover:bg-gray-50"
                   }`}
-                  onClick={() => onSessionSelect(session.id)}
+                  onClick={() =>
+                    sessionWithPatient.id &&
+                    onSessionSelect(sessionWithPatient.id)
+                  }
                 >
                   <div className="flex justify-between">
                     <div>
@@ -152,7 +156,8 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({
                           isSelected ? "text-blue-600" : "text-gray-600"
                         }`}
                       >
-                        {session.sessionDate} - {session.startTime}
+                        {sessionWithPatient.sessionDate} -{" "}
+                        {sessionWithPatient.startTime?.toLocaleTimeString()}
                       </p>
                     </div>
                     <div className="flex items-start space-x-2">
@@ -161,13 +166,15 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({
                           <div
                             key={index}
                             className={`h-5 w-5 rounded-full ${
-                              colorMap[detection.color]?.bg || "bg-gray-100"
+                              colorMap[detection.color || ""]?.bg ||
+                              "bg-gray-100"
                             } flex items-center justify-center border border-white`}
                             title={detection.type}
                           >
                             <div
                               className={`h-2 w-2 rounded-full ${
-                                colorMap[detection.color]?.dot || "bg-gray-500"
+                                colorMap[detection.color || ""]?.dot ||
+                                "bg-gray-500"
                               }`}
                             ></div>
                           </div>
@@ -179,7 +186,7 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({
                         )}
                       </div>
                       <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
-                        {session.stationId}
+                        {sessionWithPatient.stationId}
                       </span>
                     </div>
                   </div>
@@ -208,7 +215,8 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({
                       className="text-xs text-blue-600 hover:text-blue-800"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onSessionSelect(session.id);
+                        sessionWithPatient.id &&
+                          onSessionSelect(sessionWithPatient.id);
                       }}
                     >
                       View
@@ -221,17 +229,21 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({
         ) : (
           // Grid view — you can update this loop too if needed
           <div className="grid grid-cols-2 gap-2 p-2">
-            {sortedSessions.map(({ session, patient, detections }) => {
-              const isSelected = session.id === selectedSessionId;
+            {sortedSessions.map((sessionWithPatient) => {
+              const { patient, detections } = sessionWithPatient;
+              const isSelected = sessionWithPatient.id === selectedSessionId;
               return (
                 <div
-                  key={session.id}
+                  key={sessionWithPatient.id}
                   className={`${
                     isSelected
                       ? "bg-blue-50 border-2 border-blue-500"
                       : "bg-white border border-gray-200 hover:bg-gray-50"
                   } rounded-lg p-2 cursor-pointer`}
-                  onClick={() => onSessionSelect(session.id)}
+                  onClick={() =>
+                    sessionWithPatient.id &&
+                    onSessionSelect(sessionWithPatient.id)
+                  }
                 >
                   <div className="relative h-24 bg-gray-200 rounded mb-2 overflow-hidden">
                     <Image
@@ -244,13 +256,14 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({
                         <div
                           key={index}
                           className={`h-5 w-5 rounded-full ${
-                            colorMap[detection.color]?.bg || "bg-gray-100"
+                            colorMap[detection.color || ""]?.bg || "bg-gray-100"
                           } flex items-center justify-center border border-white`}
                           title={detection.type}
                         >
                           <div
                             className={`h-2 w-2 rounded-full ${
-                              colorMap[detection.color]?.dot || "bg-gray-500"
+                              colorMap[detection.color || ""]?.dot ||
+                              "bg-gray-500"
                             }`}
                           ></div>
                         </div>
@@ -274,11 +287,12 @@ const SessionGallery: React.FC<SessionGalleryProps> = ({
                       isSelected ? "text-blue-600" : "text-gray-600"
                     }`}
                   >
-                    {session.sessionDate}, {session.startTime}
+                    {sessionWithPatient.sessionDate},{" "}
+                    {sessionWithPatient.startTime?.toLocaleTimeString()}
                   </p>
                   <div className="flex justify-between items-center mt-1">
                     <span className="text-xs bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
-                      {session.stationId}
+                      {sessionWithPatient.stationId}
                     </span>
                     <span className="text-xs text-green-700">
                       {detections.length}{" "}

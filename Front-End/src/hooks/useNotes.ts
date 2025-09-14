@@ -1,18 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { api } from "@/services/api";
+import type { Note } from "@/services";
+import { noteService } from "@/services";
+import { useCallback, useState } from "react";
 
-export interface Note {
-  id: string;
-  created_at: string;
-  content: string;
-  patient_id: string;
-  video_id?: string;
-  author: string;
-  timestamp_seconds?: number;
-  updated_at?: string;
-}
+// Re-export Note interface for backward compatibility
+export type { Note };
 
 interface CreateNoteRequest {
   content: string;
@@ -64,7 +57,7 @@ export function useNotes(): UseNotesReturn {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<Note[]>(`/note/patient/${patientId}`);
+      const response = await noteService.getByPatientId(patientId);
       setNotes(response.data || []);
     } catch (err) {
       const message =
@@ -80,7 +73,7 @@ export function useNotes(): UseNotesReturn {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get<Note[]>(`/note/video/${videoId}`);
+      const response = await noteService.getByVideoId(videoId);
       setNotes(response.data || []);
     } catch (err) {
       const message =
@@ -97,7 +90,7 @@ export function useNotes(): UseNotesReturn {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.post<Note>("/note/", data);
+        const response = await noteService.create(data);
         if (response.data) {
           setNotes((prev) => [response.data!, ...prev]); // Add new note to the top
           return response.data;
@@ -121,7 +114,7 @@ export function useNotes(): UseNotesReturn {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.patch<Note>(`/note/${id}`, data);
+        const response = await noteService.update(id, data);
         if (response.data) {
           setNotes((prev) =>
             prev.map((note) => (note.id === id ? response.data! : note))
@@ -150,7 +143,7 @@ export function useNotes(): UseNotesReturn {
       try {
         setLoading(true);
         setError(null);
-        const response = await api.delete(`/note/${id}`);
+        const response = await noteService.delete(id);
         if (!response.error) {
           setNotes((prev) => prev.filter((note) => note.id !== id));
           if (selectedNote?.id === id) {

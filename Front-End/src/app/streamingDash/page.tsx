@@ -1,16 +1,16 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Maximize2, ArrowLeft, ArrowRight } from "lucide-react";
-import { motion } from "framer-motion";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
-import { Card } from "@/components/ui/Card";
-import { Loading } from "@/components/ui/Loading";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { useStreaming, usePatients } from "@/hooks";
-import ScriptLog from "./ScriptLog";
+import { Card } from "@/components/ui/Card";
+import { Loading } from "@/components/ui/Loading";
+import { usePatients, useStreaming } from "@/hooks";
 import type { Patient } from "@/types";
+import { motion } from "framer-motion";
+import { ArrowLeft, ArrowRight, Maximize2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import ScriptLog from "./ScriptLog";
 
 export default function StreamingDashPage() {
   const params = useSearchParams();
@@ -30,7 +30,7 @@ export default function StreamingDashPage() {
     toggleFullscreen,
   } = useStreaming();
 
-  const { patients, isLoading: loading, error, getPatient } = usePatients();
+  const { isLoading: loading, error, getPatient } = usePatients();
 
   const [patient, setPatient] = useState<Patient | null>(null);
 

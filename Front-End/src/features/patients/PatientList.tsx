@@ -1,29 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
 import {
-  Button,
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableCell,
-  Loading,
   Alert,
-  Modal,
+  Button,
   Input,
+  Loading,
+  Modal,
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableRow,
 } from "@/components/ui";
 import { usePatients } from "@/hooks";
+import type { PatientCreateRequest } from "@/types";
 import { formatDate } from "@/utils/cn";
-import type { Patient, PatientCreateRequest } from "@/types";
 import {
-  PlusIcon,
-  PencilIcon,
-  TrashIcon,
   EyeIcon,
+  PencilIcon,
+  PlusIcon,
+  TrashIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import Link from "next/link";
+import { useState } from "react";
 
 export function PatientList() {
   const { patients, isLoading, error, createPatient, deletePatient } =

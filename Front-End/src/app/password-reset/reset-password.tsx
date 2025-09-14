@@ -1,18 +1,13 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { usePasswordReset } from "@/hooks";
 import Modal from "@/components/ModalPopUp/Modal";
+import { usePasswordReset } from "@/hooks";
+import { useRouter } from "next/navigation";
+import React, { useState } from "react";
 
 export default function ResetPassword() {
   const router = useRouter(); //The useRouter initialized to handle page navigation
 
-  const {
-    resetPassword,
-    isLoading,
-    error: hookError,
-    success: hookSuccess,
-  } = usePasswordReset();
+  const { resetPassword, error: hookError } = usePasswordReset();
 
   //The state variables for managing the inputs and messages of this page
   const [password, setPassword] = useState("");

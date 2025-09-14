@@ -113,7 +113,7 @@ export default function PatientMedicalHistory() {
       const history = medicalHistories.find((h) => h.id === id);
       if (history) {
         await updateMedicalHistory(id, {
-          diagnosis: history.condition, // Use condition from the type
+          diagnosis: history.diagnosis,
           note: note || undefined,
         });
       }
@@ -364,8 +364,8 @@ export default function PatientMedicalHistory() {
                     </div>
                     <MedicalHistoryForm
                       initialData={{
-                        diagnosis: history.condition || "",
-                        note: history.notes || "",
+                        diagnosis: history.diagnosis || "",
+                        note: history.note || "",
                       }}
                       onSubmit={(data) => handleUpdateHistory(history.id, data)}
                       onCancel={() => setEditingHistoryId(null)}
@@ -458,7 +458,7 @@ export default function PatientMedicalHistory() {
                           </div>
                           <div className="bg-gray-50 rounded-lg p-4">
                             <p className="text-gray-900 leading-relaxed">
-                              {history.condition}
+                              {history.diagnosis}
                             </p>
                           </div>
                         </div>
@@ -485,7 +485,7 @@ export default function PatientMedicalHistory() {
                           {editingNoteId === history.id ? (
                             <div className="bg-gray-50 rounded-lg p-4">
                               <NoteEditor
-                                initialNote={history.notes || ""}
+                                initialNote={history.note || ""}
                                 onSave={(note) =>
                                   handleUpdateNote(history.id, note)
                                 }
@@ -495,7 +495,7 @@ export default function PatientMedicalHistory() {
                           ) : (
                             <div className="bg-gray-50 rounded-lg p-4">
                               <p className="text-gray-900 leading-relaxed">
-                                {history.notes || (
+                                {history.note || (
                                   <span className="text-gray-500 italic">
                                     No notes available
                                   </span>

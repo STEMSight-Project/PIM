@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { authService } from "@/services/authService";
 import { useRouter } from "next/navigation";
-import type { PasswordResetRequest } from "@/types";
-import { api } from "@/services/api";
+import { useEffect, useState } from "react";
 
 export function usePasswordReset() {
   const [isLoading, setIsLoading] = useState(false);
@@ -65,8 +64,8 @@ export function usePasswordReset() {
     }
 
     try {
-      const resetData: PasswordResetRequest = { token, password };
-      const { data, error } = await api.post("/auth/reset-password", resetData);
+      const resetData = { token, new_password: password };
+      const { error } = await authService.confirmPasswordReset(resetData);
 
       if (error) {
         throw new Error(error);
@@ -98,7 +97,7 @@ export function usePasswordReset() {
     setSuccess(null);
 
     try {
-      const { error } = await api.post("/auth/forgot-password", { email });
+      const { error } = await authService.requestPasswordReset(email);
 
       if (error) {
         throw new Error(error);
