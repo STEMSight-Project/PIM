@@ -1,7 +1,9 @@
+import { ClientOnly } from "@/components/ui";
+import { AuthProvider } from "@/hooks/useAuth";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
 import { Suspense } from "react";
+import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "STEMSight App",
-  description: "Hospital Private Networking App",
+  title: "STEMSight PIM",
+  description: "Posture and Movement Analysis Platform",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
@@ -33,7 +35,25 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Suspense>{children}</Suspense>
+        <ClientOnly
+          fallback={
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+            </div>
+          }
+        >
+          <AuthProvider>
+            <Suspense
+              fallback={
+                <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+                </div>
+              }
+            >
+              {children}
+            </Suspense>
+          </AuthProvider>
+        </ClientOnly>
       </body>
     </html>
   );

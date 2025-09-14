@@ -1,12 +1,14 @@
 "use client";
 import React, { useState } from "react";
 import TextField from "@/components/TextField";
-import { reset_password_request } from "@/services/authServices";
+import { usePasswordReset } from "@/hooks";
 
 export default function PatientDashboard() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const { requestPasswordReset } = usePasswordReset();
 
   const handleEmailChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(event.currentTarget.value);
@@ -21,23 +23,20 @@ export default function PatientDashboard() {
       return;
     }
 
-    reset_password_request(email)
-      .then((res) => {
-        if (!res) {
-          console.error("No data received from API");
-          setError("Request failed. Please try again.");
-          return null;
-        }
-        console.log("Password reset request successful:", res);
+    try {
+      const success = await requestPasswordReset(email);
+      if (success) {
         setSuccess("A reset link has been sent to your email address.");
         setError("");
-        return res;
-      })
-      .catch((error) => {
-        console.error("Error during password reset request:", error); //Will log errors that occured to console.
-        setError("Unable to send request. Please try again later.");
+      } else {
+        setError("Request failed. Please try again.");
         setSuccess("");
-      });
+      }
+    } catch (error) {
+      console.error("Error during password reset request:", error);
+      setError("Unable to send request. Please try again later.");
+      setSuccess("");
+    }
   };
 
   return (

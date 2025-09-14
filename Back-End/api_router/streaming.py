@@ -4,7 +4,7 @@ from typing import Optional
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 from fastapi import APIRouter, HTTPException, Depends
-from common import logger
+from core.common import logger
 from pydantic import BaseModel
 from security.jwt_verify import current_user
 
@@ -23,14 +23,17 @@ class Room:
             coros.append(viewer.close())
         await asyncio.gather(*coros)
 
+
 class SDPBody(BaseModel):
     sdp: str
     type: str
 
-router = APIRouter()
+
+router = APIRouter(dependencies=[Depends(current_user)])
 
 rooms: dict[str, Room] = {}
 relay = MediaRelay()
+
 
 @router.post("/create_room/{patient_id}")
 async def create_room(patient_id: str):
@@ -39,6 +42,7 @@ async def create_room(patient_id: str):
     #     return HTTPException(402, "Room already exists")
     rooms[room_id] = Room(room_id)
     return {"room_id": room_id}
+
 
 @router.post("/rooms/{patient_id}/streamer")
 async def publish_streamer(patient_id: str, body: SDPBody):
@@ -66,12 +70,13 @@ async def publish_streamer(patient_id: str, body: SDPBody):
 
     @pc.on("track")
     def on_track(track):
-        logger.info(f"Track received: {track.kind}")
+        logger.info("Track received: %s", track.kind)
 
     await pc.setRemoteDescription(RTCSessionDescription(**body.model_dump()))
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
     return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+
 
 @router.post("/rooms/{patient_id}/viewer", dependencies=[Depends(current_user)])
 async def publish_viewer(patient_id: str, body: SDPBody):
