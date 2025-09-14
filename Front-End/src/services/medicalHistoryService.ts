@@ -26,17 +26,17 @@ export interface MedicalHistoryUpdateRequest
 export const medicalHistoryService = {
   // CRUD Operations
   async getAll(): Promise<ApiResponse<MedicalHistory[]>> {
-    return api.get<MedicalHistory[]>("/medical_history/");
+    return api.get<MedicalHistory[]>("/medical-history/");
   },
 
   async getById(id: string): Promise<ApiResponse<MedicalHistory>> {
-    return api.get<MedicalHistory>(`/medical_history/${id}`);
+    return api.get<MedicalHistory>(`/medical-history/${id}`);
   },
 
   async getByPatientId(
     patientId: string
   ): Promise<ApiResponse<MedicalHistory[]>> {
-    const response = await api.get<MedicalHistory[]>("/medical_history/");
+    const response = await api.get<MedicalHistory[]>("/medical-history/");
     // Filter client-side since backend doesn't have patient-specific endpoint
     const filteredData = (response.data || []).filter(
       (history) => history.patient_id === patientId
@@ -50,18 +50,18 @@ export const medicalHistoryService = {
   async create(
     data: MedicalHistoryCreateRequest
   ): Promise<ApiResponse<MedicalHistory>> {
-    return api.post<MedicalHistory>("/medical_history/", data);
+    return api.post<MedicalHistory>("/medical-history/", data);
   },
 
   async update(
     id: string,
     data: MedicalHistoryUpdateRequest
   ): Promise<ApiResponse<MedicalHistory>> {
-    return api.put<MedicalHistory>(`/medical_history/${id}`, data);
+    return api.put<MedicalHistory>(`/medical-history/${id}`, data);
   },
 
   async delete(id: string): Promise<ApiResponse<{ message: string }>> {
-    return api.delete<{ message: string }>(`/medical_history/${id}`);
+    return api.delete<{ message: string }>(`/medical-history/${id}`);
   },
 
   // Utility Methods
@@ -70,7 +70,7 @@ export const medicalHistoryService = {
     note: string
   ): Promise<ApiResponse<MedicalHistory[]>> {
     return api.patch<MedicalHistory[]>(
-      `/medical_history/update_note/${id}?note=${encodeURIComponent(note)}`
+      `/medical-history/update_note/${id}?note=${encodeURIComponent(note)}`
     );
   },
 };

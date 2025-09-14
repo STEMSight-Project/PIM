@@ -124,6 +124,13 @@ export default function PatientDetailPage() {
             </div>
           </div>
           <div className="flex space-x-3">
+            <Button 
+              variant="outline"
+              onClick={() => router.push(`/medical-history/${patientId}`)}
+            >
+              <DocumentTextIcon className="h-4 w-4 mr-2" />
+              Full Medical History
+            </Button>
             <Button variant="outline">
               <PencilIcon className="h-4 w-4 mr-2" />
               Edit Subject
@@ -290,6 +297,19 @@ export default function PatientDetailPage() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+            
+            {medicalHistories.length > 0 && (
+              <div className="mt-6 text-center">
+                <Button 
+                  variant="outline" 
+                  onClick={() => router.push(`/medical-history/${patientId}`)}
+                  className="w-full"
+                >
+                  <DocumentTextIcon className="h-4 w-4 mr-2" />
+                  View Full Medical History & Manage Records
+                </Button>
               </div>
             )}
           </Card>
