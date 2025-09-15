@@ -2,9 +2,12 @@
 Streaming API router - refactored to use service layer with dependency injection.
 """
 
+import asyncio
+import json
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends
-from core.common import logger
+from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.responses import StreamingResponse
+from core.common import logger, supabase
 from security.jwt_verify import current_user
 from services.streaming import (
     SDPBody,
@@ -309,22 +312,222 @@ async def get_patients_streaming_status(db_service=Depends(get_database_service)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+# Supabase Real-time SSE Endpoints
+@router.get("/realtime/sessions")
+async def realtime_sessions(request: Request, patient_id: Optional[str] = None):
+    """Stream real-time updates for streaming sessions using Supabase channels."""
+
+    async def event_generator():
+        # Create channel for streaming sessions
+        channel_name = f"streaming_sessions_{patient_id or 'all'}"
+        channel = supabase.channel(channel_name)
+
+        # Create async queue for events
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        def handler(payload):
+            """Handle Supabase real-time events."""
+            try:
+                msg = f"data: {json.dumps(payload)}\n\n"
+                queue.put_nowait(msg)
+            except Exception as e:
+                logger.error("Error handling real-time event: %s", e)
+
+        # Configure table subscription
+        subscription_config = {
+            "event": "*",  # Listen to all events (INSERT, UPDATE, DELETE)
+            "schema": "public",
+            "table": "streaming_sessions",
+        }
+
+        # Add patient filter if specified
+        if patient_id:
+            subscription_config["filter"] = f"patient_id=eq.{patient_id}"
+
+        # Subscribe to postgres changes
+        channel.on("postgres_changes", subscription_config, handler).subscribe()
+
+        try:
+            # Send initial heartbeat
+            yield f"data: {json.dumps({'type': 'connected', 'channel': channel_name})}\n\n"
+
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    # Wait for event with timeout for heartbeat
+                    msg = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield msg
+                except asyncio.TimeoutError:
+                    # Send heartbeat
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': asyncio.get_event_loop().time()})}\n\n"
+
+        except Exception as e:
+            logger.error("Error in sessions stream: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up channel
+            try:
+                supabase.remove_channel(channel)
+                logger.info("Removed Supabase channel: %s", channel_name)
+            except Exception as cleanup_error:
+                logger.error("Error removing channel: %s", cleanup_error)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/realtime/rooms")
+async def realtime_rooms(request: Request):
+    """Stream real-time updates for streaming rooms using Supabase channels."""
+
+    async def event_generator():
+        # Create channel for streaming rooms
+        channel_name = "streaming_rooms_all"
+        channel = supabase.channel(channel_name)
+
+        # Create async queue for events
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        def handler(payload):
+            """Handle Supabase real-time events."""
+            try:
+                msg = f"data: {json.dumps(payload)}\n\n"
+                queue.put_nowait(msg)
+            except Exception as e:
+                logger.error("Error handling real-time room event: %s", e)
+
+        # Subscribe to streaming_rooms table changes
+        channel.on(
+            "postgres_changes",
+            {
+                "event": "*",  # Listen to all events
+                "schema": "public",
+                "table": "streaming_rooms",
+            },
+            handler,
+        ).subscribe()
+
+        try:
+            # Send initial heartbeat
+            yield f"data: {json.dumps({'type': 'connected', 'channel': channel_name})}\n\n"
+
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    # Wait for event with timeout for heartbeat
+                    msg = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield msg
+                except asyncio.TimeoutError:
+                    # Send heartbeat
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': asyncio.get_event_loop().time()})}\n\n"
+
+        except Exception as e:
+            logger.error("Error in rooms stream: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up channel
+            try:
+                supabase.remove_channel(channel)
+                logger.info("Removed Supabase channel: %s", channel_name)
+            except Exception as cleanup_error:
+                logger.error("Error removing channel: %s", cleanup_error)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get(
-    "/sessions/patient/{patient_id}/active", dependencies=[Depends(current_user)]
+    "/realtime/patient/{patient_id}/status", dependencies=[Depends(current_user)]
 )
-async def get_active_sessions_for_patient(patient_id: str):
-    """Get active streaming sessions for a specific patient"""
-    try:
-        result = (
-            supabase.table("streaming_sessions")
-            .select("*")
-            .eq("patient_id", patient_id)
-            .eq("is_live", True)
-            .eq("status", "active")
-            .execute()
+async def realtime_patient_status(request: Request, patient_id: str):
+    """Stream real-time status updates for a specific patient."""
+
+    async def event_generator():
+        # Create channel for patient-specific updates
+        channel_name = f"patient_status_{patient_id}"
+        channel = supabase.channel(channel_name)
+
+        # Create async queue for events
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        def handler(payload):
+            """Handle Supabase real-time events."""
+            try:
+                msg = f"data: {json.dumps(payload)}\n\n"
+                queue.put_nowait(msg)
+            except Exception as e:
+                logger.error("Error handling patient status event: %s", e)
+
+        # Subscribe to both streaming_sessions and streaming_rooms for this patient
+        # Sessions subscription
+        channel.on(
+            "postgres_changes",
+            {
+                "event": "*",
+                "schema": "public",
+                "table": "streaming_sessions",
+                "filter": f"patient_id=eq.{patient_id}",
+            },
+            handler,
         )
 
-        return result.data
-    except Exception as e:
-        logger.error("Error fetching active sessions for patient: %s", e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        # Subscribe to channel
+        channel.subscribe()
+
+        try:
+            # Send initial heartbeat
+            yield f"data: {json.dumps({'type': 'connected', 'channel': channel_name, 'patient_id': patient_id})}\n\n"
+
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    # Wait for event with timeout for heartbeat
+                    msg = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield msg
+                except asyncio.TimeoutError:
+                    # Send heartbeat
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'patient_id': patient_id, 'timestamp': asyncio.get_event_loop().time()})}\n\n"
+
+        except Exception as e:
+            logger.error("Error in patient status stream: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up channel
+            try:
+                supabase.remove_channel(channel)
+                logger.info("Removed Supabase channel: %s", channel_name)
+            except Exception as cleanup_error:
+                logger.error("Error removing channel: %s", cleanup_error)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
