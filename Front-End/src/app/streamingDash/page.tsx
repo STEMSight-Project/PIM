@@ -1,5 +1,6 @@
 "use client";
 
+import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
 import type {
   PatientWithSession,
@@ -7,6 +8,7 @@ import type {
   StreamingRoom,
 } from "@/hooks";
 import { useStreamingSessions } from "@/hooks";
+import { useAuth } from "@/hooks/useAuth";
 import {
   ArrowPathIcon,
   CameraIcon,
@@ -20,7 +22,7 @@ import {
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // Badge component following UI design system rules
 const Badge = ({
@@ -59,6 +61,7 @@ const Badge = ({
 };
 
 export default function LiveStreamingDashboard() {
+  const { user, isAuthenticated, isLoading } = useAuth();
   const {
     patients,
     loading,
@@ -74,6 +77,33 @@ export default function LiveStreamingDashboard() {
 
   const router = useRouter();
   const [endingSession, setEndingSession] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="relative mx-auto w-16 h-16 mb-8">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
+              <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
+            </div>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">
+              Loading Dashboard
+            </h3>
+            <p className="text-slate-600">
+              Please wait while we set up your streaming dashboard...
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const handleViewStream = (patientId: string) => {
     router.push(`/streamingDash/${patientId}`);
@@ -165,81 +195,75 @@ export default function LiveStreamingDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-transparent">
-        <div className="container mx-auto px-6 py-8">
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center">
-              <div className="relative mx-auto w-16 h-16 mb-8">
-                <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
-                <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
-              </div>
-              <h3 className="text-xl font-semibold text-slate-800 mb-2">
-                Loading Live Streams
-              </h3>
-              <p className="text-slate-600">
-                Connecting to camera feeds and patient sessions...
-              </p>
-              <div className="mt-4 flex justify-center">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                  <div
-                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.1s" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.2s" }}
-                  ></div>
-                </div>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="relative mx-auto w-16 h-16 mb-8">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
+              <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
+            </div>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">
+              Loading Live Streams
+            </h3>
+            <p className="text-slate-600">
+              Connecting to camera feeds and patient sessions...
+            </p>
+            <div className="mt-4 flex justify-center">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                <div
+                  className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                  style={{ animationDelay: "0.1s" }}
+                ></div>
+                <div
+                  className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                  style={{ animationDelay: "0.2s" }}
+                ></div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="container mx-auto px-6 py-8">
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center max-w-md">
-              <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6">
-                <ExclamationTriangleIcon className="w-8 h-8 text-red-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-slate-800 mb-3">
-                Connection Failed
-              </h3>
-              <p className="text-slate-600 mb-6">
-                Unable to connect to streaming service. Please check your
-                internet connection and try again.
-              </p>
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-                <p className="text-red-800 text-sm font-medium">
-                  Error Details:
-                </p>
-                <p className="text-red-700 text-sm mt-1">{error}</p>
-              </div>
-              <button
-                onClick={() => window.location.reload()}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors duration-200"
-              >
-                <ArrowPathIcon className="w-5 h-5" />
-                Retry Connection
-              </button>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center max-w-md">
+            <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6">
+              <ExclamationTriangleIcon className="w-8 h-8 text-red-600" />
             </div>
+            <h3 className="text-xl font-semibold text-slate-800 mb-3">
+              Connection Failed
+            </h3>
+            <p className="text-slate-600 mb-6">
+              Unable to connect to streaming service. Please check your internet
+              connection and try again.
+            </p>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+              <p className="text-red-800 text-sm font-medium">Error Details:</p>
+              <p className="text-red-700 text-sm mt-1">{error}</p>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors duration-200"
+            >
+              <ArrowPathIcon className="w-5 h-5" />
+              Retry Connection
+            </button>
           </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-transparent">
-      <div className="container mx-auto px-6 py-8">
+    <DashboardLayout>
+      <div className="space-y-8">
         {/* Standard page header following UI design system */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
@@ -440,7 +464,6 @@ export default function LiveStreamingDashboard() {
                             </div>
                           </div>
                         </div>
-
                         <div className="space-y-3">
                           <div className="flex items-center justify-between text-sm font-medium text-slate-700">
                             <span>
@@ -542,6 +565,6 @@ export default function LiveStreamingDashboard() {
           </>
         )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

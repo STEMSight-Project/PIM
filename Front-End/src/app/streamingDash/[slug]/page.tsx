@@ -104,7 +104,7 @@ export default function PatientStreamingPage() {
       setLoading(true);
       const response = await streamingService.getSessions({
         patient_id: patientId,
-        is_live: true,
+        status: "active",
       });
 
       if (response.error) {
@@ -259,7 +259,7 @@ export default function PatientStreamingPage() {
                       <VideoCameraIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
                       <p className="text-lg font-medium">Camera Ready</p>
                       <p className="text-sm opacity-75">
-                        Start streaming to begin monitoring
+                        Start watching to view live camera feed
                       </p>
                     </div>
                   </div>
@@ -314,7 +314,7 @@ export default function PatientStreamingPage() {
                     className="flex items-center gap-2"
                   >
                     <PlayIcon className="h-4 w-4" />
-                    Start Stream
+                    Start Watching
                   </Button>
                 ) : (
                   <Button
@@ -323,7 +323,7 @@ export default function PatientStreamingPage() {
                     className="flex items-center gap-2"
                   >
                     <StopIcon className="h-4 w-4" />
-                    Stop Stream
+                    Stop Watching
                   </Button>
                 )}
               </div>

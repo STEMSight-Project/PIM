@@ -124,10 +124,19 @@ class Room:
 
     def add_peer_connection(self, pc: RTCPeerConnection):
         """Add a peer connection to this room."""
+        was_empty = len(self.pcs) == 0
         self.pcs.add(pc)
         logger.info(
             "Added peer connection to room %s (total: %d)", self.room_id, len(self.pcs)
         )
+
+        # If this is the first connection, update room status to connected
+        if was_empty:
+            logger.info(
+                "Room %s now has connections, updating status to connected",
+                self.room_id,
+            )
+            asyncio.create_task(self._update_room_connected())
 
     def remove_peer_connection(self, pc: RTCPeerConnection):
         """Remove a peer connection from this room."""
@@ -137,6 +146,44 @@ class Room:
                 "Removed peer connection from room %s (remaining: %d)",
                 self.room_id,
                 len(self.pcs),
+            )
+
+            # If no more connections, update room status to disconnected
+            if len(self.pcs) == 0:
+                logger.info(
+                    "Room %s has no connections, updating status to disconnected",
+                    self.room_id,
+                )
+                asyncio.create_task(self._update_room_disconnected())
+
+    async def _update_room_disconnected(self):
+        """Update room status to disconnected when no connections remain."""
+        try:
+            if self.room_db_id:
+                await self._db_service.update_room_status(
+                    self.room_db_id, connected=False
+                )
+                logger.info(
+                    "Updated room %s status to disconnected in database", self.room_id
+                )
+        except Exception as e:
+            logger.error(
+                "Error updating room %s status to disconnected: %s", self.room_id, e
+            )
+
+    async def _update_room_connected(self):
+        """Update room status to connected when first connection is added."""
+        try:
+            if self.room_db_id:
+                await self._db_service.update_room_status(
+                    self.room_db_id, connected=True
+                )
+                logger.info(
+                    "Updated room %s status to connected in database", self.room_id
+                )
+        except Exception as e:
+            logger.error(
+                "Error updating room %s status to connected: %s", self.room_id, e
             )
 
 

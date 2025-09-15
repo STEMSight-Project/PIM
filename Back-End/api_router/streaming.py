@@ -307,3 +307,24 @@ async def get_patients_streaming_status(db_service=Depends(get_database_service)
     except Exception as e:
         logger.error("Error fetching patients streaming status: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get(
+    "/sessions/patient/{patient_id}/active", dependencies=[Depends(current_user)]
+)
+async def get_active_sessions_for_patient(patient_id: str):
+    """Get active streaming sessions for a specific patient"""
+    try:
+        result = (
+            supabase.table("streaming_sessions")
+            .select("*")
+            .eq("patient_id", patient_id)
+            .eq("is_live", True)
+            .eq("status", "active")
+            .execute()
+        )
+
+        return result.data
+    except Exception as e:
+        logger.error("Error fetching active sessions for patient: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e

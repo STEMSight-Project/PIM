@@ -167,12 +167,11 @@ export const streamingService = {
 
   async getSessions(filters?: {
     patient_id?: string;
-    is_live?: boolean;
+    status?: "active" | "ended" | "error" | "disconnected";
   }): Promise<ApiResponse<StreamingSession[]>> {
     const params = new URLSearchParams();
     if (filters?.patient_id) params.append("patient_id", filters.patient_id);
-    if (filters?.is_live !== undefined)
-      params.append("is_live", filters.is_live.toString());
+    if (filters?.status !== undefined) params.append("status", filters.status);
 
     const queryString = params.toString();
     const endpoint = queryString
@@ -203,9 +202,25 @@ export const streamingService = {
   async getActiveSessionsForPatient(
     patientId: string
   ): Promise<ApiResponse<StreamingSession[]>> {
-    return api.get<StreamingSession[]>(
-      `/streaming/sessions/patient/${patientId}/active`
-    );
+    // Use the existing getSessions endpoint with filters
+    return this.getSessions({
+      patient_id: patientId,
+      status: "active",
+    });
+  },
+
+  // Helper method to check if patient has any active sessions
+  async hasActiveSession(patientId: string): Promise<boolean> {
+    try {
+      const response = await this.getSessions({
+        patient_id: patientId,
+        status: "active",
+      });
+      return response.data ? response.data.length > 0 : false;
+    } catch (error) {
+      console.error("Error checking for active sessions:", error);
+      return false;
+    }
   },
 
   // New method to get sessions with rooms (matches current backend API)
