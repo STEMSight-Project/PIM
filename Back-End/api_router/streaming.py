@@ -1,5 +1,6 @@
 import asyncio
 from typing import Optional
+import time
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
@@ -17,22 +18,31 @@ class Room:
         self.viewers: set[RTCPeerConnection] = set()
         self.is_active = True
         self.reconnection_attempts = 0
-        self.max_reconnection_attempts = 3
+        self.max_reconnection_attempts = 5  # Increased to 5 attempts
+        self.disconnection_time: Optional[float] = (
+            None  # Track when disconnection started
+        )
+        self.max_disconnection_time = 15.0  # 15 seconds timeout
+        self.reconnection_timeout_task: Optional[asyncio.Task] = None
 
     async def close(self):
         """Close all connections and mark room as inactive"""
+        # Cancel any pending timeout task
+        if self.reconnection_timeout_task and not self.reconnection_timeout_task.done():
+            self.reconnection_timeout_task.cancel()
+
         coros = []
         if self.streamer:
             coros.append(self.streamer.close())
         for viewer in self.viewers:
             coros.append(viewer.close())
-        await asyncio.gather(*coros)
+        await asyncio.gather(*coros, return_exceptions=True)
         self.is_active = False
 
         # Update session status in database
         if self.session_id:
             try:
-                await self._update_session_status("disconnected")
+                await self._update_session_status("ended")
             except Exception as e:
                 logger.error("Failed to update session status on room close: %s", e)
 
@@ -41,11 +51,20 @@ class Room:
         self.is_active = False
         self.reconnection_attempts += 1
 
+        # Record disconnection time if this is the first disconnection
+        if self.disconnection_time is None:
+            self.disconnection_time = time.time()
+            # Start timeout task for automatic cancellation
+            self.reconnection_timeout_task = asyncio.create_task(
+                self._handle_reconnection_timeout()
+            )
+
         logger.info(
-            "Room %s disconnected. Attempt %d/%d",
+            "Room %s disconnected. Attempt %d/%d (disconnected for %.1fs)",
             self.room_id,
             self.reconnection_attempts,
             self.max_reconnection_attempts,
+            time.time() - self.disconnection_time,
         )
 
         # Update session status
@@ -63,8 +82,9 @@ class Room:
         # If max attempts reached, close permanently
         if self.reconnection_attempts >= self.max_reconnection_attempts:
             logger.warning(
-                "Room %s reached max reconnection attempts. Closing permanently.",
+                "Room %s reached max reconnection attempts (%d). Closing permanently.",
                 self.room_id,
+                self.max_reconnection_attempts,
             )
             await self.close()
             return False
@@ -74,6 +94,14 @@ class Room:
     async def reactivate(self):
         """Reactivate room for reconnection"""
         self.is_active = True
+        # Reset disconnection tracking since we're back online
+        self.disconnection_time = None
+        self.reconnection_attempts = 0
+
+        # Cancel timeout task since we're reconnected
+        if self.reconnection_timeout_task and not self.reconnection_timeout_task.done():
+            self.reconnection_timeout_task.cancel()
+
         logger.info("Room %s reactivated for reconnection", self.room_id)
 
         # Update session status back to active
@@ -82,6 +110,35 @@ class Room:
                 await self._update_session_status("active")
             except Exception as e:
                 logger.error("Failed to update session status on reactivation: %s", e)
+
+    async def _handle_reconnection_timeout(self):
+        """Background task to handle reconnection timeout"""
+        try:
+            await asyncio.sleep(self.max_disconnection_time)
+
+            # Check if we're still disconnected after timeout
+            if not self.is_active and self.disconnection_time is not None:
+                elapsed = time.time() - self.disconnection_time
+                logger.warning(
+                    "Room %s timed out after %.1fs of disconnection. Cancelling session.",
+                    self.room_id,
+                    elapsed,
+                )
+                await self.close()
+
+                # Remove from rooms dict
+                if self.room_id in rooms:
+                    rooms.pop(self.room_id, None)
+
+        except asyncio.CancelledError:
+            # Task was cancelled, which is fine (means reconnection happened)
+            logger.debug(
+                "Reconnection timeout task cancelled for room %s", self.room_id
+            )
+        except Exception as e:
+            logger.error(
+                "Error in reconnection timeout handler for room %s: %s", self.room_id, e
+            )
 
     async def _update_session_status(self, status: str):
         """Update the session status in database"""
@@ -130,15 +187,65 @@ router = APIRouter()
 rooms: dict[str, Room] = {}
 relay = MediaRelay()
 
+# Background task for cleanup
+cleanup_task: Optional[asyncio.Task] = None
+
+
+async def start_cleanup_task():
+    """Start the background cleanup task"""
+    global cleanup_task
+    if cleanup_task is None or cleanup_task.done():
+        cleanup_task = asyncio.create_task(periodic_cleanup())
+        logger.info("Started room cleanup background task")
+
+
+async def periodic_cleanup():
+    """Periodically clean up inactive rooms"""
+    while True:
+        try:
+            await asyncio.sleep(5)  # Run cleanup every 5 seconds
+            await cleanup_inactive_rooms()
+        except asyncio.CancelledError:
+            logger.info("Cleanup task cancelled")
+            break
+        except Exception as e:
+            logger.error("Error in periodic cleanup: %s", e)
+
 
 async def cleanup_inactive_rooms():
     """Clean up rooms that have been inactive for too long"""
+    current_time = time.time()
     inactive_rooms = []
+
     for room_id, room in rooms.items():
+        should_cleanup = False
+
+        # Check if room reached max reconnection attempts
         if (
             not room.is_active
             and room.reconnection_attempts >= room.max_reconnection_attempts
         ):
+            should_cleanup = True
+            logger.info(
+                "Room %s marked for cleanup: max reconnection attempts reached", room_id
+            )
+
+        # Check if room has been disconnected for too long (15 seconds)
+        elif (
+            not room.is_active
+            and room.disconnection_time is not None
+            and (current_time - room.disconnection_time) >= room.max_disconnection_time
+        ):
+            should_cleanup = True
+            elapsed = current_time - room.disconnection_time
+            logger.info(
+                "Room %s marked for cleanup: disconnected for %.1fs (limit: %.1fs)",
+                room_id,
+                elapsed,
+                room.max_disconnection_time,
+            )
+
+        if should_cleanup:
             inactive_rooms.append(room_id)
 
     for room_id in inactive_rooms:
@@ -213,6 +320,9 @@ async def create_room(patient_id: str, device_name: Optional[str] = None):
 
         # Create room with session link
         rooms[room_id] = Room(room_id, session_id)
+
+        # Start cleanup task if not already running
+        await start_cleanup_task()
 
         logger.info("Created room %s with session %s", room_id, session_id)
 
@@ -376,7 +486,7 @@ async def get_streaming_sessions(
 
         result = query.order("started_at", desc=True).execute()
 
-        return {"data": result.data, "error": None}
+        return result.data
     except Exception as e:
         logger.error("Error fetching streaming sessions: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -432,7 +542,7 @@ async def update_streaming_session(
         )
 
         if result.data:
-            return {"data": result.data[0], "error": None}
+            return result.data[0]
         else:
             raise HTTPException(status_code=404, detail="Streaming session not found")
     except Exception as e:
@@ -475,7 +585,7 @@ async def get_active_sessions_for_patient(patient_id: str):
             .execute()
         )
 
-        return {"data": result.data, "error": None}
+        return result.data
     except Exception as e:
         logger.error("Error fetching active sessions for patient: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e

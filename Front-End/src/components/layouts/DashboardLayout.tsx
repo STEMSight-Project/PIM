@@ -6,6 +6,8 @@ import { cn } from "@/utils/cn";
 import {
   ArrowRightOnRectangleIcon,
   Bars3Icon,
+  ChevronDoubleLeftIcon,
+  ChevronDoubleRightIcon,
   DocumentTextIcon,
   HomeIcon,
   UserGroupIcon,
@@ -16,7 +18,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -35,9 +37,25 @@ const navigation = [
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
+
+  // Load collapsed state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("sidebarCollapsed");
+    if (saved !== null) {
+      setSidebarCollapsed(JSON.parse(saved));
+    }
+  }, []);
+
+  // Save collapsed state to localStorage
+  const toggleSidebarCollapsed = () => {
+    const newState = !sidebarCollapsed;
+    setSidebarCollapsed(newState);
+    localStorage.setItem("sidebarCollapsed", JSON.stringify(newState));
+  };
 
   const handleLogout = async () => {
     try {
@@ -50,49 +68,97 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   return (
-    <div className="h-screen flex bg-gray-100">
+    <div className="h-screen flex bg-transparent">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         >
-          <div className="fixed inset-0 bg-black/50" />
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
         </div>
       )}
 
-      {/* Sidebar */}
+      {/* Modern Sidebar */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-50 bg-white/95 backdrop-blur-lg shadow-2xl border-r border-slate-200 transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          sidebarCollapsed ? "lg:w-20" : "lg:w-72"
         )}
+        style={{
+          width:
+            sidebarOpen || !sidebarCollapsed
+              ? sidebarCollapsed
+                ? "5rem"
+                : "18rem"
+              : "5rem",
+        }}
       >
-        <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="flex items-center justify-between p-6 border-b">
-            <div className="flex items-center space-x-3">
-              <Image
-                src="/STEMSight-Logo.png"
-                alt="STEMSight"
-                width={40}
-                height={40}
-              />
-              <div>
-                <h1 className="text-lg font-bold text-gray-900">STEMSight</h1>
-                <p className="text-xs text-gray-500">PIM System</p>
-              </div>
+        {/* Collapsed state indicator */}
+        {sidebarCollapsed && (
+          <div className="hidden lg:block absolute top-1/2 -right-2 w-4 h-8 bg-blue-600 rounded-r-lg shadow-lg transform -translate-y-1/2 opacity-60">
+            <div className="flex items-center justify-center h-full">
+              <ChevronDoubleRightIcon className="h-3 w-3 text-white" />
             </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-1 rounded-md hover:bg-gray-100"
+          </div>
+        )}
+
+        <div className="flex flex-col h-full">
+          {/* Header Section */}
+          <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-blue-600 to-blue-700">
+            <div
+              className={cn(
+                "flex items-center space-x-3 overflow-hidden transition-all duration-300",
+                sidebarCollapsed && "lg:space-x-0 lg:justify-center"
+              )}
             >
-              <XMarkIcon className="h-5 w-5" />
-            </button>
+              {(!sidebarCollapsed || sidebarOpen) && (
+                <div className="flex-shrink-0 w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center">
+                  <Image
+                    src="/STEMSight-Logo.png"
+                    alt="STEMSight"
+                    width={24}
+                    height={24}
+                    className="object-contain"
+                  />
+                </div>
+              )}
+
+              {(!sidebarCollapsed || sidebarOpen) && (
+                <div className="transition-opacity duration-300">
+                  <h1 className="text-lg font-bold text-white">STEMSight</h1>
+                  <p className="text-xs text-blue-100">PIM System</p>
+                </div>
+              )}
+            </div>
+
+            {/* Enhanced desktop collapse toggle - only control point */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={toggleSidebarCollapsed}
+                className="hidden lg:flex items-center justify-center w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 text-white transition-all duration-200 hover:scale-105 active:scale-95"
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {sidebarCollapsed ? (
+                  <ChevronDoubleRightIcon className="h-5 w-5" />
+                ) : (
+                  <ChevronDoubleLeftIcon className="h-5 w-5" />
+                )}
+              </button>
+
+              {/* Mobile close button */}
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden flex items-center justify-center w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 text-white transition-all duration-200 hover:scale-105 active:scale-95"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
+          <nav className="flex-1 p-4 space-y-2 overflow-hidden">
             {navigation.map((item) => {
               const isActive = pathname === item.href;
               return (
@@ -100,81 +166,154 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   key={item.name}
                   href={item.href}
                   className={cn(
-                    "flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                    "group flex items-center space-x-3 px-3 py-3 rounded-xl text-sm font-medium transition-all duration-200 relative overflow-hidden",
                     isActive
-                      ? "bg-blue-100 text-blue-700"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 scale-105"
+                      : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:scale-102",
+                    sidebarCollapsed &&
+                      "lg:justify-center lg:space-x-0 lg:w-12 lg:h-12 lg:mx-auto lg:p-0"
                   )}
                   onClick={() => setSidebarOpen(false)}
+                  title={sidebarCollapsed ? item.name : undefined}
                 >
-                  <item.icon className="h-5 w-5" />
-                  <span>{item.name}</span>
+                  <div
+                    className={cn(
+                      "flex-shrink-0 w-6 h-6 flex items-center justify-center",
+                      isActive && "text-white",
+                      sidebarCollapsed && "lg:w-5 lg:h-5"
+                    )}
+                  >
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  {(!sidebarCollapsed || sidebarOpen) && (
+                    <span className="transition-opacity duration-300 whitespace-nowrap">
+                      {item.name}
+                    </span>
+                  )}
+                  {isActive && !sidebarCollapsed && (
+                    <div className="absolute inset-y-0 left-0 w-1 bg-white rounded-r-full" />
+                  )}
+                  {isActive && sidebarCollapsed && (
+                    <div className="absolute -right-1 top-1/2 w-2 h-2 bg-blue-600 rounded-full transform -translate-y-1/2" />
+                  )}
                 </Link>
               );
             })}
           </nav>
 
-          {/* User section */}
-          <div className="border-t p-4">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="h-8 w-8 bg-gray-300 rounded-full flex items-center justify-center">
-                <UserIcon className="h-5 w-5 text-gray-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  Dr. Smith
-                </p>
-                <p className="text-xs text-gray-500 truncate">
-                  doctor@stemsight.com
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleLogout}
-              className="w-full"
-              leftIcon={<ArrowRightOnRectangleIcon className="h-4 w-4" />}
+          {/* User Profile Section */}
+          <div className="border-t border-slate-200 p-4 bg-slate-50">
+            <div
+              className={cn(
+                "flex items-center space-x-3 mb-4",
+                sidebarCollapsed && "lg:justify-center lg:space-x-0 lg:mb-2"
+              )}
             >
-              Sign Out
-            </Button>
+              <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg flex items-center justify-center">
+                <UserIcon className="h-5 w-5 text-white" />
+              </div>
+              {(!sidebarCollapsed || sidebarOpen) && (
+                <div className="flex-1 min-w-0 transition-opacity duration-300">
+                  <p className="text-sm font-semibold text-slate-900 truncate">
+                    Dr. Smith
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">
+                    doctor@stemsight.com
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {sidebarCollapsed ? (
+              <div className="hidden lg:flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="w-10 h-10 p-0 border-slate-300 text-slate-700 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all duration-200"
+                  title="Sign Out"
+                >
+                  <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                className="w-full transition-all duration-300 border-slate-300 text-slate-700 hover:bg-red-50 hover:border-red-300 hover:text-red-700"
+              >
+                <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2" />
+                <span className="transition-opacity duration-300">
+                  Sign Out
+                </span>
+              </Button>
+            )}
+
+            {/* Mobile logout button when sidebar is open */}
+            {sidebarOpen && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                className="w-full lg:hidden transition-all duration-300 border-slate-300 text-slate-700 hover:bg-red-50 hover:border-red-300 hover:text-red-700"
+              >
+                <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
-        <header className="bg-white shadow-sm border-b px-6 py-4">
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out">
+        {/* Top navigation bar */}
+        <header className="bg-white/80 backdrop-blur-lg shadow-sm border-b border-slate-200 px-6 py-4 transition-all duration-300">
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-md hover:bg-gray-100"
-            >
-              <Bars3Icon className="h-5 w-5" />
-            </button>
+            <div className="flex items-center space-x-4">
+              {/* Mobile menu button only */}
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden p-2 rounded-xl hover:bg-slate-100 transition-colors duration-200"
+              >
+                <Bars3Icon className="h-5 w-5 text-slate-700" />
+              </button>
 
-            <div className="flex-1 lg:flex lg:items-center lg:justify-between">
-              <h1 className="text-xl font-semibold text-gray-900">
-                Camera AI Monitoring System
-              </h1>
+              <div>
+                <h1 className="text-xl font-semibold text-slate-900">
+                  Camera AI Monitoring System
+                </h1>
+                <p className="text-sm text-slate-500">
+                  Real-time posture and movement analysis
+                </p>
+              </div>
+            </div>
 
-              <div className="hidden lg:flex items-center space-x-4">
-                <span className="text-sm text-gray-500">
+            <div className="hidden lg:flex items-center space-x-4">
+              <div className="text-right">
+                <p className="text-sm font-medium text-slate-900">
                   {new Date().toLocaleDateString("en-US", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
+                    weekday: "short",
+                    month: "short",
                     day: "numeric",
                   })}
-                </span>
+                </p>
+                <p className="text-xs text-slate-500">
+                  {new Date().toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </p>
               </div>
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6 bg-transparent">
+          {children}
+        </main>
       </div>
     </div>
   );

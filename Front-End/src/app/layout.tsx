@@ -1,3 +1,4 @@
+import { ThemeProvider } from "@/components/providers";
 import { ClientOnly } from "@/components/ui";
 import { AuthProvider } from "@/hooks/useAuth";
 import type { Metadata } from "next";
@@ -31,28 +32,56 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="light">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              document.documentElement.classList.add('light');
+              document.documentElement.style.colorScheme = 'light';
+            `,
+          }}
+        />
+      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased light min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100`}
       >
         <ClientOnly
           fallback={
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+            <div className="min-h-screen bg-transparent flex items-center justify-center">
+              <div className="text-center">
+                <div className="relative mx-auto w-16 h-16 mb-8">
+                  <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
+                  <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
+                </div>
+                <p className="text-slate-600 font-medium">
+                  Loading STEMSight...
+                </p>
+              </div>
             </div>
           }
         >
-          <AuthProvider>
-            <Suspense
-              fallback={
-                <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-                </div>
-              }
-            >
-              {children}
-            </Suspense>
-          </AuthProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <Suspense
+                fallback={
+                  <div className="min-h-screen bg-transparent flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="relative mx-auto w-16 h-16 mb-8">
+                        <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
+                        <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
+                      </div>
+                      <p className="text-slate-600 font-medium">
+                        Initializing application...
+                      </p>
+                    </div>
+                  </div>
+                }
+              >
+                {children}
+              </Suspense>
+            </AuthProvider>
+          </ThemeProvider>
         </ClientOnly>
       </body>
     </html>

@@ -29,9 +29,6 @@ def _verify_token(access_token: str) -> dict:
         logger.info("Calling supabase_auth.auth.get_user with token...")
         user_response = supabase_auth.auth.get_user(access_token)
 
-        logger.info("get_user response: %s", user_response)
-        logger.info("user_response.user: %s", user_response.user)
-
         if user_response.user:
             logger.info("Token verification successful, returning user data")
             return user_response.user
@@ -89,11 +86,6 @@ def current_user(
     Raises:
         HTTPException: 401 if no valid token found or authentication fails
     """
-    logger.info(
-        "Auth attempt - oauth2_token: %s, auth_header: %s",
-        bool(oauth2_token),
-        request.headers.get("authorization"),
-    )
     access_token = None
     # Priority 1: OAuth2 token (from FastAPI docs Authorize button)
     if oauth2_token:
