@@ -152,31 +152,52 @@ async def publish(
         # Create room (this will also create a streaming session automatically)
         async with session.post(create_room_url) as resp:
             if resp.status != 200:
-                LOGGER.error(
-                    "Create room failed (%s): %s", resp.status, await resp.text()
-                )
-                safe_close_player(player)
-                await pc.close()
-                return
+                error_text = await resp.text()
+                LOGGER.error("Create room failed (%s): %s", resp.status, error_text)
+
+                # Check if it's because of existing non-ended session
+                if "non-ended session" in error_text.lower():
+                    LOGGER.warning(
+                        "Patient has an existing active session. Please end it first via frontend."
+                    )
+                    safe_close_player(player)
+                    await pc.close()
+                    return
+                else:
+                    safe_close_player(player)
+                    await pc.close()
+                    return
+
             room_json = await resp.json()
             LOGGER.info("Room created/connected: %s", room_json)
 
-            # Extract session info if available
+            # Extract session info and updated room_id
             session_id = room_json.get("session_id")
+            returned_room_id = room_json.get("room_id")
             if session_id:
-                LOGGER.info("Streaming session created: %s", session_id)
+                LOGGER.info("Streaming session ID: %s", session_id)
+
+            # Use the returned room_id for subsequent calls (includes device name suffix)
+            if returned_room_id:
+                room_id = returned_room_id
+                LOGGER.info("Using returned room ID: %s", room_id)
 
             if room_json.get("reconnected"):
-                LOGGER.info("Reconnected to existing room")
+                LOGGER.info("✅ Reconnected to existing room")
             elif room_json.get("already_exists"):
-                LOGGER.info("Room already exists and is active")
+                LOGGER.info("✅ Room already exists and is active")
             elif room_json.get("created"):
-                LOGGER.info("New room and session created")
+                LOGGER.info("✅ New room and session created")
 
         # Connect streamer to room
-        streaming_url = f"{base_url}/streaming/rooms/{room_id}/streamer"
+        streaming_url = f"{base_url}/streaming/streamer/{room_id}"
         async with session.post(streaming_url, json=offer_payload) as resp:
-            if resp.status == 409:
+            if resp.status == 404:
+                LOGGER.error("Room not found. Please create room first.")
+                safe_close_player(player)
+                await pc.close()
+                return
+            elif resp.status == 409:
                 LOGGER.warning("Streamer already exists. Retrying...")
                 await asyncio.sleep(1)
                 # Retry once
@@ -202,10 +223,14 @@ async def publish(
                 answer_json = await resp.json()
 
     await pc.setRemoteDescription(RTCSessionDescription(**answer_json))
+    LOGGER.info("🎥 Streaming started successfully!")
+    LOGGER.info("📡 Session ID: %s", session_id or "Unknown")
     LOGGER.info(
-        "Streaming started successfully! Session ID: %s", session_id or "Unknown"
+        "⚠️  NOTE: Session will remain active until explicitly ended via frontend"
     )
-    LOGGER.info("Press Ctrl+C to stop streaming...")
+    LOGGER.info(
+        "🛑 Press Ctrl+C to stop streaming (session stays active for reconnection)..."
+    )
 
     try:
         # Monitor connection state
@@ -213,34 +238,42 @@ async def publish(
             await asyncio.sleep(5)
             if pc.connectionState in ["failed", "closed", "disconnected"]:
                 LOGGER.warning(
-                    "Connection state: %s. Attempting to reconnect...",
+                    "Connection state: %s. Room will wait for reconnection...",
                     pc.connectionState,
+                )
+                LOGGER.info(
+                    "💡 Session remains active - you can restart broadcaster to reconnect"
                 )
                 break
     except KeyboardInterrupt:
-        LOGGER.info("Stopping stream...")
+        LOGGER.info("🛑 Stopping stream...")
+        LOGGER.info("💡 Session remains active - restart broadcaster to reconnect")
+        LOGGER.info("💡 Use frontend to explicitly end session when done")
     finally:
-        # End the session if we have session_id
-        if session_id:
-            try:
-                end_session_url = f"{base_url}/streaming/sessions/{session_id}/end"
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(end_session_url) as resp:
-                        if resp.status == 200:
-                            LOGGER.info("Streaming session ended successfully")
-                        else:
-                            LOGGER.warning("Failed to end session: %s", resp.status)
-            except Exception as e:
-                LOGGER.error("Error ending session: %s", e)
-
+        # Note: We do NOT end the session here - that's only done via frontend
         safe_close_player(player)
         await pc.close()
-        LOGGER.info("Cleanup completed")
+        LOGGER.info("🧹 Broadcaster cleanup completed")
+        LOGGER.info("📋 Session Status: ACTIVE (can reconnect)")
+
+
+async def end_session_manually(base_url: str, session_id: str) -> None:
+    """Helper function to manually end a session (for testing purposes)."""
+    try:
+        end_session_url = f"{base_url}/streaming/sessions/{session_id}/end"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(end_session_url) as resp:
+                if resp.status == 200:
+                    LOGGER.info("✅ Session %s ended successfully", session_id)
+                else:
+                    LOGGER.warning("❌ Failed to end session: %s", resp.status)
+    except Exception as e:
+        LOGGER.error("❌ Error ending session: %s", e)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="WebRTC camera publisher with auto session management"
+        description="WebRTC camera publisher with smart session management"
     )
     parser.add_argument(
         "--room", required=True, help="Room ID (patient ID) for streaming"
@@ -275,7 +308,18 @@ def main() -> None:
         action="store_true",
         help="Check room status before starting stream",
     )
+    parser.add_argument(
+        "--end_session",
+        required=False,
+        help="End a specific session ID (for testing purposes)",
+    )
     args = parser.parse_args()
+
+    # Handle end session command
+    if args.end_session:
+        print(f"🛑 Ending session: {args.end_session}")
+        asyncio.run(end_session_manually(args.signaling, args.end_session))
+        return
 
     print(f"🎥 Starting WebRTC Broadcaster")
     print(f"📡 Room ID: {args.room}")
@@ -283,6 +327,7 @@ def main() -> None:
     print(f"📹 Video Device: {args.video_device or 'Default'}")
     print(f"🎤 Audio Device: {args.audio_device or 'Default'}")
     print(f"🏷️  Device Name: {args.device_name}")
+    print(f"💡 Session Management: Only ends via frontend")
     print(f"{'='*50}")
 
     try:

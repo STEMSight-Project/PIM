@@ -41,16 +41,22 @@ export type {
 export { noteService } from "./noteService";
 export type { Note, NoteCreateRequest, NoteUpdateRequest } from "./noteService";
 
+// Live streaming services for real-time video sessions
 export { streamingService } from "./streamingService";
 export type {
   RoomInfo,
   SDPData,
+  SessionWithRooms,
   StreamCreateRequest,
   StreamResponse,
   StreamSession,
   StreamStats,
   StreamUpdateRequest,
+  StreamingRoom,
 } from "./streamingService";
+
+// Historical session review services for post-session analysis
+export { fetchStitchedSessions } from "./sessionService";
 
 // Re-export api and types for convenience
 export type { ApiResponse } from "@/types";

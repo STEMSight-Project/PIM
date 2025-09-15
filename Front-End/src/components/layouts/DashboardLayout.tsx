@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui";
+import { Button, ClientOnly } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/utils/cn";
 import {
@@ -291,21 +291,32 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
 
             <div className="hidden lg:flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-slate-900">
-                  {new Date().toLocaleDateString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {new Date().toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
+              <ClientOnly
+                fallback={
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-slate-900">
+                      Loading...
+                    </p>
+                    <p className="text-xs text-slate-500">--:--</p>
+                  </div>
+                }
+              >
+                <div className="text-right">
+                  <p className="text-sm font-medium text-slate-900">
+                    {new Date().toLocaleDateString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {new Date().toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              </ClientOnly>
             </div>
           </div>
         </header>

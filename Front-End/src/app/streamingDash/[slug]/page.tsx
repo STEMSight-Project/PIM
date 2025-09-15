@@ -452,7 +452,7 @@ export default function PatientStreamingPage() {
                 <span className="text-gray-500">Reconnect Attempts:</span>
                 <span>{reconnectAttempts}/5</span>
               </div>
-              {currentSession && (
+              {currentSession && currentSession.id && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Session ID:</span>
                   <span className="font-mono text-xs">
