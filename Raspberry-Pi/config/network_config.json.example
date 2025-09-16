@@ -1,0 +1,14 @@
+{
+  "device_id": "pi-001",
+  "server_url": "https://your-backend-server.com",
+  "api_version": "v1",
+  "upload_interval": 30,
+  "retry_attempts": 3,
+  "timeout": 10,
+  "ssl_verify": true,
+  "compression": true,
+  "log_level": "INFO",
+  "max_video_length": 300,
+  "auto_upload": true,
+  "storage_path": "/home/pi/stemsight/data"
+}

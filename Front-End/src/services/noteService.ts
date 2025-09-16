@@ -1,5 +1,7 @@
+import type { ApiResponse } from "@/types";
 import { api } from "./api";
 
+// Note Types - Updated to match existing hook types
 export interface Note {
   id: string;
   created_at: string;
@@ -11,32 +13,43 @@ export interface Note {
   updated_at?: string;
 }
 
-// get notes for a specific patient id
-export async function getNotesForPatient(patientId: string): Promise<Note[]> {
-  return await api.get(`/note/patient/${patientId}`);
+export interface NoteCreateRequest {
+  content: string;
+  patient_id: string;
+  video_id?: string;
+  author: string;
+  timestamp_seconds?: number;
 }
 
-// get notes for a specific video id
-export async function getNotesForVideo(videoId: string): Promise<Note[]> {
-  return await api.get(`/note/video/${videoId}`);
+export interface NoteUpdateRequest {
+  content?: string;
+  author?: string;
+  timestamp_seconds?: number;
 }
 
-// create new note
-export async function createNote(
-  note: Omit<Note, "id" | "created_at" | "updated_at">
-): Promise<Note> {
-  return await api.post<Note>("/note/", note);
-}
+// Note Service Functions - Updated to match backend endpoints
+export const noteService = {
+  // CRUD Operations matching backend note.py
+  async getByPatientId(patientId: string): Promise<ApiResponse<Note[]>> {
+    return api.get<Note[]>(`/note/patient/${patientId}`);
+  },
 
-// update note
-export async function updateNote(
-  noteId: string,
-  note: Partial<Omit<Note, "id" | "created_at" | "updated_at">>
-): Promise<Note> {
-  return await api.post<Note>(`/note/${noteId}`, note);
-}
+  async getByVideoId(videoId: string): Promise<ApiResponse<Note[]>> {
+    return api.get<Note[]>(`/note/video/${videoId}`);
+  },
 
-// delete note
-export async function deleteNote(noteId: string): Promise<{ message: string }> {
-  return await api.delete<{ message: string }>(`/note/${noteId}`);
-}
+  async create(data: NoteCreateRequest): Promise<ApiResponse<Note>> {
+    return api.post<Note>("/note/", data);
+  },
+
+  async update(
+    id: string,
+    data: NoteUpdateRequest
+  ): Promise<ApiResponse<Note>> {
+    return api.put<Note>(`/note/${id}`, data);
+  },
+
+  async delete(id: string): Promise<ApiResponse<{ message: string }>> {
+    return api.delete<{ message: string }>(`/note/${id}`);
+  },
+};

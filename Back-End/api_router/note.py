@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-from common import supabase, logger
+from core.common import supabase, logger
 from security.jwt_verify import current_user
 
 router = APIRouter(dependencies=[Depends(current_user)])
@@ -32,8 +32,8 @@ def get_notes_for_patient(patient_id: str):
         )
         return response.data
     except Exception as e:
-        logger.error(f"Error getting notes for patient: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error getting notes for patient: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @router.get('/video/{video_id}')
 def get_notes_for_video(video_id: str):
@@ -48,8 +48,8 @@ def get_notes_for_video(video_id: str):
         )
         return response.data
     except Exception as e:
-        logger.error(f"Error getting notes for video: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error getting notes for video: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @router.post('/')
 def create_note(note: NoteBase):
@@ -64,8 +64,8 @@ def create_note(note: NoteBase):
             raise HTTPException(status_code=400, detail="Failed to create note")
         return response.data[0]
     except Exception as e:
-        logger.error(f"Error creating note: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error creating note: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @router.put('/{note_id}')
 def update_note(note_id: str, note_update: NoteBase):
@@ -81,8 +81,8 @@ def update_note(note_id: str, note_update: NoteBase):
             raise HTTPException(status_code=404, detail="Note not found")
         return response.data[0]
     except Exception as e:
-        logger.error(f"Error updating note: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error updating note: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @router.delete('/{note_id}')
 def delete_note(note_id: str):
@@ -98,5 +98,5 @@ def delete_note(note_id: str):
             raise HTTPException(status_code=404, detail="Note not found")
         return {"message": "Note deleted successfully"}
     except Exception as e:
-        logger.error(f"Error deleting note: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error deleting note: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e

@@ -1,16 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import { useNotes } from "@/hooks";
+import { Note } from "@/services";
 import { MessageSquare } from "lucide-react";
+import React, { useState } from "react";
 import NoteForm from "./NoteForm";
 import NotesList from "./NoteList";
 import { NotesProps } from "./types";
-import {
-  createNote,
-  updateNote,
-  deleteNote,
-  Note,
-} from "@/services/noteService";
 
 /**
  * For the notes tab, handling note creation via NoteForm and displaying/editing notes in NotesList.
@@ -29,23 +25,25 @@ const Notes: React.FC<NotesProps> = ({
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
 
+  const { createNote, updateNote, deleteNote } = useNotes();
+
   const handleUpdateTimestamp = async (noteId: string, newTime: number) => {
-    await updateNote(noteId, { timestamp_seconds: newTime })
-      .then((note) => {
-        if (!note) throw new Error("Failed to update note");
-        console.log("Note updated successfully:", note);
-        setNotes(
-          notes.map((n) => {
-            if (n.id === noteId) {
-              return { ...n, timestamp_seconds: newTime };
-            }
-            return note;
-          })
-        );
-      })
-      .catch((error) => {
-        console.error("Error updating note:", error);
-      });
+    const updatedNote = await updateNote(noteId, {
+      timestamp_seconds: newTime,
+    });
+    if (updatedNote) {
+      console.log("Note updated successfully:", updatedNote);
+      setNotes(
+        notes.map((n) => {
+          if (n.id === noteId) {
+            return { ...n, timestamp_seconds: newTime };
+          }
+          return n;
+        })
+      );
+    } else {
+      console.error("Failed to update note");
+    }
   };
 
   // Add a new note
@@ -60,16 +58,15 @@ const Notes: React.FC<NotesProps> = ({
       patient_id: patientId,
     };
 
-    await createNote(notePayload).then((note) => {
-      if (note) {
-        setNotes([note, ...notes]);
-        setNewNote("");
-        setIsAdding(false);
-        setCurrentTime(undefined);
-      } else {
-        console.error("Failed to create note");
-      }
-    });
+    const note = await createNote(notePayload);
+    if (note) {
+      setNotes([note, ...notes]);
+      setNewNote("");
+      setIsAdding(false);
+      setCurrentTime(undefined);
+    } else {
+      console.error("Failed to create note");
+    }
   };
 
   // Start editing a note
@@ -81,30 +78,28 @@ const Notes: React.FC<NotesProps> = ({
   const handleSaveEdit = async (id: string) => {
     if (editContent.trim() === "") return;
 
-    await updateNote(id, { content: editContent }).then((note) => {
-      if (note) {
-        setNotes(
-          notes.map((note) =>
-            note.id === id ? { ...note, content: editContent } : note
-          )
-        );
-        setEditingNoteId(null);
-        setEditContent("");
-      } else {
-        console.error("Failed to update note");
-      }
-    });
+    const updatedNote = await updateNote(id, { content: editContent });
+    if (updatedNote) {
+      setNotes(
+        notes.map((note) =>
+          note.id === id ? { ...note, content: editContent } : note
+        )
+      );
+      setEditingNoteId(null);
+      setEditContent("");
+    } else {
+      console.error("Failed to update note");
+    }
   };
 
   // Delete a note
   const handleDeleteNote = async (id: string) => {
-    await deleteNote(id).then((note) => {
-      if (note) {
-        setNotes(notes.filter((note) => note.id !== id));
-      } else {
-        console.error("Failed to delete note");
-      }
-    });
+    const success = await deleteNote(id);
+    if (success) {
+      setNotes(notes.filter((note) => note.id !== id));
+    } else {
+      console.error("Failed to delete note");
+    }
   };
   // Cancel form
   const handleCancelForm = () => {
@@ -126,30 +121,37 @@ const Notes: React.FC<NotesProps> = ({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-medium text-gray-800">Session Notes</h3>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Session Notes</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            {notes.length} {notes.length === 1 ? "note" : "notes"} recorded
+          </p>
+        </div>
         <button
-          className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center"
+          className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md"
           onClick={() => setIsAdding(!isAdding)}
         >
           <MessageSquare className="w-4 h-4 mr-2" />
-          Add Note
+          {isAdding ? "Cancel" : "Add Note"}
         </button>
       </div>
 
       {/* Add note form */}
       {isAdding && (
-        <NoteForm
-          newNote={newNote}
-          setNewNote={setNewNote}
-          currentTime={currentTime}
-          setCurrentTime={setCurrentTime}
-          currentVideoTime={currentVideoTime}
-          onCancel={handleCancelForm}
-          onSave={handleAddNote}
-          onUpdateTimestamp={handleUpdateTimestamp}
-        />
+        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+          <NoteForm
+            newNote={newNote}
+            setNewNote={setNewNote}
+            currentTime={currentTime}
+            setCurrentTime={setCurrentTime}
+            currentVideoTime={currentVideoTime}
+            onCancel={handleCancelForm}
+            onSave={handleAddNote}
+            onUpdateTimestamp={handleUpdateTimestamp}
+          />
+        </div>
       )}
 
       {/* Notes list */}

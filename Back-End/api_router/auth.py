@@ -1,3 +1,4 @@
+Antonio-Test-branch
 from fastapi import APIRouter, HTTPException, Response, Request, BackgroundTasks
 from pydantic import BaseModel, EmailStr, ValidationError
 from common import admin_supabase, supabase
@@ -13,14 +14,30 @@ from email_service import (
 import asyncio
 from common import supabase
 
+from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from pydantic import BaseModel, EmailStr, ValidationError
+from typing import Optional
+from core.common import admin_supabase
+from core.env import ENVIRONMENT as ENV
+from security.jwt_verify import current_user
+
+from core.common import supabase
+ main
+
 router = APIRouter()
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-@router.post("/login")
-def login(body: LoginRequest, response: Response) -> dict:
+
+@router.post(
+    "/login",
+    summary="Login to get access token",
+    description="Use this endpoint to get your Bearer token for API authentication",
+)
+def login(body: LoginRequest) -> dict:
     supabase.auth._auto_refresh_token = True
 
     try:
@@ -46,36 +63,35 @@ def login(body: LoginRequest, response: Response) -> dict:
 
     access_token = auth.session.access_token
     refresh_token = auth.session.refresh_token
-    setAccessToken(response, access_token)
-    setRefreshToken(response, refresh_token)
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "user": auth.user
+        "user": auth.user,
     }
 
 
+ Antonio-Test-branch
 
 
+
+main
 @router.get("/me")
 def me(request: Request):
-    access_token = request.cookies.get("sb-access-token")
-    try:
-        user = supabase.auth.get_user(access_token)
-        if not user:
-            raise HTTPException(401, "Unauthorized")
-    except Exception as e:
-        raise HTTPException(401, "Unauthorized")
+    user = current_user(request)  # Extract user from auth
     return user
 
+
 @router.post("/logout")
-def logout(response: Response):
-    response.delete_cookie("sb-access-token", path="/")
-    response.delete_cookie("sb-refresh-token", path="/auth/refresh")
+def logout():
+    # With Bearer token authentication, logout is handled client-side
+    # by removing tokens from localStorage
     return {"logged_out": True}
+
 
 class TokenRefreshRequest(BaseModel):
     refresh_token: str
+
 
 @router.post("/refresh")
 def refresh(body: TokenRefreshRequest) -> dict:
@@ -90,7 +106,7 @@ def refresh(body: TokenRefreshRequest) -> dict:
         }
     except Exception:
         raise HTTPException(status_code=401, detail="Session expired")
-    
+
 
 class ResetRequest(BaseModel):
     email: EmailStr
@@ -100,16 +116,18 @@ class ResetRequest(BaseModel):
 async def request_password_reset(data: ResetRequest):
     try:
         supabase.auth.reset_password_email(
-            data.email, {
+            data.email,
+            {
                 "redirect_to": "https://main.d3nf33ntk31bcv.amplifyapp.com/password-reset",
-            }
+            },
         )
         return {"message": "Password reset email sent"}
     except ValidationError as ve:
         raise HTTPException(status_code=422, detail="Invalid email format.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 class ConfirmResetRequest(BaseModel):
     access_token: str
     new_password: str
@@ -118,7 +136,7 @@ class ConfirmResetRequest(BaseModel):
 @router.post("/confirm-password-reset")
 def confirm_password_reset(data: ConfirmResetRequest):
     try:
-        #Supabase will update user PW using the provided access token
+        # Supabase will update user PW using the provided access token
         res = admin_supabase.auth.get_user(data.access_token)
         admin_supabase.auth.admin
         print(f"[BOGUS]: {res.user}")
@@ -128,9 +146,10 @@ def confirm_password_reset(data: ConfirmResetRequest):
 
         return {"message": "Password reset successfully"}
     except Exception as e:
-        #Will return HTTP 500 error for any other encountered errors.
+        # Will return HTTP 500 error for any other encountered errors.
         print(f"[BOGUS]: {e.__dict__}")
         raise HTTPException(500, str(e))
+ Antonio-Test-branch
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
@@ -252,3 +271,5 @@ async def resend_confirmation(body: RegisterRequest, background_tasks: Backgroun
     except Exception as e:
         logger.error(f"Failed to resend confirmation: {str(e)}")
         raise HTTPException(status_code=400, detail="Failed to resend confirmation email")
+
+ main
