@@ -12,6 +12,7 @@ import {
   UserIcon,
   VideoCameraIcon,
   XMarkIcon,
+  PlayIcon
 } from "@heroicons/react/24/outline";
 import Image from "next/image";
 import Link from "next/link";
@@ -31,6 +32,7 @@ const navigation = [
     icon: DocumentTextIcon,
   },
   { name: "Live Cameras", href: "/streamingDash", icon: VideoCameraIcon },
+  { name: "Video Playback", href: "/video-playback", icon: PlayIcon },
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {

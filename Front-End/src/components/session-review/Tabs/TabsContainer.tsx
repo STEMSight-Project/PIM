@@ -4,6 +4,8 @@ import { Note } from "@/services";
 import React, { useState } from "react";
 import Notes from "./Notes";
 import Timeline from "./Timeline";
+import { Detection } from "@/components/session-review/types";
+import type { PatientEvent } from "@/components/session-review/types";
 
 type TabType = "timeline" | "notes";
 
@@ -29,16 +31,15 @@ const TabsContainer = ({
   const [currentTab, setCurrentTab] = useState<TabType>("timeline");
 
   return (
-    <div className="bg-white rounded-lg shadow-lg">
+    <div className="w-full bg-white rounded-lg shadow-lg">
       {/* Tab Navigation - Timeline and Notes */}
       <div className="p-4">
         <div className="flex bg-gray-50 rounded-lg p-1 mb-6">
           <button
-            className={`flex-1 py-3 px-4 text-center text-sm font-medium transition-all duration-200 rounded-md ${
-              currentTab === "timeline"
+            className={`flex-1 py-3 px-4 text-center text-sm font-medium transition-all duration-200 rounded-md ${currentTab === "timeline"
                 ? "bg-white text-blue-600 shadow-sm ring-1 ring-gray-200"
                 : "text-gray-600 hover:text-gray-900 hover:bg-white/50"
-            }`}
+              }`}
             onClick={() => setCurrentTab("timeline")}
           >
             <div className="flex items-center justify-center">
@@ -60,11 +61,10 @@ const TabsContainer = ({
           </button>
 
           <button
-            className={`flex-1 py-3 px-4 text-center text-sm font-medium transition-all duration-200 rounded-md ${
-              currentTab === "notes"
+            className={`flex-1 py-3 px-4 text-center text-sm font-medium transition-all duration-200 rounded-md ${currentTab === "notes"
                 ? "bg-white text-blue-600 shadow-sm ring-1 ring-gray-200"
                 : "text-gray-600 hover:text-gray-900 hover:bg-white/50"
-            }`}
+              }`}
             onClick={() => {
               setCurrentTab("notes");
               console.log("clicked on notes");
@@ -92,9 +92,13 @@ const TabsContainer = ({
 
       {/* Tab Content */}
       <div className="px-4 pb-4">
-        <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
+        <div className="bg-gray-50 rounded-lg p-4 min-h-96 overflow-y-auto">
           {currentTab === "timeline" && (
-            <Timeline setCurrentTimestamp={setCurrentTimestamp} />
+            <Timeline
+              setCurrentTimestamp={setCurrentTimestamp}
+              videoId={videoId}
+              patientId={patientId}
+            />
           )}
           {currentTab === "notes" && (
             <Notes
