@@ -337,7 +337,7 @@ const SessionReview: React.FC = () => {
                       {Math.round(
                         (new Date(session.endTime).getTime() -
                           new Date(session.startTime).getTime()) /
-                          60000
+                        60000
                       )}
                       m
                     </span>
@@ -474,7 +474,7 @@ const SessionReview: React.FC = () => {
                 <div className="space-y-4">
                   <div className="bg-gray-900 rounded-lg overflow-hidden aspect-video">
                     <VideoPlayer
-                      videoUrl={currentVideo.file_path || null}
+                      videoUrl={currentVideo.public_video_url || null}
                       currentTimestamp={currentTimestamp}
                       onTimeUpdate={handleTimeUpdate}
                     />
@@ -563,11 +563,10 @@ const SessionReview: React.FC = () => {
                     <button
                       key={video.id}
                       onClick={() => handleVideoSelect(index)}
-                      className={`relative p-4 rounded-lg border-2 transition-all text-sm font-medium ${
-                        index === selectedVideoIndex
-                          ? "border-purple-500 bg-purple-50 text-purple-700"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-                      }`}
+                      className={`relative p-4 rounded-lg border-2 transition-all text-sm font-medium ${index === selectedVideoIndex
+                        ? "border-purple-500 bg-purple-50 text-purple-700"
+                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                        }`}
                     >
                       <div className="text-center">
                         <svg

@@ -23,11 +23,25 @@ class VideoUpload(BaseModel):
     description: str = None
 
 
-@router.get("/")
+@router.get("/", response_model=list[Video])
 def get_all_videos():
     try:
         response = supabase.table("video").select("*").execute()
-        return response.data
+        videos: list[Video] = []
+        for obj in response.data:
+            video_url = supabase.storage.from_("recorded.videos").get_public_url(
+                obj["file_path"]
+            )
+            video = Video(
+                id=obj["id"],
+                patient_id=obj["patient_id"],
+                description=obj["description"],
+                file_path=obj["file_path"],
+                public_video_url=video_url,
+                created_at=obj["created_at"],
+            )
+            videos.append(video)
+        return videos
     except Exception as e:
         logger.error("Error getting all videos: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
