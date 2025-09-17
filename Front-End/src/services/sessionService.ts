@@ -1,3 +1,20 @@
+/**
+ * SESSION SERVICE
+ *
+ * Handles historical session data aggregation for post-session analysis:
+ * - Stitches together videos, events, and detections into session views
+ * - Provides session review and analysis capabilities
+ * - Aggregates data from multiple sources for comprehensive session insights
+ *
+ * Use this service for:
+ * - Session review pages
+ * - Historical data analysis
+ * - Post-session reporting
+ * - Patient progress tracking over time
+ *
+ * Note: This is separate from streamingService which handles live streaming.
+ */
+
 // services/sessionService.ts
 
 import { api } from "./api";

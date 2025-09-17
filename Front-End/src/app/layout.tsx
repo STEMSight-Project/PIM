@@ -32,17 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="light">
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              document.documentElement.classList.add('light');
-              document.documentElement.style.colorScheme = 'light';
-            `,
-          }}
-        />
-      </head>
+    <html lang="en" className="light" style={{ colorScheme: "light" }}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased light min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100`}
       >

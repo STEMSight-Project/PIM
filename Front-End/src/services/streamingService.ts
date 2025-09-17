@@ -1,6 +1,22 @@
 import type { ApiResponse } from "@/types";
 import { api } from "./api";
 
+/**
+ * STREAMING SERVICE
+ *
+ * Handles live streaming operations for real-time video sessions:
+ * - WebRTC signaling (SDP exchange)
+ * - Room management for live streams
+ * - Active session lifecycle management
+ * - Real-time connection status
+ *
+ * Use this service for:
+ * - Starting/ending live streaming sessions
+ * - Managing WebRTC connections
+ * - Real-time dashboard operations
+ * - Live session monitoring
+ */
+
 // Streaming Types - Updated to match backend streaming.py
 export interface RoomInfo {
   room_id: string;
@@ -44,6 +60,27 @@ export interface StreamingSessionUpdate {
   is_live?: boolean;
   status?: "active" | "ended" | "error" | "disconnected";
   device_name?: string;
+}
+
+// New types to match current backend API structure
+export interface StreamingRoom {
+  id: string;
+  session_id: string;
+  room_id: string;
+  device_name?: string;
+  connected: boolean;
+  created_at: string;
+  updated_at: string;
+  ended_at?: string;
+}
+
+export interface SessionWithRooms {
+  id: string;
+  patient_id: string;
+  status: "active" | "ended" | "error";
+  started_at: string;
+  ended_at?: string;
+  streaming_rooms: StreamingRoom[];
 }
 
 // Legacy types for backward compatibility (deprecated)
@@ -109,7 +146,7 @@ export const streamingService = {
     sdpData: SDPData
   ): Promise<ApiResponse<StreamResponse>> {
     return api.post<StreamResponse>(
-      `/streaming/rooms/${patientId}/streamer`,
+      `/streaming/streamer/${patientId}`,
       sdpData
     );
   },
@@ -118,10 +155,7 @@ export const streamingService = {
     patientId: string,
     sdpData: SDPData
   ): Promise<ApiResponse<StreamResponse>> {
-    return api.post<StreamResponse>(
-      `/streaming/rooms/${patientId}/viewer`,
-      sdpData
-    );
+    return api.post<StreamResponse>(`/streaming/viewer/${patientId}`, sdpData);
   },
 
   // Streaming Sessions CRUD - Matches backend streaming.py
@@ -133,12 +167,11 @@ export const streamingService = {
 
   async getSessions(filters?: {
     patient_id?: string;
-    is_live?: boolean;
+    status?: "active" | "ended" | "error" | "disconnected";
   }): Promise<ApiResponse<StreamingSession[]>> {
     const params = new URLSearchParams();
     if (filters?.patient_id) params.append("patient_id", filters.patient_id);
-    if (filters?.is_live !== undefined)
-      params.append("is_live", filters.is_live.toString());
+    if (filters?.status !== undefined) params.append("status", filters.status);
 
     const queryString = params.toString();
     const endpoint = queryString
@@ -169,9 +202,44 @@ export const streamingService = {
   async getActiveSessionsForPatient(
     patientId: string
   ): Promise<ApiResponse<StreamingSession[]>> {
-    return api.get<StreamingSession[]>(
-      `/streaming/sessions/patient/${patientId}/active`
-    );
+    // Use the existing getSessions endpoint with filters
+    return this.getSessions({
+      patient_id: patientId,
+      status: "active",
+    });
+  },
+
+  // Helper method to check if patient has any active sessions
+  async hasActiveSession(patientId: string): Promise<boolean> {
+    try {
+      const response = await this.getSessions({
+        patient_id: patientId,
+        status: "active",
+      });
+      return response.data ? response.data.length > 0 : false;
+    } catch (error) {
+      console.error("Error checking for active sessions:", error);
+      return false;
+    }
+  },
+
+  // New method to get sessions with rooms (matches current backend API)
+  async getSessionsWithRooms(filters?: {
+    patient_id?: string;
+    status?: string;
+    limit?: number;
+  }): Promise<ApiResponse<SessionWithRooms[]>> {
+    const params = new URLSearchParams();
+    if (filters?.patient_id) params.append("patient_id", filters.patient_id);
+    if (filters?.status) params.append("status", filters.status);
+    if (filters?.limit) params.append("limit", filters.limit.toString());
+
+    const queryString = params.toString();
+    const endpoint = queryString
+      ? `/streaming/sessions?${queryString}`
+      : "/streaming/sessions";
+
+    return api.get<SessionWithRooms[]>(endpoint);
   },
 
   // Legacy methods for backward compatibility (deprecated - use new session methods above)

@@ -114,38 +114,29 @@ export function useStreaming(): UseStreamingReturn {
     []
   );
 
-  const createOrGetSession = useCallback(
+  const findActiveSession = useCallback(
     async (patientId: string): Promise<StreamingSession | null> => {
       try {
-        // First check if there's an active session for this patient
-        const activeSessions =
-          await streamingService.getActiveSessionsForPatient(patientId);
+        // Look for active sessions for this patient (started by RPi devices)
+        const sessionsResponse = await streamingService.getSessions({
+          patient_id: patientId,
+          status: "active", // Only get live/active sessions
+        });
 
-        if (activeSessions.data && activeSessions.data.length > 0) {
-          const session = activeSessions.data[0];
+        if (sessionsResponse.data && sessionsResponse.data.length > 0) {
+          const session = sessionsResponse.data[0];
           console.log("Found existing active session:", session.id);
           setCurrentSession(session);
           return session;
         }
 
-        // Create a new session
-        const newSessionData = {
-          patient_id: patientId,
-          room_id: patientId, // Using patient ID as room ID for simplicity
-          device_name: "Web Viewer",
-        };
-
-        const response = await streamingService.createSession(newSessionData);
-        if (response.data) {
-          console.log("Created new session:", response.data.id);
-          setCurrentSession(response.data);
-          return response.data;
-        } else {
-          console.error("Failed to create session:", response.error);
-          return null;
-        }
+        // No active session found - RPi device hasn't started streaming yet
+        console.log("No active session found for patient:", patientId);
+        setCurrentSession(null);
+        return null;
       } catch (error) {
-        console.error("Error creating or getting session:", error);
+        console.error("Error finding active session:", error);
+        setCurrentSession(null);
         return null;
       }
     },
@@ -327,10 +318,7 @@ export function useStreaming(): UseStreamingReturn {
             setError(null);
             setUserFriendlyStatus("Live stream connected");
             resetReconnectionState();
-            // Update session status to active
-            if (currentSession) {
-              updateSessionStatus(currentSession.id, "active", true);
-            }
+            // Note: Don't update session status - we're just a viewer, RPi manages the session
             break;
           case "connecting":
             setIsConnecting(true);
@@ -339,10 +327,7 @@ export function useStreaming(): UseStreamingReturn {
           case "disconnected":
             setIsConnected(false);
             setIsConnecting(false);
-            // Update session status to disconnected
-            if (currentSession) {
-              updateSessionStatus(currentSession.id, "disconnected", false);
-            }
+            // Note: Don't update session status - viewer disconnection doesn't affect RPi session
             if (!isUserStoppedRef.current) {
               handleAutoReconnection();
             }
@@ -350,10 +335,7 @@ export function useStreaming(): UseStreamingReturn {
           case "failed":
             setIsConnected(false);
             setIsConnecting(false);
-            // Update session status to error
-            if (currentSession) {
-              updateSessionStatus(currentSession.id, "error", false);
-            }
+            // Note: Don't update session status - viewer connection failure doesn't affect RPi session
             if (!isUserStoppedRef.current) {
               handleAutoReconnection();
             }
@@ -362,10 +344,7 @@ export function useStreaming(): UseStreamingReturn {
             setIsConnected(false);
             setIsConnecting(false);
             setConnectionQuality(null);
-            // Update session status to ended
-            if (currentSession) {
-              updateSessionStatus(currentSession.id, "ended", false);
-            }
+            // Note: Don't update session status - viewer disconnection doesn't end RPi session
             break;
         }
       };
@@ -497,15 +476,17 @@ export function useStreaming(): UseStreamingReturn {
       try {
         setIsConnecting(true);
         setError(null);
-        setUserFriendlyStatus("Connecting to camera...");
+        setUserFriendlyStatus("Looking for active camera...");
         isUserStoppedRef.current = false;
         currentPatientIdRef.current = patientId;
         resetReconnectionState();
 
-        // Create or get existing session
-        const session = await createOrGetSession(patientId);
+        // Look for existing active session (started by RPi device)
+        const session = await findActiveSession(patientId);
         if (!session) {
-          throw new Error("Failed to create streaming session");
+          throw new Error(
+            "No active camera session found. Please ensure the camera device is connected and streaming."
+          );
         }
 
         // Clean up any existing connection
@@ -526,7 +507,11 @@ export function useStreaming(): UseStreamingReturn {
         let userMessage = "Unable to connect to camera";
 
         if (err instanceof Error) {
-          if (err.message.includes("Invalid SDP type")) {
+          if (err.message.includes("No active camera session")) {
+            message = err.message;
+            userMessage =
+              "No camera is currently streaming. Please check if the camera device is active.";
+          } else if (err.message.includes("Invalid SDP type")) {
             message = "Server returned invalid session data. Please try again.";
             userMessage = "Server configuration error. Please try again.";
           } else if (err.message.includes("No SDP answer")) {
@@ -552,10 +537,7 @@ export function useStreaming(): UseStreamingReturn {
         setIsReconnecting(false);
         currentPatientIdRef.current = null;
 
-        // Update session status to error if we have a session
-        if (currentSession) {
-          updateSessionStatus(currentSession.id, "error", false);
-        }
+        // Note: Don't update session status - we're just a viewer, errors don't affect RPi session
       }
     },
     [
@@ -563,7 +545,7 @@ export function useStreaming(): UseStreamingReturn {
       isConnected,
       createPeerConnection,
       resetReconnectionState,
-      createOrGetSession,
+      findActiveSession,
       currentSession,
       updateSessionStatus,
     ]
@@ -574,11 +556,9 @@ export function useStreaming(): UseStreamingReturn {
     currentPatientIdRef.current = null;
     resetReconnectionState();
 
-    // End the current session
-    if (currentSession) {
-      updateSessionStatus(currentSession.id, "ended", false);
-      setCurrentSession(null);
-    }
+    // Don't end the session - it's managed by RPi device
+    // Just disconnect the viewer and clear local state
+    setCurrentSession(null);
 
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -594,8 +574,9 @@ export function useStreaming(): UseStreamingReturn {
     setIsReconnecting(false);
     setConnectionQuality(null);
     setError(null);
+    setUserFriendlyStatus("Disconnected from camera");
 
-    console.log("Streaming stopped");
+    console.log("Viewer disconnected from streaming");
   }, [resetReconnectionState]);
 
   const reconnect = useCallback(async (): Promise<void> => {

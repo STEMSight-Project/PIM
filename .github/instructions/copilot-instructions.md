@@ -198,6 +198,137 @@ async def protected_profile():
 - UI components in `/components/ui/` (Button, Card, etc.)
 - Icons: Heroicons React library
 
+### Frontend Data Flow Architecture
+
+**CRITICAL: Follow this clean data flow pattern for all frontend development:**
+
+```
+Service Layer → Hooks Layer → UI/Page Components
+```
+
+#### ✅ CORRECT Data Flow Pattern
+
+```typescript
+// 1. SERVICE LAYER - Pure data fetching (services/api.ts)
+export const streamingService = {
+  async getSessions(filters?: any): Promise<ApiResponse<StreamingSession[]>> {
+    return api.get("/streaming/sessions", { params: filters });
+  },
+
+  async getRooms(): Promise<ApiResponse<StreamingRoom[]>> {
+    return api.get("/streaming/rooms");
+  },
+};
+
+// 2. HOOKS LAYER - State management and business logic (hooks/)
+export const useStreamingData = () => {
+  const [sessions, setSessions] = useState<StreamingSession[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchSessions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await streamingService.getSessions();
+      if (response.error) throw new Error(response.error);
+      setSessions(response.data || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { sessions, loading, error, fetchSessions };
+};
+
+// 3. UI/PAGE COMPONENTS - Pure presentation logic
+export default function StreamingPage() {
+  const { sessions, loading, error, fetchSessions } = useStreamingData();
+
+  if (loading) return <LoadingSpinner />;
+  if (error) return <ErrorMessage error={error} />;
+
+  return (
+    <div>
+      {sessions.map((session) => (
+        <SessionCard key={session.id} session={session} />
+      ))}
+    </div>
+  );
+}
+```
+
+#### ❌ AVOID These Anti-Patterns
+
+```typescript
+// ❌ DON'T: Direct API calls in components
+export default function BadComponent() {
+  const [data, setData] = useState([]);
+
+  useEffect(() => {
+    // Never do direct API calls in components
+    fetch("/api/sessions")
+      .then((res) => res.json())
+      .then(setData);
+  }, []);
+}
+
+// ❌ DON'T: Business logic in components
+export default function BadComponent() {
+  const { sessions } = useStreamingData();
+
+  // Never put business logic in render
+  const processedSessions = sessions.map((session) => ({
+    ...session,
+    // Complex business logic here - belongs in hooks!
+    computedStatus: session.status === "active" ? "live" : "offline",
+  }));
+}
+
+// ❌ DON'T: State management in components
+export default function BadComponent() {
+  // Don't manage complex state directly in components
+  const [sessions, setSessions] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [loading, setLoading] = useState(false);
+  // ... lots of useState calls
+}
+```
+
+#### Key Principles
+
+1. **Services**: Pure functions for API communication, no state management
+2. **Hooks**: Encapsulate state management, business logic, and side effects
+3. **Components**: Pure presentation, minimal logic, consume hook data
+4. **Separation**: Never mix data fetching with rendering logic
+5. **Reusability**: Hooks can be shared across multiple components
+6. **Testing**: Each layer can be tested independently
+
+#### Real-World Example Structure
+
+```
+services/
+├── api.ts                 # Core API client
+├── streamingService.ts    # Streaming-specific API calls
+├── patientService.ts      # Patient-specific API calls
+└── authService.ts         # Authentication API calls
+
+hooks/
+├── useAuth.ts            # Authentication state management
+├── useStreamingData.ts   # Streaming data management
+├── usePatients.ts        # Patient data management
+└── useRealtimeData.ts    # Generic real-time data hook
+
+components/
+├── pages/
+│   └── StreamingPage.tsx # Page component using hooks
+├── ui/
+│   └── SessionCard.tsx   # Pure UI component
+└── layouts/
+    └── DashboardLayout.tsx # Layout component
+```
+
 ### Frontend Routing Patterns
 
 #### Updated Navigation Structure
@@ -522,3 +653,183 @@ cd Front-End && npm install
 - **TypeScript** with strict type checking
 
 This ensures AI tools understand our specific requirements and suggest appropriate solutions that fit our architecture and coding standards.
+
+## 🎥 Updated Streaming Architecture (September 2025)
+
+### Frontend Streaming Model: Viewer-Only
+
+**CRITICAL: The frontend website is for WATCHING streams, NOT creating them.**
+
+#### ✅ Correct Streaming Approach
+
+```typescript
+// Frontend useStreaming hook - WATCHING existing sessions
+const findActiveSession = async (patientId: string) => {
+  // Look for existing sessions started by RPi devices
+  const sessionsResponse = await streamingService.getSessions({
+    patient_id: patientId,
+    is_live: true, // Only get active sessions
+  });
+
+  if (sessionsResponse.data && sessionsResponse.data.length > 0) {
+    return sessionsResponse.data[0]; // Found existing session
+  }
+
+  return null; // No active session - RPi hasn't started streaming
+};
+
+// Frontend displays: "Start Watching" not "Start Stream"
+<Button onClick={startWatching}>Start Watching</Button>;
+```
+
+#### ❌ Avoid These Anti-Patterns
+
+```typescript
+// ❌ WRONG - Don't create sessions from frontend
+const createSession = await streamingService.createSession(sessionData);
+
+// ❌ WRONG - Don't use "Start Stream" terminology
+<Button>Start Stream</Button>
+
+// ❌ WRONG - Don't end sessions when viewer disconnects
+stopStreaming() => {
+  updateSessionStatus(currentSession.id, "ended", false); // Don't do this
+}
+```
+
+### Backend Room Management
+
+#### Room Connection Status Tracking
+
+```python
+# services/streaming/room_service.py - Auto-update room status
+class Room:
+    def add_peer_connection(self, pc: RTCPeerConnection):
+        was_empty = len(self.pcs) == 0
+        self.pcs.add(pc)
+
+        # If first connection, mark room as connected
+        if was_empty:
+            asyncio.create_task(self._update_room_connected())
+
+    def remove_peer_connection(self, pc: RTCPeerConnection):
+        self.pcs.remove(pc)
+
+        # If no more connections, mark room as disconnected
+        if len(self.pcs) == 0:
+            asyncio.create_task(self._update_room_disconnected())
+```
+
+#### Fixed Frontend Service Methods
+
+```typescript
+// services/streamingService.ts - Use existing backend endpoints
+async getActiveSessionsForPatient(patientId: string) {
+  // Use existing getSessions endpoint with filters
+  return this.getSessions({
+    patient_id: patientId,
+    is_live: true
+  });
+  // NOTE: Don't use /streaming/sessions/patient/{id}/active - doesn't exist
+}
+
+// Helper method for checking active sessions
+async hasActiveSession(patientId: string): Promise<boolean> {
+  const response = await this.getSessions({
+    patient_id: patientId,
+    is_live: true
+  });
+  return response.data ? response.data.length > 0 : false;
+}
+```
+
+### Streaming Workflow Patterns
+
+#### 1. **RPi Device Workflow** (Session Creator)
+
+```
+1. RPi boots up with camera → Connects to backend
+2. Creates streaming session → Starts WebRTC room
+3. Streams video continuously → Updates session status
+4. On disconnect → Session ends automatically (1-minute timeout)
+```
+
+#### 2. **Frontend Workflow** (Session Viewer)
+
+```
+1. User clicks "Start Watching" → Look for active sessions
+2. If session found → Connect as WebRTC viewer
+3. If no session → Show "No camera currently streaming"
+4. User disconnects → Only affects viewer, session continues
+```
+
+#### 3. **Backend Room Lifecycle**
+
+```
+Room Creation (RPi) → connected=true in DB
+├── Add viewer connections → Keep connected=true
+├── Remove viewer connections → Still connected=true (RPi active)
+└── RPi disconnects → connected=false → 1-min timeout → End session
+```
+
+### Key Development Rules
+
+#### ✅ DO
+
+- **Frontend**: Use "Start Watching" / "Stop Watching" terminology
+- **Frontend**: Only connect to existing sessions, never create them
+- **Backend**: Auto-update room `connected` status based on peer connections
+- **Sessions**: Let RPi devices manage session lifecycle (create/end)
+- **Error messages**: "No camera currently streaming" when no active sessions
+- **API calls**: Use `getSessions()` with filters instead of non-existent endpoints
+
+#### ❌ DON'T
+
+- **Frontend**: Create or end sessions from the website
+- **Frontend**: Use "Stream" terminology - use "Watch" instead
+- **Backend**: End sessions when viewers disconnect (only when RPi disconnects)
+- **API**: Create endpoints like `/sessions/patient/{id}/active` - use existing filtered endpoints
+- **Room status**: Leave rooms as `connected=true` when no peer connections remain
+
+### Updated Component Patterns
+
+```typescript
+// Streaming dashboard page - Viewer pattern
+const StreamingPage = () => {
+  const { startStreaming, stopStreaming, error } = useStreaming();
+
+  const handleStartWatching = () => {
+    startStreaming(patientId); // This finds existing session and connects as viewer
+  };
+
+  const handleStopWatching = () => {
+    stopStreaming(); // This disconnects viewer only
+  };
+
+  if (error?.includes("No active camera session")) {
+    return (
+      <div>
+        <p>No camera is currently streaming.</p>
+        <p>Please ensure the camera device is connected and active.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <video ref={videoRef} autoPlay />
+      <Button onClick={handleStartWatching}>Start Watching</Button>
+      <Button onClick={handleStopWatching}>Stop Watching</Button>
+    </div>
+  );
+};
+```
+
+### Session Timeout Behavior
+
+- **Room Inactivity**: If no peer connections for 1 minute → Room marked as `connected=false`
+- **Session Management**: Sessions are ended by RPi devices or timeout, not by frontend viewers
+- **Auto-cleanup**: Backend automatically cleans up disconnected rooms and ended sessions
+- **Graceful Recovery**: Viewers can reconnect to existing sessions without affecting session state
+
+This streaming architecture ensures clear separation between edge devices (session creators) and frontend (session viewers), preventing conflicts and ensuring proper resource management.
