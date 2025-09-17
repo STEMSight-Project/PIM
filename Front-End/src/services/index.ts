@@ -9,6 +9,15 @@ export type {
   User,
 } from "./authService";
 
+export { realtimeService } from "./realtimeService";
+export type {
+  RealtimeConnection,
+  RealtimeEvent,
+  RealtimeEventHandler,
+  RealtimeOptions,
+  RealtimeService,
+} from "./realtimeService";
+
 export { patientService } from "./patientService";
 export type {
   Patient,
@@ -48,11 +57,11 @@ export type {
   SDPData,
   SessionWithRooms,
   StreamCreateRequest,
+  StreamingRoom,
   StreamResponse,
   StreamSession,
   StreamStats,
   StreamUpdateRequest,
-  StreamingRoom,
 } from "./streamingService";
 
 // Historical session review services for post-session analysis

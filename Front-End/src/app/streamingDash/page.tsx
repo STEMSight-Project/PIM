@@ -7,7 +7,11 @@ import type {
   SessionWithRooms,
   StreamingRoom,
 } from "@/hooks";
-import { useStreamingSessions } from "@/hooks";
+import {
+  useRealtimeRooms,
+  useRealtimeSessions,
+  useStreamingSessions,
+} from "@/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import {
   ArrowPathIcon,
@@ -74,6 +78,104 @@ export default function LiveStreamingDashboard() {
     connectedRooms,
     lastRefreshTime,
   } = useStreamingSessions();
+
+  // Realtime hooks for live data
+  const {
+    sessions: realtimeSessions,
+    isConnected: sessionsConnected,
+    error: sessionsError,
+  } = useRealtimeSessions({
+    enabled: true,
+  });
+
+  const { rooms: realtimeRooms, isConnected: roomsConnected } =
+    useRealtimeRooms({
+      enabled: true,
+    });
+
+  // Merge realtime data with initial data for display
+  const [mergedPatients, setMergedPatients] = useState(patients);
+
+  // Update merged data when initial data changes
+  useEffect(() => {
+    setMergedPatients(patients);
+  }, [patients]);
+
+  // Apply realtime session updates to merged data
+  useEffect(() => {
+    if (realtimeSessions.length > 0) {
+      setMergedPatients((prev) => {
+        const updated = [...prev];
+
+        // Update sessions in patient data
+        realtimeSessions.forEach((session) => {
+          const patientIndex = updated.findIndex(
+            (p) => p.id === session.patient_id
+          );
+          if (patientIndex >= 0) {
+            // Preserve existing streaming_rooms when updating session
+            const existingRooms =
+              updated[patientIndex].session?.streaming_rooms || [];
+            updated[patientIndex] = {
+              ...updated[patientIndex],
+              session: {
+                ...session,
+                streaming_rooms: existingRooms, // Preserve rooms array
+              } as SessionWithRooms,
+            };
+            console.log(
+              `🔄 UI - Updated patient ${session.patient_id} with realtime session`
+            );
+          }
+        });
+
+        return updated;
+      });
+    }
+  }, [realtimeSessions]);
+
+  // Apply realtime room updates to merged data
+  useEffect(() => {
+    if (realtimeRooms.length > 0) {
+      setMergedPatients((prev) => {
+        const updated = [...prev];
+
+        // Update rooms in patient session data
+        realtimeRooms.forEach((room) => {
+          const patientIndex = updated.findIndex(
+            (p) => p.id === room.patient_id
+          );
+          if (patientIndex >= 0 && updated[patientIndex].session) {
+            const sessionRooms =
+              updated[patientIndex].session!.streaming_rooms || [];
+            const roomIndex = sessionRooms.findIndex((r) => r.id === room.id);
+
+            if (roomIndex >= 0) {
+              // Update existing room
+              sessionRooms[roomIndex] = room;
+              console.log(
+                `🔄 UI - Updated room ${room.id} connected: ${room.connected}`
+              );
+            } else {
+              // Add new room
+              sessionRooms.push(room);
+              console.log(`➕ UI - Added new room ${room.id}`);
+            }
+
+            updated[patientIndex] = {
+              ...updated[patientIndex],
+              session: {
+                ...updated[patientIndex].session!,
+                streaming_rooms: sessionRooms,
+              },
+            };
+          }
+        });
+
+        return updated;
+      });
+    }
+  }, [realtimeRooms]);
 
   const router = useRouter();
   const [endingSession, setEndingSession] = useState<string | null>(null);
@@ -282,7 +384,7 @@ export default function LiveStreamingDashboard() {
               <div className="hidden lg:flex items-center space-x-6">
                 <div className="text-center bg-white/10 rounded-lg px-4 py-2 backdrop-blur-sm">
                   <div className="text-2xl font-bold text-white">
-                    {patients.length}
+                    {mergedPatients.length}
                   </div>
                   <div className="text-blue-200 text-sm font-medium">
                     Patients
@@ -325,14 +427,36 @@ export default function LiveStreamingDashboard() {
                       : "Never"}
                   </span>
                 </div>
+                {/* Realtime connection status */}
+                <div className="flex items-center space-x-2">
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      sessionsConnected && roomsConnected
+                        ? "bg-green-500 animate-pulse"
+                        : "bg-red-500"
+                    }`}
+                  ></div>
+                  <span className="text-sm text-slate-600">
+                    Realtime:{" "}
+                    {sessionsConnected && roomsConnected
+                      ? "Connected"
+                      : "Disconnected"}
+                  </span>
+                </div>
               </div>
-              <Button
-                onClick={refreshData}
-                className="border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors duration-200"
-              >
-                <ArrowPathIcon className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
+              <div className="flex items-center space-x-3">
+                <span className="text-sm text-slate-500">
+                  Live data: {realtimeSessions.length} sessions,{" "}
+                  {realtimeRooms.length} rooms
+                </span>
+                <Button
+                  onClick={refreshData}
+                  className="border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors duration-200"
+                >
+                  <ArrowPathIcon className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -359,7 +483,7 @@ export default function LiveStreamingDashboard() {
           </div>
         )}
 
-        {patients.length === 0 ? (
+        {mergedPatients.length === 0 ? (
           <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
             <CardContent className="text-center py-16">
               <div className="mb-8">
@@ -396,7 +520,7 @@ export default function LiveStreamingDashboard() {
                     <div>
                       <p className="text-sm text-slate-500">Active Patients</p>
                       <p className="text-xl font-semibold text-slate-800">
-                        {patients.length}
+                        {mergedPatients.length}
                       </p>
                     </div>
                   </div>
@@ -424,7 +548,7 @@ export default function LiveStreamingDashboard() {
 
             {/* Patient Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {patients.map((patient: PatientWithSession) => (
+              {mergedPatients.map((patient: PatientWithSession) => (
                 <Card
                   key={patient.id}
                   className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden"
@@ -503,7 +627,7 @@ export default function LiveStreamingDashboard() {
                                         room.room_id.split("-")[0]}
                                     </p>
                                     <p className="text-xs text-slate-500">
-                                      Room: {room.room_id}
+                                      Room: {room.device_name ?? room.room_id}
                                     </p>
                                   </div>
                                 </div>
