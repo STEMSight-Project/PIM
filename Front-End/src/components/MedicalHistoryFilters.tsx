@@ -49,15 +49,15 @@ export function MedicalHistoryFilters({
   const hasActiveFilters = searchTerm || selectedDoctor || startDate || endDate;
 
   return (
-    <div className="bg-white p-4 border rounded-lg shadow-sm space-y-4">
+    <div className="bg-gradient-to-r from-purple-50 to-violet-50 p-4 border border-purple-200 rounded-lg shadow-md space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">Filter Records</h3>
+        <h3 className="text-sm font-medium text-purple-900">Filter Records</h3>
         {hasActiveFilters && (
           <Button
             variant="ghost"
             size="sm"
             onClick={handleClearAll}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-purple-600 hover:text-purple-800 hover:bg-purple-100"
           >
             <XMarkIcon className="h-4 w-4 mr-1" />
             Clear All
@@ -68,32 +68,32 @@ export function MedicalHistoryFilters({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Search */}
         <div>
-          <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="search" className="block text-sm font-medium text-purple-800 mb-1">
             Search
           </label>
           <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-purple-400" />
             <input
               id="search"
               type="text"
               value={searchTerm}
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Search diagnosis or notes..."
-              className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="pl-10 w-full px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white placeholder-purple-400"
             />
           </div>
         </div>
 
         {/* Doctor Filter */}
         <div>
-          <label htmlFor="doctor" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="doctor" className="block text-sm font-medium text-purple-800 mb-1">
             Doctor
           </label>
           <select
             id="doctor"
             value={selectedDoctor}
             onChange={(e) => handleDoctorChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-purple-900"
           >
             <option value="">All Doctors</option>
             {doctorOptions.map((doctor) => (
@@ -106,7 +106,7 @@ export function MedicalHistoryFilters({
 
         {/* Date Range */}
         <div>
-          <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="startDate" className="block text-sm font-medium text-purple-800 mb-1">
             From Date
           </label>
           <input
@@ -119,12 +119,12 @@ export function MedicalHistoryFilters({
                 onDateFilter({ start: e.target.value, end: endDate });
               }
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-purple-900"
           />
         </div>
 
         <div>
-          <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="endDate" className="block text-sm font-medium text-purple-800 mb-1">
             To Date
           </label>
           <input
@@ -137,7 +137,7 @@ export function MedicalHistoryFilters({
                 onDateFilter({ start: startDate, end: e.target.value });
               }
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-purple-900"
           />
         </div>
       </div>

@@ -21,39 +21,43 @@ export function MedicalHistoryStats({ medicalHistories }: MedicalHistoryStatsPro
       label: "Total Records",
       value: totalRecords,
       icon: DocumentTextIcon,
-      color: "blue"
+      color: "purple",
+      bgGradient: "from-purple-500 to-violet-500"
     },
     {
       label: "Records with Notes",
       value: recordsWithNotes,
       icon: ChartBarIcon,
-      color: "green"
+      color: "violet",
+      bgGradient: "from-violet-500 to-purple-500"
     },
     {
       label: "Unique Doctors",
       value: uniqueDoctors,
       icon: UserIcon,
-      color: "purple"
+      color: "purple",
+      bgGradient: "from-purple-600 to-purple-500"
     },
     {
       label: "Days Since Last",
       value: mostRecentDate ? Math.floor((Date.now() - mostRecentDate.getTime()) / (1000 * 60 * 60 * 24)) : "N/A",
       icon: ClockIcon,
-      color: "orange"
+      color: "violet",
+      bgGradient: "from-violet-600 to-purple-500"
     }
   ];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {stats.map((stat, index) => (
-        <Card key={index} className="p-4">
+        <Card key={index} className="p-4 bg-gradient-to-br from-purple-50 to-violet-50 border-purple-200 hover:shadow-lg transition-all duration-200 hover:border-purple-300">
           <div className="flex items-center">
-            <div className={`p-2 rounded-md bg-${stat.color}-100`}>
-              <stat.icon className={`h-6 w-6 text-${stat.color}-600`} />
+            <div className={`p-3 rounded-lg bg-gradient-to-br ${stat.bgGradient} shadow-md`}>
+              <stat.icon className="h-6 w-6 text-white" />
             </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">{stat.label}</p>
-              <p className="text-2xl font-semibold text-gray-900">{stat.value}</p>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-purple-700">{stat.label}</p>
+              <p className="text-2xl font-bold text-purple-900">{stat.value}</p>
             </div>
           </div>
         </Card>
