@@ -133,7 +133,7 @@ export function useRealtimeSessions(options: UseRealtimeSessionsOptions = {}) {
       setError(err instanceof Error ? err.message : "Failed to connect");
       setIsConnected(false);
     }
-  }, [enabled, patientId]); // Remove handleMessage and realtimeOptions to prevent constant reconnects
+  }, [enabled, patientId, handleMessage, realtimeOptions]);
 
   const disconnect = useCallback(() => {
     if (connectionRef.current) {
