@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -29,6 +29,7 @@ origins = [
     "http://127.0.0.1:8000",
     "http://127.0.0.1:3000",
     "http://localhost:3000",
+    "http://localhost:8000",
     "https://localhost:3000",
     "https://main.d3nf33ntk31bcv.amplifyapp.com",
 ]
@@ -36,15 +37,19 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=False,  # Changed to False since we're using Bearer tokens, not cookies
+    allow_credentials=True,  # Enable credentials for Bearer token auth
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 
-@app.exception_handler((RequestValidationError))
-async def validation_exception_handler(_, exc):
-    return {"error": "Invalid request", "details": exc.errors()}
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"error": "Invalid request", "details": exc.errors()}
+    )
 
 
 @app.post("/token", summary="OAuth2 Token Endpoint", tags=["Auth"])
