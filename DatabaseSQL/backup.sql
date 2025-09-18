@@ -275,6 +275,21 @@ CREATE TYPE auth.one_time_token_type AS ENUM (
 ALTER TYPE auth.one_time_token_type OWNER TO supabase_auth_admin;
 
 --
+-- Name: streaming_session_status; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE public.streaming_session_status AS ENUM (
+    'active',
+    'paused',
+    'ended',
+    'error',
+    'disconnected'
+);
+
+
+ALTER TYPE public.streaming_session_status OWNER TO postgres;
+
+--
 -- Name: action; Type: TYPE; Schema: realtime; Owner: supabase_admin
 --
 
@@ -781,6 +796,22 @@ $_$;
 
 
 ALTER FUNCTION pgbouncer.get_auth(p_usename text) OWNER TO supabase_admin;
+
+--
+-- Name: update_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.update_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.update_updated_at() OWNER TO postgres;
 
 --
 -- Name: apply_rls(jsonb, integer); Type: FUNCTION; Schema: realtime; Owner: supabase_admin
@@ -2772,6 +2803,26 @@ CREATE TABLE public.patients (
 ALTER TABLE public.patients OWNER TO postgres;
 
 --
+-- Name: streaming_sessions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.streaming_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    patient_id uuid NOT NULL,
+    room_id character varying(255) NOT NULL,
+    is_live boolean DEFAULT true NOT NULL,
+    status public.streaming_session_status DEFAULT 'active'::public.streaming_session_status,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    ended_at timestamp with time zone,
+    device_name character varying(100),
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.streaming_sessions OWNER TO postgres;
+
+--
 -- Name: video; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -3806,6 +3857,151 @@ COPY auth.audit_log_entries (instance_id, id, payload, created_at, ip_address) F
 00000000-0000-0000-0000-000000000000	36f0af45-faf2-42b4-9f99-79dffc7fc5e5	{"action":"login","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 06:06:15.614541+00	
 00000000-0000-0000-0000-000000000000	c6c23b60-0172-4e24-9fb9-720395884658	{"action":"login","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 06:47:42.189793+00	
 00000000-0000-0000-0000-000000000000	616326b8-676a-48fb-8638-5c3370bdc7a5	{"action":"login","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 07:11:23.263738+00	
+00000000-0000-0000-0000-000000000000	06e01c6e-b5c6-4e7b-98aa-be1858da585b	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:33.918784+00	
+00000000-0000-0000-0000-000000000000	0372018a-4384-4eaa-9431-452e41cb1f5f	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:33.933337+00	
+00000000-0000-0000-0000-000000000000	4a6e7a1d-871c-4460-a5cd-c8b61193f66a	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:33.964274+00	
+00000000-0000-0000-0000-000000000000	0173d789-8394-49ee-bc08-38fa343b6f73	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:33.972563+00	
+00000000-0000-0000-0000-000000000000	dd669fcc-67b8-4bde-9369-e6634eefaa99	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:33.981555+00	
+00000000-0000-0000-0000-000000000000	b3f58b38-d3c2-4782-8732-78aee90242e0	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:33.991732+00	
+00000000-0000-0000-0000-000000000000	5e45159a-0b2b-4a2a-afa2-f2446c9be3c5	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:34.761707+00	
+00000000-0000-0000-0000-000000000000	3befd39d-ebc1-4e1b-b5de-b713a8ef36b3	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:34.762838+00	
+00000000-0000-0000-0000-000000000000	6095be8e-dae6-4ec5-b5e8-52c8aebe00c7	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:34.782724+00	
+00000000-0000-0000-0000-000000000000	1c788b89-3f08-49ae-9eeb-aa1cb36c4555	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:34.812445+00	
+00000000-0000-0000-0000-000000000000	56b503e3-af4b-4ce2-b626-bec29de7560b	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:34.824399+00	
+00000000-0000-0000-0000-000000000000	49f4ffb5-57fe-4ad7-96e7-c3899f74f7d4	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:36.624733+00	
+00000000-0000-0000-0000-000000000000	15e90c1b-7185-42ae-978f-d10d2057e32a	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:36.625475+00	
+00000000-0000-0000-0000-000000000000	3b7ee797-3490-4ef4-bf06-72f2125745fb	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:36.64082+00	
+00000000-0000-0000-0000-000000000000	8bf67e20-9cd9-45fa-afb2-967a53951ee3	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 08:06:36.669102+00	
+00000000-0000-0000-0000-000000000000	054d9ede-c077-40c0-b22d-065400454efd	{"action":"login","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 08:24:25.738001+00	
+00000000-0000-0000-0000-000000000000	e5e6e817-3824-4041-958a-3c0b9a5ecea5	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:01:38.295736+00	
+00000000-0000-0000-0000-000000000000	e23ce04a-b0ad-4497-bcd0-d9e3441dcef7	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:01:38.317341+00	
+00000000-0000-0000-0000-000000000000	0f76f371-04fa-4dbb-a5f6-394292602ac0	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:01:38.39491+00	
+00000000-0000-0000-0000-000000000000	64bc5191-cf62-47e4-81a1-b94588ef65be	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:01:56.343753+00	
+00000000-0000-0000-0000-000000000000	facdd95c-b1c3-4ba0-b76f-8dc43ec71bee	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:01:56.345563+00	
+00000000-0000-0000-0000-000000000000	7800a4c1-bf1d-4581-ae5f-52c46049f4eb	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:01:56.400271+00	
+00000000-0000-0000-0000-000000000000	b327bbf2-adc7-4c89-bb03-c1db2533b4eb	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:02:25.17388+00	
+00000000-0000-0000-0000-000000000000	2975fa4d-ca08-419b-8378-f300c055e6ac	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:02:25.175568+00	
+00000000-0000-0000-0000-000000000000	cd37d940-8f43-4ece-9d47-b926df643973	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:02:25.186876+00	
+00000000-0000-0000-0000-000000000000	29b6e36e-3b83-4b4e-8018-75560fb79a41	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:02:25.212799+00	
+00000000-0000-0000-0000-000000000000	b1a744bd-1cef-415c-b1fc-96cd19278e5a	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:02:25.234596+00	
+00000000-0000-0000-0000-000000000000	773bfd29-298a-4f59-a8ea-7291faa53672	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 09:02:25.254338+00	
+00000000-0000-0000-0000-000000000000	23fd13a9-2a4d-4316-89af-371a22fe111f	{"action":"login","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 09:31:44.597709+00	
+00000000-0000-0000-0000-000000000000	b7d6a8bc-ccd1-4e64-9659-cba8ab60b37d	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 10:31:45.122926+00	
+00000000-0000-0000-0000-000000000000	4434290e-7bc0-4036-8b2e-fd3f533dd3c1	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 10:31:45.153657+00	
+00000000-0000-0000-0000-000000000000	935febe2-d4b8-4076-8285-9016e3382abf	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 11:31:45.202135+00	
+00000000-0000-0000-0000-000000000000	f831c70d-a33d-44fd-8ab3-031d5ea365e8	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 11:31:45.228958+00	
+00000000-0000-0000-0000-000000000000	e66e6f89-ab0e-42f7-94e1-d4b099d52287	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 12:31:45.365506+00	
+00000000-0000-0000-0000-000000000000	02f8217b-adfe-4758-a606-d057ccb5a43a	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 12:31:45.390902+00	
+00000000-0000-0000-0000-000000000000	0284f8e1-3977-40e9-b444-f390ce70b9d7	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 13:31:45.494234+00	
+00000000-0000-0000-0000-000000000000	a9641de8-8372-4697-a853-e166d838edfb	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 13:31:45.523176+00	
+00000000-0000-0000-0000-000000000000	74445471-2738-4722-a709-36188229373e	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 14:31:45.707077+00	
+00000000-0000-0000-0000-000000000000	c5075e1b-272b-41f9-a2c2-603d1002293a	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 14:31:45.740356+00	
+00000000-0000-0000-0000-000000000000	0ddbcd91-e577-42fd-84ef-f05a31963ec4	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 15:31:45.858731+00	
+00000000-0000-0000-0000-000000000000	e248a302-436f-4c68-9a2e-37c38719eaa6	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 15:31:45.883333+00	
+00000000-0000-0000-0000-000000000000	b7c02169-8f93-4da6-9afe-4188e737a4ec	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 16:31:46.03091+00	
+00000000-0000-0000-0000-000000000000	f37ca1c4-1d8f-44ef-87fd-adbb9aff83aa	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 16:31:46.060709+00	
+00000000-0000-0000-0000-000000000000	4e81b232-bd01-43d6-914c-c02917a54b9f	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 17:31:51.105649+00	
+00000000-0000-0000-0000-000000000000	fafd871c-df50-49b8-9ea4-fe9f564a4965	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 17:31:51.13678+00	
+00000000-0000-0000-0000-000000000000	853f32c4-805f-40a0-aaac-03e65aa97435	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 18:31:51.307953+00	
+00000000-0000-0000-0000-000000000000	3078fb3b-c67f-4f6b-9dda-4da370895ed9	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 18:31:51.335322+00	
+00000000-0000-0000-0000-000000000000	9c57d100-9b73-45f4-b995-7d2a64c06df4	{"action":"token_refreshed","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 18:36:28.23951+00	
+00000000-0000-0000-0000-000000000000	52b1a833-6a51-481b-a326-9710d6059c2e	{"action":"token_revoked","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 18:36:28.255033+00	
+00000000-0000-0000-0000-000000000000	e36d0ed6-0b12-4e3c-9310-c11e4ed05d7e	{"action":"login","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 18:36:57.517673+00	
+00000000-0000-0000-0000-000000000000	0d0425b3-b46b-4952-b2a3-7fef6fde3ff3	{"action":"token_refreshed","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 18:43:14.857569+00	
+00000000-0000-0000-0000-000000000000	9edb9f19-65ff-4f9b-ba49-a83f7ec50a38	{"action":"token_revoked","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 18:43:14.862202+00	
+00000000-0000-0000-0000-000000000000	aeecbdab-102e-4aec-80c2-2e2fc55be9e9	{"action":"token_refreshed","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 18:43:14.950472+00	
+00000000-0000-0000-0000-000000000000	8296a73f-7ac7-4de8-83c9-25d21ae70f78	{"action":"login","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 19:15:38.816815+00	
+00000000-0000-0000-0000-000000000000	7a7164da-a095-424a-9167-b01a9d4253ca	{"action":"token_refreshed","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 19:15:53.475062+00	
+00000000-0000-0000-0000-000000000000	8dd9afcb-a6d1-4ecc-a741-d87b94960a38	{"action":"token_revoked","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 19:15:53.475728+00	
+00000000-0000-0000-0000-000000000000	1b90db16-90f7-4c84-8180-1fb16f912d3b	{"action":"token_refreshed","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 19:15:53.508883+00	
+00000000-0000-0000-0000-000000000000	81c5ad14-dcb4-48c1-a422-53c0411b4a2f	{"action":"login","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 19:17:08.162811+00	
+00000000-0000-0000-0000-000000000000	e815a1af-093a-4a55-8748-b7d2373b33ec	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 19:31:51.395098+00	
+00000000-0000-0000-0000-000000000000	efec759e-f4d0-4d57-b9c0-743d3dc348e3	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 19:31:51.408301+00	
+00000000-0000-0000-0000-000000000000	7622c79b-6c00-491b-9a5a-44bb0a9db815	{"action":"login","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 19:33:03.895298+00	
+00000000-0000-0000-0000-000000000000	e28643f0-82cf-43f4-b052-2ca05b65e491	{"action":"token_refreshed","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 19:54:02.334009+00	
+00000000-0000-0000-0000-000000000000	90058e69-8b85-4f96-9334-9e6021a77768	{"action":"token_revoked","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 19:54:02.345377+00	
+00000000-0000-0000-0000-000000000000	9842d2c2-699c-467b-9cdf-7b573f60058c	{"action":"token_refreshed","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"token"}	2025-09-14 19:54:02.376067+00	
+00000000-0000-0000-0000-000000000000	a1aa6924-ac24-4db1-8143-5f19be3a8dcb	{"action":"login","actor_id":"bf250d15-2188-413b-b954-120a31ca5840","actor_username":"mikefeschenko@yahoo.com","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 19:54:58.621105+00	
+00000000-0000-0000-0000-000000000000	6202f3bd-7e34-4805-a91c-ab49bf66800f	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:00:06.121276+00	
+00000000-0000-0000-0000-000000000000	45b29277-c010-456e-a759-d89837603188	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:00:06.143877+00	
+00000000-0000-0000-0000-000000000000	25e481a4-f623-452e-8610-9aa681d538ed	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:00:06.226676+00	
+00000000-0000-0000-0000-000000000000	2f9fcf94-e79b-4c4b-9a9a-9391ac314997	{"action":"login","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 22:08:05.096723+00	
+00000000-0000-0000-0000-000000000000	c556867e-448e-4a1d-b408-febe276b52fa	{"action":"login","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-14 22:11:26.693465+00	
+00000000-0000-0000-0000-000000000000	514c7916-59cc-45ae-abf4-37511b9a1e30	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:17.333574+00	
+00000000-0000-0000-0000-000000000000	a1cd397a-da14-49d8-b1cc-4503630b6bae	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:17.345503+00	
+00000000-0000-0000-0000-000000000000	27439c0f-60f8-4853-a90a-cf00f7a06beb	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:17.386807+00	
+00000000-0000-0000-0000-000000000000	d1da474b-859a-42a6-a898-45e4d115ef81	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:19.191256+00	
+00000000-0000-0000-0000-000000000000	1c30d73c-e003-469e-af3d-68b343f9c6b0	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:19.192005+00	
+00000000-0000-0000-0000-000000000000	7964b573-630e-4e6d-a670-d1b848ce0233	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:19.220734+00	
+00000000-0000-0000-0000-000000000000	d9a32ace-51fa-424e-8dd5-f13edf978f6b	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:20.372675+00	
+00000000-0000-0000-0000-000000000000	9421f6fc-03d0-4aed-b16c-2e1d09c9ac71	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:20.373416+00	
+00000000-0000-0000-0000-000000000000	2d67f9aa-0886-4076-85d0-c2718f24daef	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:20.39746+00	
+00000000-0000-0000-0000-000000000000	93c118df-aca7-4db9-b855-929fed853bbf	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:21.573004+00	
+00000000-0000-0000-0000-000000000000	58ba1693-fdd1-4df4-b986-e21f28acbf37	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:21.573609+00	
+00000000-0000-0000-0000-000000000000	634de575-6ec4-4363-bede-1f784e44d5bb	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:21.61006+00	
+00000000-0000-0000-0000-000000000000	c55a9564-7fb4-4432-b9d2-46c54acf738c	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:26.746746+00	
+00000000-0000-0000-0000-000000000000	47efaf82-8264-4c0c-ad22-d16af9e8079d	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:26.74742+00	
+00000000-0000-0000-0000-000000000000	52a7f054-70b7-4b35-9a0a-4af21209fcc6	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:28.354285+00	
+00000000-0000-0000-0000-000000000000	f5cf54bf-cbd3-446b-a2a5-8bd7c3d946d9	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:28.354979+00	
+00000000-0000-0000-0000-000000000000	7ba553b2-a6b1-40b5-bdef-00a5fb7ebae4	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:28.362785+00	
+00000000-0000-0000-0000-000000000000	8b536829-1801-492c-91a6-c54fa980ae02	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:29.481775+00	
+00000000-0000-0000-0000-000000000000	510e72f6-ee16-45e2-8c6a-1dafe41efbc5	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:29.482706+00	
+00000000-0000-0000-0000-000000000000	8c965be4-1fe9-4168-8be2-56e548b93945	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:32.733288+00	
+00000000-0000-0000-0000-000000000000	73b64f2b-6a60-4395-a8d0-6e338bb7bd20	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:32.734056+00	
+00000000-0000-0000-0000-000000000000	9c574bf3-012e-441e-9e75-4870e16351ec	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:32.765174+00	
+00000000-0000-0000-0000-000000000000	b1589e8a-c402-42d7-9ca0-e33c9e0f4bdc	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:34.704194+00	
+00000000-0000-0000-0000-000000000000	b958c2cf-ce8c-471f-a930-4294f9a7eeb1	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:34.704882+00	
+00000000-0000-0000-0000-000000000000	1436cc50-8e01-48c1-993c-6abcb227a710	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:38.321954+00	
+00000000-0000-0000-0000-000000000000	202d41b9-3a0a-46f5-9340-1e17ca4b0ac8	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:38.797672+00	
+00000000-0000-0000-0000-000000000000	27e6fafd-9a59-416e-9f29-fe8c98b58e5b	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:38.798364+00	
+00000000-0000-0000-0000-000000000000	dffcdb22-44e5-42e2-8257-42f0191e850b	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:38.829013+00	
+00000000-0000-0000-0000-000000000000	fae3c6d8-5289-4218-8b0c-9f4fce8ae020	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:40.368737+00	
+00000000-0000-0000-0000-000000000000	f834e4bb-ffe9-4a6c-af2e-69c875d3945f	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:40.370074+00	
+00000000-0000-0000-0000-000000000000	fa1c0d1f-c6b6-455e-a0f2-fe62ed870eb8	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:40.392008+00	
+00000000-0000-0000-0000-000000000000	499453f3-650e-4544-8558-d9a689dcdae6	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:40.857148+00	
+00000000-0000-0000-0000-000000000000	00e54543-9790-4c63-9c3b-10cbf301335e	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:40.858372+00	
+00000000-0000-0000-0000-000000000000	ffd6c07f-2d80-4b7d-92d6-6fce41c973a0	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:40.908011+00	
+00000000-0000-0000-0000-000000000000	8395eab7-97ae-478e-b836-4c56291c145e	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:26.758014+00	
+00000000-0000-0000-0000-000000000000	76d3e574-5322-42db-ad90-64fd3c22befd	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:27.364106+00	
+00000000-0000-0000-0000-000000000000	fe2fb9ae-a9e0-4dbf-933b-2bc1e7c22c80	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:27.36476+00	
+00000000-0000-0000-0000-000000000000	3ccf873f-02a6-40a4-acb9-d73896ce3fe8	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:27.400724+00	
+00000000-0000-0000-0000-000000000000	8793b17d-e192-4300-bfd1-e636aab84aba	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:29.507201+00	
+00000000-0000-0000-0000-000000000000	a3992e0c-ab1c-457c-a665-bc86fe8f3730	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:34.73519+00	
+00000000-0000-0000-0000-000000000000	3fcd7fbc-130b-4351-ae93-e8ab5e3a6597	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:36.660815+00	
+00000000-0000-0000-0000-000000000000	3e8279d0-5eff-4beb-a293-2850aadebea8	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:36.661502+00	
+00000000-0000-0000-0000-000000000000	2b662170-6232-42cd-a975-ee2b9a50d534	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:36.685863+00	
+00000000-0000-0000-0000-000000000000	580154be-97f6-49c7-a8b2-4920e019b19f	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:38.313359+00	
+00000000-0000-0000-0000-000000000000	83531397-c52f-45ee-8b10-71952dbde75a	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:38.31404+00	
+00000000-0000-0000-0000-000000000000	1c9fb1f9-04ec-47b5-ae08-652568678e51	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:41.462249+00	
+00000000-0000-0000-0000-000000000000	2325bb35-d61a-4499-a583-d0543a4db239	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:41.46318+00	
+00000000-0000-0000-0000-000000000000	0ee9de0e-a3a5-4f01-a9bb-0388ad904eb8	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:41.483281+00	
+00000000-0000-0000-0000-000000000000	07207030-41bd-485d-a62e-dcbef676d151	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:43.731312+00	
+00000000-0000-0000-0000-000000000000	1f80dfc4-af4c-4534-be37-f54f7116c336	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:43.731989+00	
+00000000-0000-0000-0000-000000000000	2cfcc842-bd3e-4592-81cb-a03fbb8a6308	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:43.747329+00	
+00000000-0000-0000-0000-000000000000	6cd627d7-c206-4232-93f9-6568b0ee381a	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:44.434328+00	
+00000000-0000-0000-0000-000000000000	e97a0e9c-fd6d-44c2-ba26-b962d7a01207	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:44.435046+00	
+00000000-0000-0000-0000-000000000000	f9a12420-9803-498d-be76-28be3c60f567	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:44.469216+00	
+00000000-0000-0000-0000-000000000000	6b68350e-6bfd-4f55-bdf6-1d864dac3061	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:46.146908+00	
+00000000-0000-0000-0000-000000000000	e16c5889-6a61-46d8-a353-f93974aef9c5	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:46.147782+00	
+00000000-0000-0000-0000-000000000000	e89edb20-5739-4811-a88e-8736d60e3284	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:46.172199+00	
+00000000-0000-0000-0000-000000000000	481c6179-a295-4afa-aacb-230359343a7d	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:47.187092+00	
+00000000-0000-0000-0000-000000000000	3de61dd4-f9b9-4bd3-bcf7-725451d5aafc	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:47.187629+00	
+00000000-0000-0000-0000-000000000000	b6c2f889-575d-431c-8a68-4a3834084054	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 22:27:47.199236+00	
+00000000-0000-0000-0000-000000000000	3b641f1b-6339-4eda-9217-e32baf24d75e	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 23:27:51.092402+00	
+00000000-0000-0000-0000-000000000000	c8dd0ae6-571f-40e9-bf43-c0500cd0a413	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-14 23:27:51.127101+00	
+00000000-0000-0000-0000-000000000000	cd6cc2d1-f84d-42f1-83c6-c285a43ade99	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-15 00:24:54.700191+00	
+00000000-0000-0000-0000-000000000000	77e45892-a555-4265-8b7b-4cf9aabfbcfe	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-15 00:24:54.719215+00	
+00000000-0000-0000-0000-000000000000	eaea17a3-8bd5-4e5c-8ef7-0062d29ea00d	{"action":"user_signedup","actor_id":"00000000-0000-0000-0000-000000000000","actor_username":"service_role","actor_via_sso":false,"log_type":"team","traits":{"provider":"email","user_email":"faithmontemayor@csus.edu","user_id":"78467702-b492-451b-a9f1-2059dbdd433e","user_phone":""}}	2025-09-15 02:03:38.663435+00	
+00000000-0000-0000-0000-000000000000	cd5bd4a3-1b2b-4570-b032-6755e1dd9242	{"action":"login","actor_id":"78467702-b492-451b-a9f1-2059dbdd433e","actor_username":"faithmontemayor@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-15 02:05:02.244346+00	
+00000000-0000-0000-0000-000000000000	d88147a6-2aae-4534-b19f-30abd610b557	{"action":"login","actor_id":"78467702-b492-451b-a9f1-2059dbdd433e","actor_username":"faithmontemayor@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-15 02:05:12.397916+00	
+00000000-0000-0000-0000-000000000000	0ef81a57-a868-428f-b718-cef86c835b1a	{"action":"login","actor_id":"78467702-b492-451b-a9f1-2059dbdd433e","actor_username":"faithmontemayor@csus.edu","actor_via_sso":false,"log_type":"account","traits":{"provider":"email"}}	2025-09-15 02:05:16.206009+00	
+00000000-0000-0000-0000-000000000000	c82d0463-d769-447d-b3f3-8274751760b6	{"action":"token_refreshed","actor_id":"78467702-b492-451b-a9f1-2059dbdd433e","actor_username":"faithmontemayor@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-15 03:05:06.553176+00	
+00000000-0000-0000-0000-000000000000	25c1fbfe-b030-4a92-beff-0fec12db290d	{"action":"token_revoked","actor_id":"78467702-b492-451b-a9f1-2059dbdd433e","actor_username":"faithmontemayor@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-15 03:05:06.582416+00	
+00000000-0000-0000-0000-000000000000	dfaba7d0-6321-4816-882e-beef00dc79d0	{"action":"token_refreshed","actor_id":"78467702-b492-451b-a9f1-2059dbdd433e","actor_username":"faithmontemayor@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-15 03:05:06.748747+00	
+00000000-0000-0000-0000-000000000000	fd12f87b-3163-4ce0-a471-58f5a3d23edb	{"action":"token_revoked","actor_id":"78467702-b492-451b-a9f1-2059dbdd433e","actor_username":"faithmontemayor@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-15 03:05:06.749598+00	
+00000000-0000-0000-0000-000000000000	074ec7ed-206e-4548-8b1d-65c4b441b4f8	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-15 04:47:14.871897+00	
+00000000-0000-0000-0000-000000000000	d74020cd-c5f7-4e70-bd31-3285529c9d3f	{"action":"token_revoked","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-15 04:47:14.895194+00	
+00000000-0000-0000-0000-000000000000	a9d55ada-e2f4-4986-a22f-ee29e4887654	{"action":"token_refreshed","actor_id":"3d05eadb-9eb9-4368-8928-87ccd7783f32","actor_username":"nguyenphuctran@csus.edu","actor_via_sso":false,"log_type":"token"}	2025-09-15 04:47:14.968952+00	
 \.
 
 
@@ -3825,6 +4021,7 @@ COPY auth.identities (provider_id, user_id, identity_data, provider, last_sign_i
 3d05eadb-9eb9-4368-8928-87ccd7783f32	3d05eadb-9eb9-4368-8928-87ccd7783f32	{"sub": "3d05eadb-9eb9-4368-8928-87ccd7783f32", "email": "nguyenphuctran@csus.edu", "email_verified": true, "phone_verified": false}	email	2025-03-22 07:51:10.818523+00	2025-03-22 07:51:10.818579+00	2025-03-22 07:51:10.818579+00	c518d05b-546e-4fc4-83bf-0cc382cb0239
 bf250d15-2188-413b-b954-120a31ca5840	bf250d15-2188-413b-b954-120a31ca5840	{"sub": "bf250d15-2188-413b-b954-120a31ca5840", "email": "mikefeschenko@yahoo.com", "email_verified": false, "phone_verified": false}	email	2025-03-26 18:53:16.031667+00	2025-03-26 18:53:16.032343+00	2025-03-26 18:53:16.032343+00	2aad0565-ed2a-4616-8fd2-c5b28cfd179a
 c96981e5-0436-43d2-b096-79dc929f0fb5	c96981e5-0436-43d2-b096-79dc929f0fb5	{"sub": "c96981e5-0436-43d2-b096-79dc929f0fb5", "email": "phernandez4@csus.edu", "email_verified": false, "phone_verified": false}	email	2025-05-03 20:41:08.585371+00	2025-05-03 20:41:08.585434+00	2025-05-03 20:41:08.585434+00	971a9c76-5276-4636-ac92-8d8a248a2d1e
+78467702-b492-451b-a9f1-2059dbdd433e	78467702-b492-451b-a9f1-2059dbdd433e	{"sub": "78467702-b492-451b-a9f1-2059dbdd433e", "email": "faithmontemayor@csus.edu", "email_verified": false, "phone_verified": false}	email	2025-09-15 02:03:38.658414+00	2025-09-15 02:03:38.658476+00	2025-09-15 02:03:38.658476+00	03e366a1-8943-4b83-bceb-722d9b4e3c9b
 \.
 
 
@@ -3955,6 +4152,18 @@ dc75c993-d127-4e85-9581-d33f71263cea	2025-09-13 02:59:17.208773+00	2025-09-13 02
 5cdc7063-dfdf-4f8a-ac00-118100fa5ad1	2025-09-14 06:06:15.724989+00	2025-09-14 06:06:15.724989+00	password	8170a08a-4c77-454f-92a1-70f30dc58b10
 8434698b-7bf5-4401-a6db-2968f956f61c	2025-09-14 06:47:42.246026+00	2025-09-14 06:47:42.246026+00	password	5c2f5e3d-4caa-4727-86f8-4e40b656cb8d
 ac34c1a7-8bff-4836-b952-48b0cdade96e	2025-09-14 07:11:23.30705+00	2025-09-14 07:11:23.30705+00	password	90b4678f-4178-4fd4-9127-d5c11aaaac3a
+3d3d0f8b-eef6-469c-b333-722c32b3aa9a	2025-09-14 08:24:25.764334+00	2025-09-14 08:24:25.764334+00	password	54a7ca26-f46e-4935-8e2f-84080136dc0b
+f17da7ad-4ba1-471d-a3d0-7225537f8aa5	2025-09-14 09:31:44.63643+00	2025-09-14 09:31:44.63643+00	password	3a5e2355-2816-46bd-ae5d-fe36ba6641ad
+5f3dcba5-bc20-49f8-a141-b381f9feca61	2025-09-14 18:36:57.542801+00	2025-09-14 18:36:57.542801+00	password	35f2885c-0444-41a8-84e8-04bce0cf6281
+83a8ae57-6717-4831-857e-6a3ea8165224	2025-09-14 19:15:38.902797+00	2025-09-14 19:15:38.902797+00	password	c2367b15-8c01-489c-8ce5-ce6f1e29025a
+230eb5c4-a702-4a81-a32f-31bc53ac82a6	2025-09-14 19:17:08.170314+00	2025-09-14 19:17:08.170314+00	password	794e6b6d-eb03-4cfa-ba50-dee50d39d133
+051f8903-3e13-4345-82d1-e123318dbc20	2025-09-14 19:33:03.902858+00	2025-09-14 19:33:03.902858+00	password	678809af-0d8d-442b-b7d3-bcb95b025c4d
+7f0c84ac-90b1-4149-ab8f-29fe67198d16	2025-09-14 19:54:58.680131+00	2025-09-14 19:54:58.680131+00	password	fb408337-a816-4929-8f03-4b0acd2fddea
+981dcbe1-f199-4e65-abf9-c53beaf6637d	2025-09-14 22:08:05.115831+00	2025-09-14 22:08:05.115831+00	password	4c8d126b-dac9-4cbe-9a58-c6d0cfc4f425
+905b2c4b-69fb-4d42-a89c-62e76b6e044b	2025-09-14 22:11:26.702208+00	2025-09-14 22:11:26.702208+00	password	0a367a7f-ad04-4c35-91a4-acfe654e7a5c
+b030bc4b-89dd-429d-8f1a-de455c3015eb	2025-09-15 02:05:02.278842+00	2025-09-15 02:05:02.278842+00	password	078160c7-c2e2-42ce-bb68-fb4a288b6456
+fb430cc6-333d-48ad-8632-86ef5ca510c8	2025-09-15 02:05:12.407285+00	2025-09-15 02:05:12.407285+00	password	858fb069-4fc6-4dae-84db-0d8623ffd3ba
+e986b82b-50ec-4d86-839a-c345d3179c07	2025-09-15 02:05:16.213118+00	2025-09-15 02:05:16.213118+00	password	3089cb0b-5143-4c84-afbf-ac06a60dd78f
 \.
 
 
@@ -4127,7 +4336,6 @@ COPY auth.refresh_tokens (instance_id, id, token, user_id, revoked, created_at, 
 00000000-0000-0000-0000-000000000000	458	bszsdixbmq2r	bf250d15-2188-413b-b954-120a31ca5840	t	2025-09-05 05:26:17.183706+00	2025-09-05 06:26:07.982962+00	\N	91d8b177-bae2-4841-b0ca-0c33fe976a1c
 00000000-0000-0000-0000-000000000000	459	qctlkhmetpv5	bf250d15-2188-413b-b954-120a31ca5840	t	2025-09-05 06:26:07.999285+00	2025-09-05 06:26:08.149115+00	bszsdixbmq2r	91d8b177-bae2-4841-b0ca-0c33fe976a1c
 00000000-0000-0000-0000-000000000000	460	rws5epql3zek	bf250d15-2188-413b-b954-120a31ca5840	f	2025-09-05 06:26:08.149445+00	2025-09-05 06:26:08.149445+00	qctlkhmetpv5	91d8b177-bae2-4841-b0ca-0c33fe976a1c
-00000000-0000-0000-0000-000000000000	461	svag4qeim7lc	bf250d15-2188-413b-b954-120a31ca5840	f	2025-09-05 06:41:54.123108+00	2025-09-05 06:41:54.123108+00	\N	f716839c-35ab-48f0-92cb-6e0db330368a
 00000000-0000-0000-0000-000000000000	462	uogjmithfa6x	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-12 06:51:29.120618+00	2025-09-12 06:51:43.994855+00	\N	21afe93a-435c-42df-97fa-67ea6be55f69
 00000000-0000-0000-0000-000000000000	463	vm5nhnzfwaur	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-12 06:51:43.998625+00	2025-09-12 06:51:44.256099+00	uogjmithfa6x	21afe93a-435c-42df-97fa-67ea6be55f69
 00000000-0000-0000-0000-000000000000	464	bwwhssfipk6q	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-12 06:51:44.257068+00	2025-09-12 06:51:50.784224+00	vm5nhnzfwaur	21afe93a-435c-42df-97fa-67ea6be55f69
@@ -4143,6 +4351,7 @@ COPY auth.refresh_tokens (instance_id, id, token, user_id, revoked, created_at, 
 00000000-0000-0000-0000-000000000000	475	6cpalsf5zqjs	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-12 08:17:48.445137+00	2025-09-12 08:17:48.445137+00	\N	c553d554-172d-418c-ace5-acf8953b5867
 00000000-0000-0000-0000-000000000000	476	c2xe4zj3jxdq	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-12 08:22:28.952009+00	2025-09-12 08:22:28.952009+00	\N	964677c1-610a-429a-a6a9-56980139259a
 00000000-0000-0000-0000-000000000000	473	7l2v2ldxeypx	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-12 08:12:53.791421+00	2025-09-12 11:21:23.497419+00	\N	a5bdff3a-8034-4930-93d0-83ca2b69f9a0
+00000000-0000-0000-0000-000000000000	461	svag4qeim7lc	bf250d15-2188-413b-b954-120a31ca5840	t	2025-09-05 06:41:54.123108+00	2025-09-14 18:36:28.258951+00	\N	f716839c-35ab-48f0-92cb-6e0db330368a
 00000000-0000-0000-0000-000000000000	477	lhqi3c772kqx	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-12 08:31:59.42275+00	2025-09-12 09:31:51.403075+00	\N	2ee64cf8-a1a6-4053-a778-6ed2cc97aa1f
 00000000-0000-0000-0000-000000000000	478	yz3xtxbbe7bj	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-12 09:31:51.421327+00	2025-09-12 09:31:51.570176+00	lhqi3c772kqx	2ee64cf8-a1a6-4053-a778-6ed2cc97aa1f
 00000000-0000-0000-0000-000000000000	479	n3g6yddgg5ej	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-12 09:31:51.570547+00	2025-09-12 09:31:51.570547+00	yz3xtxbbe7bj	2ee64cf8-a1a6-4053-a778-6ed2cc97aa1f
@@ -4181,7 +4390,65 @@ COPY auth.refresh_tokens (instance_id, id, token, user_id, revoked, created_at, 
 00000000-0000-0000-0000-000000000000	512	clocpn6xwb4o	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-13 22:26:26.066924+00	2025-09-13 22:26:26.066924+00	qrcjfi7utkj6	104e3d9e-15e9-4f01-b2a5-1ad9b02a6bd5
 00000000-0000-0000-0000-000000000000	513	zi6gsbkase4i	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-14 06:06:15.668732+00	2025-09-14 06:06:15.668732+00	\N	5cdc7063-dfdf-4f8a-ac00-118100fa5ad1
 00000000-0000-0000-0000-000000000000	514	rsqngkjhwayb	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-14 06:47:42.220184+00	2025-09-14 06:47:42.220184+00	\N	8434698b-7bf5-4401-a6db-2968f956f61c
-00000000-0000-0000-0000-000000000000	515	px2h2h33w4mb	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-14 07:11:23.28809+00	2025-09-14 07:11:23.28809+00	\N	ac34c1a7-8bff-4836-b952-48b0cdade96e
+00000000-0000-0000-0000-000000000000	515	px2h2h33w4mb	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 07:11:23.28809+00	2025-09-14 08:06:33.934256+00	\N	ac34c1a7-8bff-4836-b952-48b0cdade96e
+00000000-0000-0000-0000-000000000000	516	rr46fjfa4pjt	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 08:06:33.947693+00	2025-09-14 08:06:34.763356+00	px2h2h33w4mb	ac34c1a7-8bff-4836-b952-48b0cdade96e
+00000000-0000-0000-0000-000000000000	517	5wfdsm7aveqm	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 08:06:34.764165+00	2025-09-14 08:06:36.626096+00	rr46fjfa4pjt	ac34c1a7-8bff-4836-b952-48b0cdade96e
+00000000-0000-0000-0000-000000000000	518	724mri2quazw	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-14 08:06:36.626463+00	2025-09-14 08:06:36.626463+00	5wfdsm7aveqm	ac34c1a7-8bff-4836-b952-48b0cdade96e
+00000000-0000-0000-0000-000000000000	519	nwdgw7ftem2z	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 08:24:25.754584+00	2025-09-14 09:01:38.318847+00	\N	3d3d0f8b-eef6-469c-b333-722c32b3aa9a
+00000000-0000-0000-0000-000000000000	520	3pppg2tcvlqx	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 09:01:38.340376+00	2025-09-14 09:01:56.346185+00	nwdgw7ftem2z	3d3d0f8b-eef6-469c-b333-722c32b3aa9a
+00000000-0000-0000-0000-000000000000	521	ji25mhkyny7f	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 09:01:56.34652+00	2025-09-14 09:02:25.176252+00	3pppg2tcvlqx	3d3d0f8b-eef6-469c-b333-722c32b3aa9a
+00000000-0000-0000-0000-000000000000	522	nm2d2iny24as	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-14 09:02:25.176939+00	2025-09-14 09:02:25.176939+00	ji25mhkyny7f	3d3d0f8b-eef6-469c-b333-722c32b3aa9a
+00000000-0000-0000-0000-000000000000	523	i7froxjwuhpt	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 09:31:44.617537+00	2025-09-14 10:31:45.156744+00	\N	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	524	eumby5ps2otp	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 10:31:45.18708+00	2025-09-14 11:31:45.232107+00	i7froxjwuhpt	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	525	dmuo42mbz62z	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 11:31:45.256977+00	2025-09-14 12:31:45.392757+00	eumby5ps2otp	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	526	42uthb44ovqo	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 12:31:45.41287+00	2025-09-14 13:31:45.524684+00	dmuo42mbz62z	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	527	kjgvwuqar7fb	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 13:31:45.546545+00	2025-09-14 14:31:45.742754+00	42uthb44ovqo	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	528	ktvdipv4k7ch	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 14:31:45.767951+00	2025-09-14 15:31:45.886512+00	kjgvwuqar7fb	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	529	eekkgao5q6fm	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 15:31:45.914154+00	2025-09-14 16:31:46.06308+00	ktvdipv4k7ch	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	530	6jbxcw6suig5	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 16:31:46.085074+00	2025-09-14 17:31:51.139079+00	eekkgao5q6fm	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	531	pxeoex7ot2sm	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 17:31:51.163665+00	2025-09-14 18:31:51.337839+00	6jbxcw6suig5	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	533	l3cnk45xl2t5	bf250d15-2188-413b-b954-120a31ca5840	f	2025-09-14 18:36:28.270628+00	2025-09-14 18:36:28.270628+00	svag4qeim7lc	f716839c-35ab-48f0-92cb-6e0db330368a
+00000000-0000-0000-0000-000000000000	534	aavrgildmmgl	bf250d15-2188-413b-b954-120a31ca5840	t	2025-09-14 18:36:57.534832+00	2025-09-14 18:43:14.863536+00	\N	5f3dcba5-bc20-49f8-a141-b381f9feca61
+00000000-0000-0000-0000-000000000000	535	i3yse2hd4mv5	bf250d15-2188-413b-b954-120a31ca5840	f	2025-09-14 18:43:14.867752+00	2025-09-14 18:43:14.867752+00	aavrgildmmgl	5f3dcba5-bc20-49f8-a141-b381f9feca61
+00000000-0000-0000-0000-000000000000	536	ufsb2otunpht	bf250d15-2188-413b-b954-120a31ca5840	t	2025-09-14 19:15:38.858415+00	2025-09-14 19:15:53.476257+00	\N	83a8ae57-6717-4831-857e-6a3ea8165224
+00000000-0000-0000-0000-000000000000	538	hx7gitsafmoy	bf250d15-2188-413b-b954-120a31ca5840	f	2025-09-14 19:17:08.167802+00	2025-09-14 19:17:08.167802+00	\N	230eb5c4-a702-4a81-a32f-31bc53ac82a6
+00000000-0000-0000-0000-000000000000	532	fermvppp2re4	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 18:31:51.361875+00	2025-09-14 19:31:51.409008+00	pxeoex7ot2sm	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	540	chio6aozqxwx	bf250d15-2188-413b-b954-120a31ca5840	f	2025-09-14 19:33:03.901554+00	2025-09-14 19:33:03.901554+00	\N	051f8903-3e13-4345-82d1-e123318dbc20
+00000000-0000-0000-0000-000000000000	537	k2grfwogpvqq	bf250d15-2188-413b-b954-120a31ca5840	t	2025-09-14 19:15:53.478058+00	2025-09-14 19:54:02.346742+00	ufsb2otunpht	83a8ae57-6717-4831-857e-6a3ea8165224
+00000000-0000-0000-0000-000000000000	541	tywfq3ct6lxp	bf250d15-2188-413b-b954-120a31ca5840	f	2025-09-14 19:54:02.351698+00	2025-09-14 19:54:02.351698+00	k2grfwogpvqq	83a8ae57-6717-4831-857e-6a3ea8165224
+00000000-0000-0000-0000-000000000000	542	be4mdc4pqlnk	bf250d15-2188-413b-b954-120a31ca5840	f	2025-09-14 19:54:58.66801+00	2025-09-14 19:54:58.66801+00	\N	7f0c84ac-90b1-4149-ab8f-29fe67198d16
+00000000-0000-0000-0000-000000000000	539	fdqswwq2jmdk	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 19:31:51.430391+00	2025-09-14 22:00:06.147073+00	fermvppp2re4	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	543	76ctomdcec2t	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-14 22:00:06.168747+00	2025-09-14 22:00:06.168747+00	fdqswwq2jmdk	f17da7ad-4ba1-471d-a3d0-7225537f8aa5
+00000000-0000-0000-0000-000000000000	544	rzxj3mjrjht3	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-14 22:08:05.107068+00	2025-09-14 22:08:05.107068+00	\N	981dcbe1-f199-4e65-abf9-c53beaf6637d
+00000000-0000-0000-0000-000000000000	545	sesazl6nk2gk	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:11:26.697348+00	2025-09-14 22:27:17.347625+00	\N	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	546	3zrcllqp6ku3	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:17.35358+00	2025-09-14 22:27:19.193128+00	sesazl6nk2gk	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	547	7rgwnf47tfuu	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:19.194622+00	2025-09-14 22:27:20.37429+00	3zrcllqp6ku3	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	548	q5bkq6mt5rov	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:20.374641+00	2025-09-14 22:27:21.577315+00	7rgwnf47tfuu	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	549	qruorsgyhjtl	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:21.577901+00	2025-09-14 22:27:26.747967+00	q5bkq6mt5rov	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	550	glygkj7otlkd	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:26.748313+00	2025-09-14 22:27:27.366275+00	qruorsgyhjtl	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	551	fatji5wxphip	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:27.366767+00	2025-09-14 22:27:28.355589+00	glygkj7otlkd	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	552	pim66ycjsk45	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:28.35596+00	2025-09-14 22:27:29.483752+00	fatji5wxphip	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	553	cjtzopir6ans	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:29.484916+00	2025-09-14 22:27:32.734673+00	pim66ycjsk45	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	554	3ok4p6n4ww3g	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:32.735038+00	2025-09-14 22:27:34.705462+00	cjtzopir6ans	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	555	djszb5vhlvz6	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:34.705835+00	2025-09-14 22:27:36.662074+00	3ok4p6n4ww3g	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	556	ntco5xjupbcg	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:36.66243+00	2025-09-14 22:27:38.314574+00	djszb5vhlvz6	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	557	xuhnlcf5y6w6	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:38.314955+00	2025-09-14 22:27:38.799005+00	ntco5xjupbcg	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	558	fruxypfysycp	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:38.7993+00	2025-09-14 22:27:40.370624+00	xuhnlcf5y6w6	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	559	e36mispiewv2	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:40.370899+00	2025-09-14 22:27:40.859193+00	fruxypfysycp	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	560	4qghjvlayfxe	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:40.859623+00	2025-09-14 22:27:41.463764+00	e36mispiewv2	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	561	k6skkea5jikw	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:41.464079+00	2025-09-14 22:27:43.732627+00	4qghjvlayfxe	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	562	v7rxggpv73zh	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:43.732922+00	2025-09-14 22:27:44.435611+00	k6skkea5jikw	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	563	rayzgjqjyqxc	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:44.43594+00	2025-09-14 22:27:46.148374+00	v7rxggpv73zh	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	564	y5wx5gsn4jwx	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:46.148797+00	2025-09-14 22:27:47.188092+00	rayzgjqjyqxc	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	565	sudaoyzljc7l	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 22:27:47.188386+00	2025-09-14 23:27:51.129018+00	y5wx5gsn4jwx	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	566	7gjqcjolt3tg	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-14 23:27:51.155304+00	2025-09-15 00:24:54.721004+00	sudaoyzljc7l	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	568	acwdb3rml5fb	78467702-b492-451b-a9f1-2059dbdd433e	f	2025-09-15 02:05:02.266066+00	2025-09-15 02:05:02.266066+00	\N	b030bc4b-89dd-429d-8f1a-de455c3015eb
+00000000-0000-0000-0000-000000000000	569	otthbfpendxl	78467702-b492-451b-a9f1-2059dbdd433e	f	2025-09-15 02:05:12.403652+00	2025-09-15 02:05:12.403652+00	\N	fb430cc6-333d-48ad-8632-86ef5ca510c8
+00000000-0000-0000-0000-000000000000	570	mkb3tfa2h34k	78467702-b492-451b-a9f1-2059dbdd433e	t	2025-09-15 02:05:16.208757+00	2025-09-15 03:05:06.584358+00	\N	e986b82b-50ec-4d86-839a-c345d3179c07
+00000000-0000-0000-0000-000000000000	571	3fs44q5zwxj7	78467702-b492-451b-a9f1-2059dbdd433e	t	2025-09-15 03:05:06.608668+00	2025-09-15 03:05:06.751976+00	mkb3tfa2h34k	e986b82b-50ec-4d86-839a-c345d3179c07
+00000000-0000-0000-0000-000000000000	572	4evdxhdr2lkv	78467702-b492-451b-a9f1-2059dbdd433e	t	2025-09-15 03:05:06.753465+00	2025-09-15 03:07:06.800138+00	3fs44q5zwxj7	e986b82b-50ec-4d86-839a-c345d3179c07
+00000000-0000-0000-0000-000000000000	567	tkid34zwj4ny	3d05eadb-9eb9-4368-8928-87ccd7783f32	t	2025-09-15 00:24:54.734053+00	2025-09-15 04:47:14.899026+00	7gjqcjolt3tg	905b2c4b-69fb-4d42-a89c-62e76b6e044b
+00000000-0000-0000-0000-000000000000	573	5mvmp6ham3aq	3d05eadb-9eb9-4368-8928-87ccd7783f32	f	2025-09-15 04:47:14.925401+00	2025-09-15 04:47:14.925401+00	tkid34zwj4ny	905b2c4b-69fb-4d42-a89c-62e76b6e044b
 \.
 
 
@@ -4376,21 +4643,33 @@ fc372ee1-b75f-4e37-a6e1-232840d27149	bf250d15-2188-413b-b954-120a31ca5840	2025-0
 bab38d1e-4e2b-43bb-81cd-8abaccaec8da	bf250d15-2188-413b-b954-120a31ca5840	2025-09-05 01:16:22.733394+00	2025-09-05 01:16:22.733394+00	\N	aal1	\N	\N	python-httpx/0.28.1	73.151.135.139	\N
 79e0fa6c-dbcd-4c7f-aed8-d7abd74c935b	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-13 05:15:02.196206+00	2025-09-13 06:19:37.322981+00	\N	aal1	\N	2025-09-13 06:19:37.322424	python-httpx/0.27.0	73.2.33.92	\N
 91d8b177-bae2-4841-b0ca-0c33fe976a1c	bf250d15-2188-413b-b954-120a31ca5840	2025-09-05 05:26:17.157158+00	2025-09-05 06:26:08.154896+00	\N	aal1	\N	2025-09-05 06:26:08.154831	python-httpx/0.28.1	73.151.135.139	\N
-f716839c-35ab-48f0-92cb-6e0db330368a	bf250d15-2188-413b-b954-120a31ca5840	2025-09-05 06:41:54.118954+00	2025-09-05 06:41:54.118954+00	\N	aal1	\N	\N	python-httpx/0.28.1	73.151.135.139	\N
 5daffb69-09f0-4706-a823-e4ee235600b9	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-13 08:33:49.53383+00	2025-09-13 08:33:49.53383+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
+051f8903-3e13-4345-82d1-e123318dbc20	bf250d15-2188-413b-b954-120a31ca5840	2025-09-14 19:33:03.898512+00	2025-09-14 19:33:03.898512+00	\N	aal1	\N	\N	python-httpx/0.28.1	73.151.135.139	\N
 104e3d9e-15e9-4f01-b2a5-1ad9b02a6bd5	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-13 21:26:35.013822+00	2025-09-13 22:26:26.072012+00	\N	aal1	\N	2025-09-13 22:26:26.070547	python-httpx/0.27.0	73.2.33.92	\N
 5cdc7063-dfdf-4f8a-ac00-118100fa5ad1	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-14 06:06:15.644082+00	2025-09-14 06:06:15.644082+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
 8434698b-7bf5-4401-a6db-2968f956f61c	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-14 06:47:42.205393+00	2025-09-14 06:47:42.205393+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
-ac34c1a7-8bff-4836-b952-48b0cdade96e	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-14 07:11:23.278391+00	2025-09-14 07:11:23.278391+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
+3d3d0f8b-eef6-469c-b333-722c32b3aa9a	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-14 08:24:25.748031+00	2025-09-14 09:02:25.255629+00	\N	aal1	\N	2025-09-14 09:02:25.255561	python-httpx/0.27.0	73.2.33.92	\N
 21afe93a-435c-42df-97fa-67ea6be55f69	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-12 06:51:29.104369+00	2025-09-12 07:22:23.295059+00	\N	aal1	\N	2025-09-12 07:22:23.294993	python-httpx/0.27.0	73.2.33.92	\N
 a220fcaf-6c3d-43f1-87b8-6a8197667c54	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-12 08:16:15.015299+00	2025-09-12 08:16:15.015299+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
 c553d554-172d-418c-ace5-acf8953b5867	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-12 08:17:48.442658+00	2025-09-12 08:17:48.442658+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
 964677c1-610a-429a-a6a9-56980139259a	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-12 08:22:28.949786+00	2025-09-12 08:22:28.949786+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
+ac34c1a7-8bff-4836-b952-48b0cdade96e	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-14 07:11:23.278391+00	2025-09-14 08:06:36.673342+00	\N	aal1	\N	2025-09-14 08:06:36.673271	python-httpx/0.27.0	73.2.33.92	\N
 2ee64cf8-a1a6-4053-a778-6ed2cc97aa1f	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-12 08:31:59.411793+00	2025-09-12 09:31:51.574464+00	\N	aal1	\N	2025-09-12 09:31:51.574381	python-httpx/0.27.0	73.2.33.92	\N
 47387d9c-a03b-497c-92ca-c7e33d1436c3	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-12 10:29:04.804953+00	2025-09-12 10:29:04.804953+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
+f716839c-35ab-48f0-92cb-6e0db330368a	bf250d15-2188-413b-b954-120a31ca5840	2025-09-05 06:41:54.118954+00	2025-09-14 18:36:28.288418+00	\N	aal1	\N	2025-09-14 18:36:28.288347	python-httpx/0.28.1	73.151.135.139	\N
 4e2712c9-7762-4cab-87e4-dd95c76b0a9a	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-12 11:21:31.857077+00	2025-09-12 18:01:43.616559+00	\N	aal1	\N	2025-09-12 18:01:43.616488	python-httpx/0.27.0	73.2.33.92	\N
 76140067-cb3f-43a6-9838-1229ba6a69ce	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-12 18:13:14.931471+00	2025-09-12 18:13:14.931471+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
 e2d152b3-e4b6-4cc6-8c35-ade398896c11	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-12 19:01:28.963725+00	2025-09-12 19:01:28.963725+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
+5f3dcba5-bc20-49f8-a141-b381f9feca61	bf250d15-2188-413b-b954-120a31ca5840	2025-09-14 18:36:57.525335+00	2025-09-14 18:43:14.959568+00	\N	aal1	\N	2025-09-14 18:43:14.959496	python-httpx/0.28.1	73.151.135.139	\N
+83a8ae57-6717-4831-857e-6a3ea8165224	bf250d15-2188-413b-b954-120a31ca5840	2025-09-14 19:15:38.840275+00	2025-09-14 19:54:02.377447+00	\N	aal1	\N	2025-09-14 19:54:02.377373	python-httpx/0.28.1	73.151.135.139	\N
+fb430cc6-333d-48ad-8632-86ef5ca510c8	78467702-b492-451b-a9f1-2059dbdd433e	2025-09-15 02:05:12.401053+00	2025-09-15 02:05:12.401053+00	\N	aal1	\N	\N	python-httpx/0.28.1	73.71.71.87	\N
+230eb5c4-a702-4a81-a32f-31bc53ac82a6	bf250d15-2188-413b-b954-120a31ca5840	2025-09-14 19:17:08.165457+00	2025-09-14 19:17:08.165457+00	\N	aal1	\N	\N	python-httpx/0.28.1	73.151.135.139	\N
+7f0c84ac-90b1-4149-ab8f-29fe67198d16	bf250d15-2188-413b-b954-120a31ca5840	2025-09-14 19:54:58.648683+00	2025-09-14 19:54:58.648683+00	\N	aal1	\N	\N	python-httpx/0.28.1	73.151.135.139	\N
+905b2c4b-69fb-4d42-a89c-62e76b6e044b	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-14 22:11:26.695797+00	2025-09-15 04:47:14.970465+00	\N	aal1	\N	2025-09-15 04:47:14.970393	python-httpx/0.27.0	45.80.186.41	\N
+b030bc4b-89dd-429d-8f1a-de455c3015eb	78467702-b492-451b-a9f1-2059dbdd433e	2025-09-15 02:05:02.251007+00	2025-09-15 02:05:02.251007+00	\N	aal1	\N	\N	python-httpx/0.28.1	73.71.71.87	\N
+f17da7ad-4ba1-471d-a3d0-7225537f8aa5	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-14 09:31:44.611384+00	2025-09-14 22:00:06.22878+00	\N	aal1	\N	2025-09-14 22:00:06.228701	python-httpx/0.27.0	73.2.33.92	\N
+981dcbe1-f199-4e65-abf9-c53beaf6637d	3d05eadb-9eb9-4368-8928-87ccd7783f32	2025-09-14 22:08:05.102384+00	2025-09-14 22:08:05.102384+00	\N	aal1	\N	\N	python-httpx/0.27.0	73.2.33.92	\N
+e986b82b-50ec-4d86-839a-c345d3179c07	78467702-b492-451b-a9f1-2059dbdd433e	2025-09-15 02:05:16.207955+00	2025-09-15 03:05:06.756731+00	\N	aal1	\N	2025-09-15 03:05:06.755595	python-httpx/0.28.1	73.71.71.87	\N
 \.
 
 
@@ -4416,8 +4695,9 @@ COPY auth.sso_providers (id, resource_id, created_at, updated_at, disabled) FROM
 
 COPY auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, invited_at, confirmation_token, confirmation_sent_at, recovery_token, recovery_sent_at, email_change_token_new, email_change, email_change_sent_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data, is_super_admin, created_at, updated_at, phone, phone_confirmed_at, phone_change, phone_change_token, phone_change_sent_at, email_change_token_current, email_change_confirm_status, banned_until, reauthentication_token, reauthentication_sent_at, is_sso_user, deleted_at, is_anonymous) FROM stdin;
 00000000-0000-0000-0000-000000000000	c96981e5-0436-43d2-b096-79dc929f0fb5	authenticated	authenticated	phernandez4@csus.edu	$2a$10$gfsZqSgrf4KzdsSnFDBw/ulJlpVhhXSNTACfqx0haQsUb.KRf3h3C	2025-05-03 20:41:08.589336+00	\N		\N		\N			\N	\N	{"provider": "email", "providers": ["email"]}	{"email_verified": true}	\N	2025-05-03 20:41:08.578781+00	2025-05-03 20:41:08.590198+00	\N	\N			\N		0	\N		\N	f	\N	f
-00000000-0000-0000-0000-000000000000	3d05eadb-9eb9-4368-8928-87ccd7783f32	authenticated	authenticated	nguyenphuctran@csus.edu	$2a$10$9kRVXnt.pc/FcdYECD5NMuETcvVxGVwdVOp2vSev12A4vjPOLpbUy	2025-03-22 07:52:49.13657+00	\N		\N		\N			\N	2025-09-14 07:11:23.278294+00	{"role": "super-admin", "provider": "email", "providers": ["email"]}	{"sub": "3d05eadb-9eb9-4368-8928-87ccd7783f32", "email": "nguyenphuctran@csus.edu", "email_verified": true, "phone_verified": false}	\N	2025-03-22 07:51:10.77988+00	2025-09-14 07:11:23.30112+00	\N	\N			\N		0	\N		\N	f	\N	f
-00000000-0000-0000-0000-000000000000	bf250d15-2188-413b-b954-120a31ca5840	authenticated	authenticated	mikefeschenko@yahoo.com	$2a$10$4S/tF085PY7b3EcCYfSVruQl/Gh2MBF8dYGsTt6/YipivEtgC3686	2025-03-26 18:53:16.04825+00	\N		\N		\N			\N	2025-09-05 06:41:54.117611+00	{"provider": "email", "providers": ["email"]}	{"email_verified": true}	\N	2025-03-26 18:53:15.988504+00	2025-09-05 06:41:54.12723+00	\N	\N			\N		0	\N		\N	f	\N	f
+00000000-0000-0000-0000-000000000000	78467702-b492-451b-a9f1-2059dbdd433e	authenticated	authenticated	faithmontemayor@csus.edu	$2a$10$YJ40FSD2Jj8Km.CtlFLmFOGHv8kNcwNrUHmaM/WHFOeCgPWy7niGq	2025-09-15 02:03:38.677234+00	\N		\N		\N			\N	2025-09-15 02:05:16.20786+00	{"provider": "email", "providers": ["email"]}	{"email_verified": true}	\N	2025-09-15 02:03:38.631795+00	2025-09-15 03:05:06.754532+00	\N	\N			\N		0	\N		\N	f	\N	f
+00000000-0000-0000-0000-000000000000	3d05eadb-9eb9-4368-8928-87ccd7783f32	authenticated	authenticated	nguyenphuctran@csus.edu	$2a$10$9kRVXnt.pc/FcdYECD5NMuETcvVxGVwdVOp2vSev12A4vjPOLpbUy	2025-03-22 07:52:49.13657+00	\N		\N		\N			\N	2025-09-14 22:11:26.695719+00	{"role": "super-admin", "provider": "email", "providers": ["email"]}	{"sub": "3d05eadb-9eb9-4368-8928-87ccd7783f32", "email": "nguyenphuctran@csus.edu", "email_verified": true, "phone_verified": false}	\N	2025-03-22 07:51:10.77988+00	2025-09-15 04:47:14.936504+00	\N	\N			\N		0	\N		\N	f	\N	f
+00000000-0000-0000-0000-000000000000	bf250d15-2188-413b-b954-120a31ca5840	authenticated	authenticated	mikefeschenko@yahoo.com	$2a$10$4S/tF085PY7b3EcCYfSVruQl/Gh2MBF8dYGsTt6/YipivEtgC3686	2025-03-26 18:53:16.04825+00	\N		\N		\N			\N	2025-09-14 19:54:58.647435+00	{"provider": "email", "providers": ["email"]}	{"email_verified": true}	\N	2025-03-26 18:53:15.988504+00	2025-09-14 19:54:58.676992+00	\N	\N			\N		0	\N		\N	f	\N	f
 \.
 
 
@@ -4457,6 +4737,8 @@ eb7f8b72-7dbb-46c7-9d0a-3dd1ba04a11c	64f695c4-9909-40ba-8374-e74f6b3a5df0	d86f06
 13f8a37d-b594-4a04-9344-9cd34ad4fa84	64f695c4-9909-40ba-8374-e74f6b3a5df0	d86f06ec-fd0a-42a7-872c-e8224a4b18f1	who cares about me?	no-one	2025-09-05 05:26:59.477195+00	2025-09-05 05:26:59.477195
 a3e75758-985d-4086-a167-c792ef8e552c	64f695c4-9909-40ba-8374-e74f6b3a5df0	d86f06ec-fd0a-42a7-872c-e8224a4b18f1	will anyone see this?	not likely	2025-09-05 05:27:16.037868+00	2025-09-05 05:27:16.037868
 74544179-c34f-4ffc-ae2e-8cae534af051	0eab151a-e6c8-486b-940e-554736135cb5	d86f06ec-fd0a-42a7-872c-e8224a4b18f1	hmmm	ok then	2025-09-05 05:27:33.658822+00	2025-09-05 05:27:33.658822
+a251c004-4d30-422c-9a7d-5a43d0b31a3f	0cabaa76-b0cb-4785-ae2a-9b5e96739ae3	d86f06ec-fd0a-42a7-872c-e8224a4b18f1	hello	test uh ok	2025-09-14 19:34:10.421871+00	2025-09-14 19:34:10.421871
+5d6b6500-1cd4-42b6-bf3c-764cc35fdb39	6f006438-8301-4364-bbf9-88f07cda6530	d86f06ec-fd0a-42a7-872c-e8224a4b18f1	who cares about me?	sadsad	2025-09-14 19:57:58.431873+00	2025-09-14 19:57:58.431873
 \.
 
 
@@ -4537,6 +4819,15 @@ e2907e9b-b1d9-4871-8223-81c1994a16ad	Benetta	Ryan	Cutmore	1973-05-08	+1067348241
 2cf7c036-e949-4576-9a3a-7ddbd8210b2a	Jard	Mackenzie	Beadham	1977-08-26	+17893207786	32 Hoard Parkway	2025-03-19 09:03:22.025514+00	2025-03-19 09:03:22.025514+00
 ff5ca674-e366-42e1-b705-7b416beea42f	Harp	Alex	Espinay	1987-04-11	+13234183362	127 Shasta Way	2025-03-19 09:03:22.025514+00	2025-03-19 09:03:22.025514+00
 b3d8e5ad-e62c-4549-a77c-07b48230d1d8	Tore	Brooke	Studdeard	2020-03-16	+15142006007	927 Havey Center	2025-03-19 09:03:22.025514+00	2025-03-19 09:03:22.025514+00
+\.
+
+
+--
+-- Data for Name: streaming_sessions; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.streaming_sessions (id, patient_id, room_id, is_live, status, started_at, ended_at, device_name, created_at, updated_at) FROM stdin;
+07c66aee-6fd3-4c66-8909-209955cc8839	6f006438-8301-4364-bbf9-88f07cda6530	room_001	f	error	2025-09-14 09:12:53.302025+00	2025-09-14 09:12:53.302025+00	RPi Camera 1	2025-09-14 09:12:53.302025+00	2025-09-14 09:12:53.302025+00
 \.
 
 
@@ -4745,7 +5036,7 @@ COPY vault.secrets (id, name, description, secret, key_id, nonce, created_at, up
 -- Name: refresh_tokens_id_seq; Type: SEQUENCE SET; Schema: auth; Owner: supabase_auth_admin
 --
 
-SELECT pg_catalog.setval('auth.refresh_tokens_id_seq', 515, true);
+SELECT pg_catalog.setval('auth.refresh_tokens_id_seq', 573, true);
 
 
 --
@@ -4992,6 +5283,22 @@ ALTER TABLE ONLY public.patient_event
 
 ALTER TABLE ONLY public.patients
     ADD CONSTRAINT patients_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: streaming_sessions streaming_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.streaming_sessions
+    ADD CONSTRAINT streaming_sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: streaming_sessions streaming_sessions_room_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.streaming_sessions
+    ADD CONSTRAINT streaming_sessions_room_id_key UNIQUE (room_id);
 
 
 --
@@ -5392,6 +5699,34 @@ CREATE INDEX users_is_anonymous_idx ON auth.users USING btree (is_anonymous);
 
 
 --
+-- Name: idx_streaming_sessions_live; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_streaming_sessions_live ON public.streaming_sessions USING btree (is_live) WHERE (is_live = true);
+
+
+--
+-- Name: idx_streaming_sessions_patient; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_streaming_sessions_patient ON public.streaming_sessions USING btree (patient_id);
+
+
+--
+-- Name: idx_streaming_sessions_room; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_streaming_sessions_room ON public.streaming_sessions USING btree (room_id);
+
+
+--
+-- Name: idx_streaming_sessions_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_streaming_sessions_status ON public.streaming_sessions USING btree (status);
+
+
+--
 -- Name: ix_realtime_subscription_entity; Type: INDEX; Schema: realtime; Owner: supabase_admin
 --
 
@@ -5466,6 +5801,13 @@ CREATE INDEX name_prefix_search ON storage.objects USING btree (name text_patter
 --
 
 CREATE UNIQUE INDEX objects_bucket_id_level_idx ON storage.objects USING btree (bucket_id, level, name COLLATE "C");
+
+
+--
+-- Name: streaming_sessions streaming_sessions_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER streaming_sessions_updated_at BEFORE UPDATE ON public.streaming_sessions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 
 --
@@ -5658,6 +6000,14 @@ ALTER TABLE ONLY public.note
 
 ALTER TABLE ONLY public.patient_event
     ADD CONSTRAINT patient_event_video_id_fkey FOREIGN KEY (video_id) REFERENCES public.video(id) ON DELETE CASCADE;
+
+
+--
+-- Name: streaming_sessions streaming_sessions_patient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.streaming_sessions
+    ADD CONSTRAINT streaming_sessions_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id) ON DELETE CASCADE;
 
 
 --
@@ -6485,6 +6835,15 @@ GRANT ALL ON FUNCTION pgsodium.crypto_aead_det_keygen() TO service_role;
 
 
 --
+-- Name: FUNCTION update_updated_at(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.update_updated_at() TO anon;
+GRANT ALL ON FUNCTION public.update_updated_at() TO authenticated;
+GRANT ALL ON FUNCTION public.update_updated_at() TO service_role;
+
+
+--
 -- Name: FUNCTION apply_rls(wal jsonb, max_record_bytes integer); Type: ACL; Schema: realtime; Owner: supabase_admin
 --
 
@@ -6934,6 +7293,15 @@ GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE public.pa
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE public.patients TO anon;
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE public.patients TO authenticated;
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE public.patients TO service_role;
+
+
+--
+-- Name: TABLE streaming_sessions; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE public.streaming_sessions TO anon;
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE public.streaming_sessions TO authenticated;
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE public.streaming_sessions TO service_role;
 
 
 --

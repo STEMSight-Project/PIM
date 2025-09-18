@@ -412,7 +412,7 @@ const SessionReview: React.FC = () => {
                       {Math.round(
                         (new Date(session.endTime).getTime() -
                           new Date(session.startTime).getTime()) /
-                          60000
+                        60000
                       )}
                       m
                     </span>
@@ -532,6 +532,7 @@ const SessionReview: React.FC = () => {
                     <span>
                       <strong>Timestamp:</strong> {Math.floor(currentTimestamp)}s
                     </span>
+
                   </div>
                   <div className="flex space-x-2">
                     <button className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 transition-colors">
@@ -576,6 +577,7 @@ const SessionReview: React.FC = () => {
           videoId={currentVideo?.id || ""}
           patientId={selectedSession?.patient.id || ""}
         />
+
 
         {/* Optional: Video Selection grid (still full width) */}
         {selectedSession && selectedSession.videos.length > 1 && (

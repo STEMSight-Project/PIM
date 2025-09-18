@@ -9,6 +9,15 @@ export type {
   User,
 } from "./authService";
 
+export { realtimeService } from "./realtimeService";
+export type {
+  RealtimeConnection,
+  RealtimeEvent,
+  RealtimeEventHandler,
+  RealtimeOptions,
+  RealtimeService,
+} from "./realtimeService";
+
 export { patientService } from "./patientService";
 export type {
   Patient,
@@ -41,16 +50,22 @@ export type {
 export { noteService } from "./noteService";
 export type { Note, NoteCreateRequest, NoteUpdateRequest } from "./noteService";
 
+// Live streaming services for real-time video sessions
 export { streamingService } from "./streamingService";
 export type {
   RoomInfo,
   SDPData,
+  SessionWithRooms,
   StreamCreateRequest,
+  StreamingRoom,
   StreamResponse,
   StreamSession,
   StreamStats,
   StreamUpdateRequest,
 } from "./streamingService";
+
+// Historical session review services for post-session analysis
+export { fetchStitchedSessions } from "./sessionService";
 
 // Re-export api and types for convenience
 export type { ApiResponse } from "@/types";

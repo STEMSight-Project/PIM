@@ -1,222 +1,136 @@
+"""
+Streaming API router - refactored to use service layer with dependency injection.
+"""
+
 import asyncio
+import json
 from typing import Optional
-
-from aiortc import RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.media import MediaRelay
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.responses import StreamingResponse
 from core.common import logger, supabase
-from pydantic import BaseModel
 from security.jwt_verify import current_user
-
-
-class Room:
-    def __init__(self, room_id: str, session_id: Optional[str] = None):
-        self.room_id = room_id
-        self.session_id = session_id  # Link to database session
-        self.streamer: Optional[RTCPeerConnection] = None
-        self.viewers: set[RTCPeerConnection] = set()
-        self.is_active = True
-        self.reconnection_attempts = 0
-        self.max_reconnection_attempts = 3
-
-    async def close(self):
-        """Close all connections and mark room as inactive"""
-        coros = []
-        if self.streamer:
-            coros.append(self.streamer.close())
-        for viewer in self.viewers:
-            coros.append(viewer.close())
-        await asyncio.gather(*coros)
-        self.is_active = False
-
-        # Update session status in database
-        if self.session_id:
-            try:
-                await self._update_session_status("disconnected")
-            except Exception as e:
-                logger.error("Failed to update session status on room close: %s", e)
-
-    async def handle_disconnection(self):
-        """Handle room disconnection with potential for reconnection"""
-        self.is_active = False
-        self.reconnection_attempts += 1
-
-        logger.info(
-            "Room %s disconnected. Attempt %d/%d",
-            self.room_id,
-            self.reconnection_attempts,
-            self.max_reconnection_attempts,
-        )
-
-        # Update session status
-        if self.session_id:
-            try:
-                status = (
-                    "error"
-                    if self.reconnection_attempts >= self.max_reconnection_attempts
-                    else "disconnected"
-                )
-                await self._update_session_status(status)
-            except Exception as e:
-                logger.error("Failed to update session status on disconnection: %s", e)
-
-        # If max attempts reached, close permanently
-        if self.reconnection_attempts >= self.max_reconnection_attempts:
-            logger.warning(
-                "Room %s reached max reconnection attempts. Closing permanently.",
-                self.room_id,
-            )
-            await self.close()
-            return False
-
-        return True  # Can attempt reconnection
-
-    async def reactivate(self):
-        """Reactivate room for reconnection"""
-        self.is_active = True
-        logger.info("Room %s reactivated for reconnection", self.room_id)
-
-        # Update session status back to active
-        if self.session_id:
-            try:
-                await self._update_session_status("active")
-            except Exception as e:
-                logger.error("Failed to update session status on reactivation: %s", e)
-
-    async def _update_session_status(self, status: str):
-        """Update the session status in database"""
-        update_data = {"status": status}
-        if status in ["ended", "error"]:
-            update_data["is_live"] = False
-            update_data["ended_at"] = "now()"
-
-        supabase.table("streaming_sessions").update(update_data).eq(
-            "id", self.session_id
-        ).execute()
-
-
-class SDPBody(BaseModel):
-    sdp: str
-    type: str
-
-
-class StreamingSessionCreate(BaseModel):
-    patient_id: str
-    room_id: str
-    device_name: Optional[str] = None
-
-
-class StreamingSessionUpdate(BaseModel):
-    is_live: Optional[bool] = None
-    status: Optional[str] = None
-    device_name: Optional[str] = None
-
-
-class StreamingSessionResponse(BaseModel):
-    id: str
-    patient_id: str
-    room_id: str
-    is_live: bool
-    status: str
-    started_at: str
-    ended_at: Optional[str] = None
-    device_name: Optional[str] = None
-    created_at: str
-    updated_at: str
-
+from services.streaming import (
+    SDPBody,
+    StreamingSessionData,
+    StreamingSessionStatusUpdate,
+)
+from services.streaming.dependencies import (
+    get_database_service,
+    get_room_manager,
+    get_webrtc_service,
+)
 
 router = APIRouter()
 
-rooms: dict[str, Room] = {}
-relay = MediaRelay()
-
-
-async def cleanup_inactive_rooms():
-    """Clean up rooms that have been inactive for too long"""
-    inactive_rooms = []
-    for room_id, room in rooms.items():
-        if (
-            not room.is_active
-            and room.reconnection_attempts >= room.max_reconnection_attempts
-        ):
-            inactive_rooms.append(room_id)
-
-    for room_id in inactive_rooms:
-        room = rooms.pop(room_id, None)
-        if room:
-            await room.close()
-            logger.info("Cleaned up inactive room %s", room_id)
-
 
 @router.get("/rooms/status")
-async def get_rooms_status():
-    """Get status of all rooms for debugging"""
-    room_status = {}
-    for room_id, room in rooms.items():
-        room_status[room_id] = {
-            "is_active": room.is_active,
-            "has_streamer": room.streamer is not None,
-            "viewer_count": len(room.viewers),
-            "reconnection_attempts": room.reconnection_attempts,
-            "session_id": room.session_id,
-        }
-    return {"rooms": room_status}
+async def get_rooms_status(
+    room_manager=Depends(get_room_manager), webrtc_service=Depends(get_webrtc_service)
+):
+    """Get status of all active rooms."""
+    try:
+        rooms = room_manager.get_all_rooms()
+        rooms_status = []
+
+        for room_id, room in rooms.items():
+            stats = webrtc_service.get_connection_stats(room_id)
+            rooms_status.append(
+                {
+                    "room_id": room_id,
+                    "session_id": room.session_id,
+                    "is_active": room.is_active,
+                    "connection_count": len(room.pcs),
+                    "stats": stats,
+                }
+            )
+
+        return {"data": rooms_status, "error": None}
+
+    except Exception as e:
+        logger.error("Error getting rooms status: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/create_room/{patient_id}")
-async def create_room(patient_id: str, device_name: Optional[str] = None):
-    """Create a room and automatically create a streaming session"""
-    room_id = patient_id
+async def create_room(
+    patient_id: str,
+    device_name: Optional[str] = None,
+    db_service=Depends(get_database_service),
+    room_manager=Depends(get_room_manager),
+):
+    """Create a room and automatically create/get streaming session."""
+    try:
+        room_id = f"{patient_id}-{device_name or 'default'}"
 
-    # Check if room exists and handle reconnection
-    if room_id in rooms:
-        existing_room = rooms[room_id]
-        if not existing_room.is_active:
-            # Reactivate existing room for reconnection
-            await existing_room.reactivate()
-            logger.info("Reactivated existing room %s for reconnection", room_id)
+        # Check if room exists in memory (room manager)
+        existing_room = room_manager.get_room(room_id)
+        if existing_room:
+            if not existing_room.is_active:
+                # Reactivate existing room for reconnection
+                await existing_room.reactivate()
+                logger.info("Reactivated existing room %s for reconnection", room_id)
+                return {
+                    "room_id": room_id,
+                    "session_id": existing_room.session_id,
+                    "room_db_id": existing_room.room_db_id,
+                    "reconnected": True,
+                }
+            else:
+                # Room is still active, return existing info
+                return {
+                    "room_id": room_id,
+                    "session_id": existing_room.session_id,
+                    "room_db_id": existing_room.room_db_id,
+                    "already_exists": True,
+                }
+
+        # Check if room exists in database (after server restart scenario)
+        existing_room_data = await db_service.get_room_by_id(room_id)
+        if existing_room_data:
+            # Room exists in database but not in memory - recreate room manager entry
+            session_id = existing_room_data["session_id"]
+            room_db_id = existing_room_data["id"]
+
+            # Recreate room object in manager
+            room_manager.create_room(room_id, session_id, room_db_id)
+
+            logger.info("Reconnected to existing room %s from database", room_id)
             return {
                 "room_id": room_id,
-                "session_id": existing_room.session_id,
+                "session_id": session_id,
+                "room_db_id": room_db_id,
                 "reconnected": True,
             }
-        else:
-            # Room is still active, return existing info
-            return {
-                "room_id": room_id,
-                "session_id": existing_room.session_id,
-                "already_exists": True,
-            }
 
-    try:
-        # Create streaming session in database
-        session_result = (
-            supabase.table("streaming_sessions")
-            .insert(
-                {
-                    "patient_id": patient_id,
-                    "room_id": room_id,
-                    "device_name": device_name,
-                    "is_live": True,
-                    "status": "active",
-                }
-            )
-            .execute()
+        # Get or create streaming session using database service
+        session_data = await db_service.get_or_create_session(patient_id)
+        session_id = session_data["id"]
+
+        # Create room entry in database
+        room_data = await db_service.create_room(
+            session_id, patient_id, room_id, device_name or "Default Camera"
+        )
+        room_db_id = room_data["id"]
+
+        # Create room object with service manager
+        room_manager.create_room(room_id, session_id, room_db_id)
+
+        # Start cleanup task if not already running
+        await room_manager.start_cleanup_task()
+
+        logger.info(
+            "Created room %s with session %s and room DB ID %s",
+            room_id,
+            session_id,
+            room_db_id,
         )
 
-        if not session_result.data:
-            raise HTTPException(
-                status_code=500, detail="Failed to create streaming session"
-            )
-
-        session_id = session_result.data[0]["id"]
-
-        # Create room with session link
-        rooms[room_id] = Room(room_id, session_id)
-
-        logger.info("Created room %s with session %s", room_id, session_id)
-
-        return {"room_id": room_id, "session_id": session_id, "created": True}
+        return {
+            "room_id": room_id,
+            "session_id": session_id,
+            "room_db_id": room_db_id,
+            "created": True,
+        }
 
     except Exception as e:
         logger.error("Error creating room and session: %s", e)
@@ -225,137 +139,86 @@ async def create_room(patient_id: str, device_name: Optional[str] = None):
         ) from e
 
 
-@router.post("/rooms/{patient_id}/streamer")
-async def publish_streamer(patient_id: str, body: SDPBody):
-    logger.info("Streamer connection request for room %s", patient_id)
+@router.post("/streamer/{patient_id}")
+async def publish_streamer(
+    patient_id: str,
+    body: SDPBody,
+    webrtc_service=Depends(get_webrtc_service),
+    room_manager=Depends(get_room_manager),
+):
+    """Establish WebRTC connection for streamer (publisher)."""
+    try:
+        # Find the actual room ID for this patient (may include device name)
+        room_id = None
+        all_rooms = room_manager.get_all_rooms()
+        for rid, _ in all_rooms.items():
+            if rid.startswith(patient_id):
+                room_id = rid
+                break
 
-    if patient_id not in rooms:
-        raise HTTPException(
-            status_code=404, detail="Room not found. Create room first."
-        )
+        if not room_id:
+            raise ValueError(f"No active room found for patient {patient_id}")
 
-    room = rooms[patient_id]
+        # Use WebRTC service to handle the connection
+        response = await webrtc_service.create_streamer_connection(room_id, body)
 
-    # If room exists but is inactive, try to reactivate it
-    if not room.is_active:
-        await room.reactivate()
+        return response
 
-    # If there's already a streamer and it's still connected, reject
-    if room.streamer and room.streamer.connectionState not in [
-        "closed",
-        "failed",
-        "disconnected",
-    ]:
-        raise HTTPException(
-            status_code=409, detail="Streamer already exists and is active"
-        )
-
-    # Clean up old streamer if exists
-    if room.streamer:
-        await room.streamer.close()
-        room.streamer = None
-
-    pc = RTCPeerConnection()
-    room.streamer = pc
-
-    @pc.on("iceconnectionstatechange")
-    async def on_state_change() -> None:
-        logger.info("Publisher ICE state %s", pc.iceConnectionState)
-        if pc.iceConnectionState in ("failed", "closed", "disconnected"):
-            # Handle disconnection with potential for reconnection
-            can_reconnect = await room.handle_disconnection()
-
-            await pc.close()
-            room.streamer = None
-
-            if not can_reconnect:
-                # Remove room from active rooms if max attempts reached
-                if room.room_id in rooms:
-                    del rooms[room.room_id]
-                logger.info("Removed room %s from active rooms", room.room_id)
-        elif pc.iceConnectionState == "connected":
-            # Reset reconnection attempts on successful connection
-            room.reconnection_attempts = 0
-            logger.info("Publisher successfully connected, reset reconnection attempts")
-
-    @pc.on("icecandidate")
-    async def on_icecandidate(candidate):
-        if candidate:
-            await pc.addIceCandidate(candidate)
-
-    @pc.on("track")
-    def on_track(track):
-        logger.info("Track received: %s", track.kind)
-
-    await pc.setRemoteDescription(RTCSessionDescription(**body.model_dump()))
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
-
-    logger.info("Streamer successfully connected to room %s", patient_id)
-    return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+    except ValueError as e:
+        logger.error("Room not found for streamer %s: %s", patient_id, e)
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error setting up streamer for %s: %s", patient_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.post("/rooms/{patient_id}/viewer", dependencies=[Depends(current_user)])
-async def publish_viewer(patient_id: str, body: SDPBody):
-    if patient_id not in rooms:
-        return HTTPException(404, "Room not found")
-    room = rooms[patient_id]
-    if not room.streamer:
-        return HTTPException(402, "Streamer not found")
+@router.post("/viewer/{patient_id}")
+async def publish_viewer(
+    patient_id: str,
+    body: SDPBody,
+    webrtc_service=Depends(get_webrtc_service),
+    room_manager=Depends(get_room_manager),
+):
+    """Establish WebRTC connection for viewer (subscriber)."""
+    try:
+        # Find the actual room ID for this patient (may include device name)
+        room_id = None
+        all_rooms = room_manager.get_all_rooms()
+        for rid, _ in all_rooms.items():
+            if rid.startswith(patient_id):
+                room_id = rid
+                break
 
-    pc = RTCPeerConnection()
-    room.viewers.add(pc)
+        if not room_id:
+            raise ValueError(f"No active room found for patient {patient_id}")
 
-    @pc.on("iceconnectionstatechange")
-    async def on_state_change() -> None:
-        logger.info("Viewer ICE state %s", pc.iceConnectionState)
-        if pc.iceConnectionState in ("failed", "closed", "disconnected"):
-            await pc.close()
-            room.viewers.discard(pc)
-            logger.info("Viewer disconnected from room %s", room.room_id)
-        elif pc.iceConnectionState == "connected":
-            logger.info("Viewer successfully connected to room %s", room.room_id)
+        # Use WebRTC service to handle the connection
+        response = await webrtc_service.create_viewer_connection(room_id, body)
 
-    streamer = room.streamer
+        return response
 
-    for receiver in streamer.getReceivers():
-        if receiver.track.kind == "video" or receiver.track.kind == "audio":
-            pc.addTrack(relay.subscribe(receiver.track))
-
-    await pc.setRemoteDescription(RTCSessionDescription(**body.model_dump()))
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
-
-    return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
-
-
-# Streaming Sessions CRUD Operations
+    except ValueError as e:
+        logger.error("Room not found for viewer %s: %s", patient_id, e)
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error setting up viewer for %s: %s", patient_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/sessions", dependencies=[Depends(current_user)])
-async def create_streaming_session(session_data: StreamingSessionCreate):
-    """Create a new streaming session"""
+async def create_streaming_session(
+    session_data: StreamingSessionData, db_service=Depends(get_database_service)
+):
+    """Create a new streaming session (1:1 with patient)."""
     try:
-        result = (
-            supabase.table("streaming_sessions")
-            .insert(
-                {
-                    "patient_id": session_data.patient_id,
-                    "room_id": session_data.room_id,
-                    "device_name": session_data.device_name,
-                    "is_live": True,
-                    "status": "active",
-                }
-            )
-            .execute()
-        )
+        # Use database service to create session
+        session = await db_service.get_or_create_session(session_data.patient_id)
 
-        if result.data:
-            return {"data": result.data[0], "error": None}
-        else:
-            raise HTTPException(
-                status_code=400, detail="Failed to create streaming session"
-            )
+        # Check if this was an existing session
+        existing = "existing" in session
+
+        return {"data": session, "error": None, "existing": existing}
+
     except Exception as e:
         logger.error("Error creating streaming session: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -363,119 +226,308 @@ async def create_streaming_session(session_data: StreamingSessionCreate):
 
 @router.get("/sessions", dependencies=[Depends(current_user)])
 async def get_streaming_sessions(
-    patient_id: Optional[str] = None, is_live: Optional[bool] = None
+    patient_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    db_service=Depends(get_database_service),
 ):
-    """Get streaming sessions with optional filters"""
+    """Get streaming sessions with optional filters."""
     try:
-        query = supabase.table("streaming_sessions").select("*")
+        sessions = await db_service.get_all_sessions(patient_id, status, limit)
+        return sessions
 
-        if patient_id:
-            query = query.eq("patient_id", patient_id)
-        if is_live is not None:
-            query = query.eq("is_live", is_live)
-
-        result = query.order("started_at", desc=True).execute()
-
-        return {"data": result.data, "error": None}
     except Exception as e:
         logger.error("Error fetching streaming sessions: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/sessions/{session_id}", dependencies=[Depends(current_user)])
-async def get_streaming_session(session_id: str):
-    """Get a specific streaming session by ID"""
+async def get_streaming_session(
+    session_id: str, db_service=Depends(get_database_service)
+):
+    """Get a specific streaming session."""
     try:
-        result = (
-            supabase.table("streaming_sessions")
-            .select("*")
-            .eq("id", session_id)
-            .execute()
-        )
+        session = await db_service.get_session_by_id(session_id)
 
-        if result.data:
-            return {"data": result.data[0], "error": None}
-        else:
-            raise HTTPException(status_code=404, detail="Streaming session not found")
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        return {"data": session, "error": None}
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Error fetching streaming session: %s", e)
+        logger.error("Error fetching streaming session %s: %s", session_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.put("/sessions/{session_id}", dependencies=[Depends(current_user)])
 async def update_streaming_session(
-    session_id: str, session_data: StreamingSessionUpdate
+    session_id: str,
+    session_data: StreamingSessionStatusUpdate,
+    db_service=Depends(get_database_service),
 ):
-    """Update a streaming session"""
+    """Update a streaming session status."""
     try:
-        update_data = {}
-        if session_data.is_live is not None:
-            update_data["is_live"] = session_data.is_live
-        if session_data.status is not None:
-            update_data["status"] = session_data.status
-        if session_data.device_name is not None:
-            update_data["device_name"] = session_data.device_name
+        if not session_data.status:
+            raise HTTPException(status_code=400, detail="Status is required")
 
-        # Auto-set ended_at if session is ending
-        if session_data.is_live is False or session_data.status in [
-            "ended",
-            "error",
-            "disconnected",
-        ]:
-            update_data["ended_at"] = "now()"
-
-        result = (
-            supabase.table("streaming_sessions")
-            .update(update_data)
-            .eq("id", session_id)
-            .execute()
+        session = await db_service.update_session_status(
+            session_id, session_data.status
         )
+        return {"data": session, "error": None}
 
-        if result.data:
-            return {"data": result.data[0], "error": None}
-        else:
-            raise HTTPException(status_code=404, detail="Streaming session not found")
     except Exception as e:
         logger.error("Error updating streaming session: %s", e)
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=str(e)) from e
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/sessions/{session_id}/end", dependencies=[Depends(current_user)])
-async def end_streaming_session(session_id: str):
-    """End a streaming session"""
+async def end_streaming_session(
+    session_id: str, db_service=Depends(get_database_service)
+):
+    """End a streaming session and all its rooms."""
     try:
-        result = (
-            supabase.table("streaming_sessions")
-            .update({"is_live": False, "status": "ended", "ended_at": "now()"})
-            .eq("id", session_id)
-            .execute()
-        )
+        session = await db_service.end_session(session_id)
+        return {"data": session, "error": None}
 
-        if result.data:
-            return {"data": result.data[0], "error": None}
-        else:
-            raise HTTPException(status_code=404, detail="Streaming session not found")
     except Exception as e:
-        logger.error("Error ending streaming session: %s", e)
+        logger.error("Error ending streaming session %s: %s", session_id, e)
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=str(e)) from e
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/patients/status", dependencies=[Depends(current_user)])
+async def get_patients_streaming_status(db_service=Depends(get_database_service)):
+    """Get streaming status for all patients."""
+    try:
+        patients_status = await db_service.get_patients_streaming_status()
+        return {"data": patients_status, "error": None}
+
+    except Exception as e:
+        logger.error("Error fetching patients streaming status: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# Supabase Real-time SSE Endpoints
+@router.get("/realtime/sessions")
+async def realtime_sessions(request: Request, patient_id: Optional[str] = None):
+    """Stream real-time updates for streaming sessions using Supabase channels."""
+
+    async def event_generator():
+        # Create channel for streaming sessions
+        channel_name = f"streaming_sessions_{patient_id or 'all'}"
+        channel = supabase.channel(channel_name)
+
+        # Create async queue for events
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        def handler(payload):
+            """Handle Supabase real-time events."""
+            try:
+                msg = f"data: {json.dumps(payload)}\n\n"
+                queue.put_nowait(msg)
+            except Exception as e:
+                logger.error("Error handling real-time event: %s", e)
+
+        # Configure table subscription
+        subscription_config = {
+            "event": "*",  # Listen to all events (INSERT, UPDATE, DELETE)
+            "schema": "public",
+            "table": "streaming_sessions",
+        }
+
+        # Add patient filter if specified
+        if patient_id:
+            subscription_config["filter"] = f"patient_id=eq.{patient_id}"
+
+        # Subscribe to postgres changes
+        channel.on("postgres_changes", subscription_config, handler).subscribe()
+
+        try:
+            # Send initial heartbeat
+            yield f"data: {json.dumps({'type': 'connected', 'channel': channel_name})}\n\n"
+
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    # Wait for event with timeout for heartbeat
+                    msg = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield msg
+                except asyncio.TimeoutError:
+                    # Send heartbeat
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': asyncio.get_event_loop().time()})}\n\n"
+
+        except Exception as e:
+            logger.error("Error in sessions stream: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up channel
+            try:
+                supabase.remove_channel(channel)
+                logger.info("Removed Supabase channel: %s", channel_name)
+            except Exception as cleanup_error:
+                logger.error("Error removing channel: %s", cleanup_error)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/realtime/rooms")
+async def realtime_rooms(request: Request):
+    """Stream real-time updates for streaming rooms using Supabase channels."""
+
+    async def event_generator():
+        # Create channel for streaming rooms
+        channel_name = "streaming_rooms_all"
+        channel = supabase.channel(channel_name)
+
+        # Create async queue for events
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        def handler(payload):
+            """Handle Supabase real-time events."""
+            try:
+                msg = f"data: {json.dumps(payload)}\n\n"
+                queue.put_nowait(msg)
+            except Exception as e:
+                logger.error("Error handling real-time room event: %s", e)
+
+        # Subscribe to streaming_rooms table changes
+        channel.on(
+            "postgres_changes",
+            {
+                "event": "*",  # Listen to all events
+                "schema": "public",
+                "table": "streaming_rooms",
+            },
+            handler,
+        ).subscribe()
+
+        try:
+            # Send initial heartbeat
+            yield f"data: {json.dumps({'type': 'connected', 'channel': channel_name})}\n\n"
+
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    # Wait for event with timeout for heartbeat
+                    msg = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield msg
+                except asyncio.TimeoutError:
+                    # Send heartbeat
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': asyncio.get_event_loop().time()})}\n\n"
+
+        except Exception as e:
+            logger.error("Error in rooms stream: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up channel
+            try:
+                supabase.remove_channel(channel)
+                logger.info("Removed Supabase channel: %s", channel_name)
+            except Exception as cleanup_error:
+                logger.error("Error removing channel: %s", cleanup_error)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get(
-    "/sessions/patient/{patient_id}/active", dependencies=[Depends(current_user)]
+    "/realtime/patient/{patient_id}/status", dependencies=[Depends(current_user)]
 )
-async def get_active_sessions_for_patient(patient_id: str):
-    """Get active streaming sessions for a specific patient"""
-    try:
-        result = (
-            supabase.table("streaming_sessions")
-            .select("*")
-            .eq("patient_id", patient_id)
-            .eq("is_live", True)
-            .eq("status", "active")
-            .execute()
+async def realtime_patient_status(request: Request, patient_id: str):
+    """Stream real-time status updates for a specific patient."""
+
+    async def event_generator():
+        # Create channel for patient-specific updates
+        channel_name = f"patient_status_{patient_id}"
+        channel = supabase.channel(channel_name)
+
+        # Create async queue for events
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        def handler(payload):
+            """Handle Supabase real-time events."""
+            try:
+                msg = f"data: {json.dumps(payload)}\n\n"
+                queue.put_nowait(msg)
+            except Exception as e:
+                logger.error("Error handling patient status event: %s", e)
+
+        # Subscribe to both streaming_sessions and streaming_rooms for this patient
+        # Sessions subscription
+        channel.on(
+            "postgres_changes",
+            {
+                "event": "*",
+                "schema": "public",
+                "table": "streaming_sessions",
+                "filter": f"patient_id=eq.{patient_id}",
+            },
+            handler,
         )
 
-        return {"data": result.data, "error": None}
-    except Exception as e:
-        logger.error("Error fetching active sessions for patient: %s", e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        # Subscribe to channel
+        channel.subscribe()
+
+        try:
+            # Send initial heartbeat
+            yield f"data: {json.dumps({'type': 'connected', 'channel': channel_name, 'patient_id': patient_id})}\n\n"
+
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    # Wait for event with timeout for heartbeat
+                    msg = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield msg
+                except asyncio.TimeoutError:
+                    # Send heartbeat
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'patient_id': patient_id, 'timestamp': asyncio.get_event_loop().time()})}\n\n"
+
+        except Exception as e:
+            logger.error("Error in patient status stream: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Clean up channel
+            try:
+                supabase.remove_channel(channel)
+                logger.info("Removed Supabase channel: %s", channel_name)
+            except Exception as cleanup_error:
+                logger.error("Error removing channel: %s", cleanup_error)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
