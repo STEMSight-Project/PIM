@@ -8,197 +8,100 @@ interface VideoPlayerProps {
   onTimeUpdate?: (time: number) => void;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({
+const DEFAULT_TEST_URL =
+  process.env.NEXT_PUBLIC_TEST_VIDEO_URL ?? "/test-video.mp4";
+
+export default function VideoPlayer({
   videoUrl,
   currentTimestamp,
   onTimeUpdate,
-}) => {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+}: VideoPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const src = videoUrl ?? DEFAULT_TEST_URL;
 
-  // store the actual src used by the <video> element (may be same as videoUrl or an object URL)
-  const [internalSrc, setInternalSrc] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-
-  // keep track of any created object URL so we can revoke it later
-  const objectUrlRef = useRef<string | null>(null);
-
-  // Keep a pending seek time if metadata hasn't loaded yet
-  const pendingSeekRef = useRef<number | null>(null);
-
-  // Resolve the incoming videoUrl to an actual usable src:
-  // - If it's a full URL already (http(s)/blob/data) use it directly.
-  // - Otherwise try to fetch it and create an object URL (useful when backend returns a path).
+  // Seek robustly (works even if metadata isn't ready yet)
   useEffect(() => {
-    let aborted = false;
-    const controller = new AbortController();
-    const signal = controller.signal;
+    const v = videoRef.current;
+    if (!v) return;
 
-    async function resolveSrc() {
-      // cleanup previous object URL
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-
-      if (!videoUrl) {
-        setInternalSrc(null);
-        setLoading(false);
-        return;
-      }
-
-      const lower = videoUrl.toLowerCase();
-      if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("blob:") || lower.startsWith("data:")) {
-        setInternalSrc(videoUrl);
-        setLoading(false);
-        return;
-      }
-
-      // attempt to fetch (this may fail if CORS or auth is required)
-      setLoading(true);
+    const seek = () => {
       try {
-        const res = await fetch(videoUrl, { signal, cache: "no-cache", mode: "cors" });
-        if (!res.ok) {
-          console.warn("VideoPlayer: failed to fetch video at", videoUrl, "status:", res.status);
-          setLoading(false);
-          setInternalSrc(null);
-          return;
-        }
-        const blob = await res.blob();
-        if (aborted) {
-          // if aborted after fetch completed, revoke and exit
-          URL.revokeObjectURL(URL.createObjectURL(blob));
-          return;
-        }
-        const objUrl = URL.createObjectURL(blob);
-        objectUrlRef.current = objUrl;
-        setInternalSrc(objUrl);
-      } catch (err: any) {
-        if (err.name === "AbortError") {
-          // ignore
-        } else {
-          console.warn("VideoPlayer: error fetching video:", err);
-        }
-        setInternalSrc(null);
-      } finally {
-        if (!aborted) setLoading(false);
-      }
-    }
-
-    resolveSrc();
-
-    return () => {
-      aborted = true;
-      controller.abort();
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-    };
-  }, [videoUrl]);
-
-  // When internalSrc changes, force a reload of the <video> and clear pending seek
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    // force reload to pick up new src
-    try {
-      video.load();
-    } catch (e) {
-      // ignore
-    }
-    // clear any pending seek — we'll apply seeking via the timestamp effect below
-    pendingSeekRef.current = null;
-  }, [internalSrc]);
-
-  // Seek to timestamp when updated — ensure metadata loaded first
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const attemptSeek = (target: number) => {
-      try {
-        // clamp target within duration if available
-        if (!isNaN(video.duration) && isFinite(video.duration)) {
-          const clamped = Math.min(target, Math.max(0, video.duration));
-          video.currentTime = clamped;
-        } else {
-          video.currentTime = Math.max(0, target);
-        }
+        v.currentTime = Number.isFinite(currentTimestamp)
+          ? currentTimestamp
+          : 0;
       } catch (err) {
-        console.warn("VideoPlayer: seek failed, will retry on loadedmetadata", err);
-        pendingSeekRef.current = target;
+        console.warn("Failed to set currentTime:", err);
       }
     };
 
-    // If metadata is already available, seek immediately
-    if (video.readyState >= 1) {
-      attemptSeek(currentTimestamp);
+    if (v.readyState >= 1) {
+      seek();
     } else {
-      // wait for loadedmetadata
-      const onLoaded = () => {
-        if (pendingSeekRef.current != null) {
-          attemptSeek(pendingSeekRef.current);
-          pendingSeekRef.current = null;
-        } else {
-          attemptSeek(currentTimestamp);
-        }
-        video.removeEventListener("loadedmetadata", onLoaded);
-      };
-      video.addEventListener("loadedmetadata", onLoaded);
-      // also keep pending target in case loadedmetadata fires before the handler attaches
-      pendingSeekRef.current = currentTimestamp;
-
-      // cleanup
-      return () => {
-        video.removeEventListener("loadedmetadata", onLoaded);
-      };
+      v.addEventListener("loadedmetadata", seek, { once: true });
+      return () => v.removeEventListener("loadedmetadata", seek);
     }
-  }, [currentTimestamp, internalSrc]);
+  }, [currentTimestamp, src]);
 
-  // Track current time updates
+  // Emit time updates & log errors
   useEffect(() => {
-    const videoElement = videoRef.current;
+    const v = videoRef.current;
+    if (!v) return;
 
-    const handleTimeUpdate = () => {
-      if (videoElement && onTimeUpdate) {
-        onTimeUpdate(videoElement.currentTime);
-      }
+    const handleTimeUpdate = () => onTimeUpdate?.(v.currentTime);
+    const handleError = () => {
+      console.error("Video error:", {
+        src: v.currentSrc,
+        error: v.error,
+        readyState: v.readyState,
+        networkState: v.networkState,
+      });
     };
 
-    if (videoElement) {
-      videoElement.addEventListener("timeupdate", handleTimeUpdate);
-    }
-
+    v.addEventListener("timeupdate", handleTimeUpdate);
+    v.addEventListener("error", handleError);
     return () => {
-      if (videoElement) {
-        videoElement.removeEventListener("timeupdate", handleTimeUpdate);
-      }
+      v.removeEventListener("timeupdate", handleTimeUpdate);
+      v.removeEventListener("error", handleError);
     };
-  }, [onTimeUpdate]);
+  }, [onTimeUpdate, src]);
 
   return (
-    <div className="video-container">
-      {loading ? (
-        <p className="text-gray-500 text-sm">Loading video...</p>
-      ) : internalSrc ? (
-        <video
-          // ensure the video reloads when internalSrc changes
-          key={internalSrc}
-          ref={videoRef}
-          src={internalSrc}
-          controls
-          crossOrigin="anonymous"
-          className="w-full max-w-3xl"
-        />
-      ) : (
-        <p className="text-gray-500 text-sm">No video loaded</p>
-      )}
+    <>
+      <div className="relative aspect-video bg-gray-900 rounded-xl overflow-hidden">
+        {src ? (
+          <video
+            ref={videoRef}
+            src={src}
+            controls
+            preload="metadata"
+            playsInline
+            className="absolute inset-0 w-full h-full object-contain"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+            <div className="text-center">
+              <svg
+                className="w-12 h-12 mx-auto mb-3 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+              <p className="text-gray-500">No video available</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="mt-2 text-xs text-gray-500">
         Current timestamp: {currentTimestamp.toFixed(2)} seconds
       </div>
-    </div>
+    </>
   );
-};
-
-export default VideoPlayer;
+}

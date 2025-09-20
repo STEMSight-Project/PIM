@@ -1,32 +1,79 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { CheckCircle, XCircle, Clock } from "lucide-react";
-import { timestampToSeconds } from "./timestamp-to-seconds";
-
-type ConfirmationStatus = "pending" | "confirmed" | "dismissed";
-
-type TimelineEvent = {
-  id: string;
-  type: "detection" | "system" | "user";
-  title: string;
-  timestamp: string;
-  confidence?: number;
-  duration?: string;
-  color: string;
-  confirmationStatus: ConfirmationStatus;
-};
+import { usePatientEvents } from "@/hooks/usePatientEvents";
+import { Detection } from "@/components/session-review/types";
 
 interface TimelineProps {
   setCurrentTimestamp: (time: number) => void;
+  videoId: string;
+  patientId: string;
+  currentEvents?: Detection[]; // Use Detection type from session-review
 }
 
-const Timeline = ({ setCurrentTimestamp }: TimelineProps) => {
-  const [eventStatuses, setEventStatuses] = useState<
-    Record<string, ConfirmationStatus>
-  >({});
+const Timeline = ({ 
+  setCurrentTimestamp, 
+  videoId, 
+  patientId,
+  currentEvents 
+}: TimelineProps) => {
+  const {
+    events: hookEvents,
+    loading,
+    error,
+    fetchEventsForVideo,
+    updateEventStatus,
+    clearError
+  } = usePatientEvents();
 
-  // Mapping for color classes - each color goes with one of the postures/movements
+  // Always use hookEvents if we're fetching, otherwise use currentEvents
+  const [shouldUseFetchedEvents, setShouldUseFetchedEvents] = useState(false);
+  const events = shouldUseFetchedEvents ? hookEvents : (currentEvents || []);
+
+  useEffect(() => {
+    if (videoId && !currentEvents) {
+      fetchEventsForVideo(videoId);
+      setShouldUseFetchedEvents(true);
+    }
+  }, [videoId, fetchEventsForVideo, currentEvents]);
+
+  // If we have currentEvents but need to update them, fetch fresh data
+  useEffect(() => {
+    if (currentEvents && shouldUseFetchedEvents) {
+      fetchEventsForVideo(videoId);
+    }
+  }, [shouldUseFetchedEvents, videoId, fetchEventsForVideo, currentEvents]);
+
+  // Convert timestamp to number if it's a string, then to MM:SS format for display
+  const getTimestampAsNumber = (timestamp: string | number): number => {
+    if (typeof timestamp === 'string') {
+      return parseFloat(timestamp) || 0;
+    }
+    return timestamp;
+  };
+
+  const formatTimestamp = (timestamp: string | number): string => {
+    const seconds = getTimestampAsNumber(timestamp);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  // Mapping for detection types to colors
+  const getEventColor = (type: string): string => {
+    const typeColorMap: Record<string, string> = {
+      'myoclonus': 'red',
+      'tremor': 'yellow', 
+      'decerebrate': 'purple',
+      'decorticate': 'blue',
+      'seizure': 'red',
+      'abnormal_movement': 'orange',
+      // Add more mappings as needed
+    };
+    return typeColorMap[type.toLowerCase()] || 'gray';
+  };
+
   const getColorClass = (color: string) => {
     const colorMap: Record<string, string> = {
       red: "bg-red-500",
@@ -34,89 +81,112 @@ const Timeline = ({ setCurrentTimestamp }: TimelineProps) => {
       green: "bg-green-500",
       purple: "bg-purple-500",
       blue: "bg-blue-500",
+      orange: "bg-orange-500",
+      gray: "bg-gray-500",
     };
     return colorMap[color] || "bg-gray-500";
   };
 
-  // handlers for the jump, confirm, and dismiss buttons
-  const handleJumpToEvent = (timestamp: string) => {
-    const seconds = timestampToSeconds(timestamp);
-    console.log(
-      "Timeline: Jump to event clicked",
-      timestamp,
-      "converted to seconds:",
-      seconds
-    );
-
-    setCurrentTimestamp(seconds - 0.5); // If we don't add this it wont let the user click on the timestamp twice in a row
+  const handleJumpToEvent = (timestamp: string | number) => {
+    const seconds = getTimestampAsNumber(timestamp);
+    console.log("Timeline: Jump to event clicked", seconds, "seconds");
+    
+    // Small trick to allow clicking the same timestamp multiple times
+    setCurrentTimestamp(seconds - 0.5);
     setTimeout(() => {
       setCurrentTimestamp(seconds);
     }, 10);
   };
 
-  const handleConfirmEvent = (eventId: string) => {
-    setEventStatuses((prevStatuses) => ({
-      ...prevStatuses,
-      [eventId]: "confirmed",
-    }));
-    console.log(`Event ${eventId} confirmed`);
+  const handleConfirmEvent = async (eventId: string) => {
+    const result = await updateEventStatus(eventId, "confirmed");
+    if (result) {
+      console.log(`Event ${eventId} confirmed`);
+      // If using currentEvents, switch to fetched events to see updates
+      if (currentEvents) {
+        setShouldUseFetchedEvents(true);
+        fetchEventsForVideo(videoId);
+      }
+    }
   };
 
-  const handleDismissEvent = (eventId: string) => {
-    setEventStatuses((prevStatuses) => ({
-      ...prevStatuses,
-      [eventId]: "dismissed",
-    }));
-    console.log(`Event ${eventId} dismissed`);
+  const handleDismissEvent = async (eventId: string) => {
+    const result = await updateEventStatus(eventId, "dismissed");
+    if (result) {
+      console.log(`Event ${eventId} dismissed`);
+      // If using currentEvents, switch to fetched events to see updates
+      if (currentEvents) {
+        setShouldUseFetchedEvents(true);
+        fetchEventsForVideo(videoId);
+      }
+    }
   };
 
-  const getEventStatus = (eventId: string): ConfirmationStatus => {
-    return eventStatuses[eventId] || "pending";
+  const handleEditStatus = async (eventId: string) => {
+    const result = await updateEventStatus(eventId, "pending");
+    if (result) {
+      console.log(`Event ${eventId} status reset to pending`);
+      // If using currentEvents, switch to fetched events to see updates
+      if (currentEvents) {
+        setShouldUseFetchedEvents(true);
+        fetchEventsForVideo(videoId);
+      }
+    }
   };
 
-  const events: TimelineEvent[] = [
-    //timestamp format is mm:ss:ms
-    {
-      id: "1",
-      type: "detection",
-      title: "Possible Myoclonus",
-      timestamp: "02:03:00", //(mm:ss:ms)
-      confidence: 22,
-      duration: "18 seconds",
-      color: "red",
-      confirmationStatus: "pending",
-    },
-    {
-      id: "2",
-      type: "detection",
-      title: "Tremor Detected",
-      timestamp: "04:01:02",
-      confidence: 92,
-      duration: "24 seconds",
-      color: "yellow",
-      confirmationStatus: "pending",
-    },
-    {
-      id: "3",
-      type: "detection",
-      title: "Decerebrate Detected",
-      timestamp: "05:01:42",
-      confidence: 80,
-      duration: "18 seconds",
-      color: "purple",
-      confirmationStatus: "pending",
-    },
-    {
-      id: "4",
-      type: "detection",
-      title: "Decorticate Posture Detected",
-      timestamp: "08:02:02",
-      confidence: 77,
-      duration: "21 seconds",
-      color: "blue",
-      confirmationStatus: "pending",
-    },
-  ];
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Activity Timeline
+          </h3>
+          <p className="text-sm text-gray-500">Loading events...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Activity Timeline
+          </h3>
+          <div className="text-red-600 text-sm">
+            Error loading events: {error}
+            <button 
+              onClick={clearError}
+              className="ml-2 text-blue-600 hover:text-blue-800"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Activity Timeline
+          </h3>
+          <p className="text-sm text-gray-500">No events detected for this video</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Sort events by timestamp
+  const sortedEvents = [...events].sort((a, b) => {
+    const timestampA = getTimestampAsNumber(a.timestamp);
+    const timestampB = getTimestampAsNumber(b.timestamp);
+    return timestampA - timestampB;
+  });
 
   return (
     <div className="space-y-6">
@@ -130,8 +200,9 @@ const Timeline = ({ setCurrentTimestamp }: TimelineProps) => {
       </div>
 
       <div className="space-y-6">
-        {events.map((event) => {
-          const status = getEventStatus(event.id);
+        {sortedEvents.map((event) => {
+          const color = getEventColor(event.type);
+          const status = event.validation_status;
 
           return (
             <div key={event.id} className="relative pl-8 pb-6 last:pb-0">
@@ -140,9 +211,7 @@ const Timeline = ({ setCurrentTimestamp }: TimelineProps) => {
 
               {/* Event dot */}
               <div
-                className={`absolute top-2 left-0 w-4 h-4 -ml-2 rounded-full border-2 border-white shadow-sm ${getColorClass(
-                  event.color
-                )}`}
+                className={`absolute top-2 left-0 w-4 h-4 -ml-2 rounded-full border-2 border-white shadow-sm ${getColorClass(color)}`}
               ></div>
 
               {/* Event card */}
@@ -150,7 +219,7 @@ const Timeline = ({ setCurrentTimestamp }: TimelineProps) => {
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-1">
-                      {event.title}
+                      {event.type.charAt(0).toUpperCase() + event.type.slice(1).replace('_', ' ')} Detected
                     </h4>
                     {event.confidence && (
                       <div className="flex items-center">
@@ -164,18 +233,16 @@ const Timeline = ({ setCurrentTimestamp }: TimelineProps) => {
                   <div className="text-right">
                     <span className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded">
                       <Clock className="w-3 h-3 mr-1" />
-                      {event.timestamp}
+                      {formatTimestamp(event.timestamp)}
                     </span>
-                    {event.duration && (
-                      <div className="mt-1 text-xs text-gray-500">
-                        Duration: {event.duration}
-                      </div>
-                    )}
+                    <div className="mt-1 text-xs text-gray-500">
+                      Created: {new Date(event.created_at).toLocaleDateString()}
+                    </div>
                   </div>
                 </div>
 
-                {/* Conditionally render buttons based on status */}
-                {event.type === "detection" && status === "pending" && (
+                {/* Buttons based on status */}
+                {status === "pending" && (
                   <div className="mt-2 flex space-x-2">
                     <button
                       className="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-md hover:bg-blue-100 transition-colors"
@@ -191,7 +258,6 @@ const Timeline = ({ setCurrentTimestamp }: TimelineProps) => {
                       <CheckCircle className="w-3 h-3 mr-1" />
                       Confirm
                     </button>
-
                     <button
                       className="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-700 text-xs font-medium rounded-md hover:bg-red-100 transition-colors"
                       onClick={() => handleDismissEvent(event.id)}
@@ -214,12 +280,7 @@ const Timeline = ({ setCurrentTimestamp }: TimelineProps) => {
                         Jump to Event
                       </button>
                       <button
-                        onClick={() =>
-                          setEventStatuses((prevStatuses) => ({
-                            ...prevStatuses,
-                            [event.id]: "pending",
-                          }))
-                        }
+                        onClick={() => handleEditStatus(event.id)}
                         className="px-2 py-1 bg-gray-50 text-gray-600 text-xs rounded hover:bg-gray-100"
                       >
                         Edit Status
@@ -244,12 +305,7 @@ const Timeline = ({ setCurrentTimestamp }: TimelineProps) => {
                         Jump to Event
                       </button>
                       <button
-                        onClick={() =>
-                          setEventStatuses((prevStatuses) => ({
-                            ...prevStatuses,
-                            [event.id]: "pending",
-                          }))
-                        }
+                        onClick={() => handleEditStatus(event.id)}
                         className="px-2 py-1 bg-gray-50 text-gray-600 text-xs rounded hover:bg-gray-100"
                       >
                         Edit Status

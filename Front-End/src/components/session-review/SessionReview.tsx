@@ -3,7 +3,12 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
 import type { Note, SessionWithPatient } from "@/hooks";
-import { useNotes, usePatients, useSessions } from "@/hooks";
+import { useNotes, usePatients } from "@/hooks";
+import {
+  fetchFullSessionDetails,
+  fetchSessionsGalleryFast,
+  galleryItemToSession,
+} from "@/services/sessionService";
 import React, { useEffect, useState } from "react";
 import TabsContainer from "./Tabs/TabsContainer";
 import VideoPlayer from "./VideoPlayer";
@@ -18,36 +23,60 @@ const SessionReview: React.FC = () => {
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
   const [notes, setNotes] = useState<Note[]>([]);
 
-  const {
-    sessions,
-    loading: sessionsLoading,
-    error: sessionsError,
-    fetchStitchedSessions,
-  } = useSessions();
-
   const { notes: hookNotes, fetchNotesForPatient } = useNotes();
-
   const { isLoading: patientsLoading } = usePatients();
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessions, setSessions] = useState<SessionWithPatient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Initial gallery load
   useEffect(() => {
-    fetchStitchedSessions();
-  }, [fetchStitchedSessions]);
+    const loadGalleryFast = async () => {
+      try {
+        const galleryItems = await fetchSessionsGalleryFast();
+        const gallerySessions = galleryItems.map(galleryItemToSession);
+        setSessions(gallerySessions);
+      } catch (err) {
+        console.error("Error fetching gallery sessions:", err);
+        setError("Failed to load sessions");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadGalleryFast();
+  }, []);
 
+  // Load notes when a session is picked
   useEffect(() => {
     if (selectedSession?.patient) {
       fetchNotesForPatient(selectedSession.patient.id);
     }
   }, [selectedSession, fetchNotesForPatient]);
 
+  // Keep local notes in sync with hook
   useEffect(() => {
     setNotes(hookNotes);
   }, [hookNotes]);
 
-  const handleSessionSelect = (session: SessionWithPatient) => {
-    setSelectedSession(session);
-    setSelectedVideoIndex(0);
-    setCurrentTimestamp(0);
-    setViewMode("player");
+  const handleSessionSelect = async (session: SessionWithPatient) => {
+    setSessionLoading(true);
+    try {
+      const fullSession =
+        await fetchFullSessionDetails(session.id || `session-${session.patient.id}`);
+
+      if (!fullSession) throw new Error("Failed to load session details");
+
+      setSelectedSession(fullSession);
+      setSelectedVideoIndex(0);
+      setCurrentTimestamp(0);
+      setViewMode("player");
+    } catch (err) {
+      console.error("Failed to load session details:", err);
+      setError("Failed to load session details. Please try again.");
+    } finally {
+      setSessionLoading(false);
+    }
   };
 
   const handleBackToGallery = () => {
@@ -66,7 +95,7 @@ const SessionReview: React.FC = () => {
     setCurrentTimestamp(time);
   };
 
-  if (sessionsLoading || patientsLoading) {
+  if (loading || patientsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <Loading size="lg" text="Loading session data..." />
@@ -74,7 +103,7 @@ const SessionReview: React.FC = () => {
     );
   }
 
-  if (sessionsError) {
+  if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <Card className="max-w-md w-full">
@@ -98,9 +127,24 @@ const SessionReview: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Error Loading Sessions
               </h3>
-              <p className="text-gray-600 mb-4">{sessionsError}</p>
+              <p className="text-gray-600 mb-4">{error}</p>
               <button
-                onClick={() => fetchStitchedSessions()}
+                onClick={() => {
+                  setError(null);
+                  setLoading(true);
+                  (async () => {
+                    try {
+                      const galleryItems = await fetchSessionsGalleryFast();
+                      const gallerySessions = galleryItems.map(galleryItemToSession);
+                      setSessions(gallerySessions);
+                    } catch (err) {
+                      console.error("Error fetching gallery sessions:", err);
+                      setError("Failed to load sessions");
+                    } finally {
+                      setLoading(false);
+                    }
+                  })();
+                }}
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
               >
                 Try Again
@@ -112,7 +156,27 @@ const SessionReview: React.FC = () => {
     );
   }
 
-  // Gallery View - Session Selection
+  if (sessionLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+            <div>
+              <p className="text-lg font-medium text-gray-900">
+                Loading session details...
+              </p>
+              <p className="text-sm text-gray-500">
+                Fetching videos and patient events
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Gallery View
   if (viewMode === "gallery") {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -124,7 +188,7 @@ const SessionReview: React.FC = () => {
                 Session Gallery
               </h2>
               <p className="text-gray-600">
-                Select a session to review video recordings and analysis data
+                Select a session to review video recordings
               </p>
             </div>
             <div className="mt-4 sm:mt-0 flex items-center space-x-3">
@@ -191,7 +255,22 @@ const SessionReview: React.FC = () => {
                   There are no recorded sessions available at the moment.
                 </p>
                 <button
-                  onClick={() => fetchStitchedSessions()}
+                  onClick={() => {
+                    setError(null);
+                    setLoading(true);
+                    (async () => {
+                      try {
+                        const galleryItems = await fetchSessionsGalleryFast();
+                        const gallerySessions = galleryItems.map(galleryItemToSession);
+                        setSessions(gallerySessions);
+                      } catch (err) {
+                        console.error("Error fetching gallery sessions:", err);
+                        setError("Failed to load sessions");
+                      } finally {
+                        setLoading(false);
+                      }
+                    })();
+                  }}
                   className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
                 >
                   <svg
@@ -216,7 +295,7 @@ const SessionReview: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {sessions.map((session, index) => (
               <Card
-                key={session.patient.id + index}
+                key={(session.id ?? session.patient.id) + index}
                 className="group cursor-pointer hover:shadow-lg hover:border-purple-300 transition-all duration-200"
                 onClick={() => handleSessionSelect(session)}
               >
@@ -241,12 +320,11 @@ const SessionReview: React.FC = () => {
                     </div>
                   </div>
                   <div className="absolute top-3 right-3 bg-white/20 backdrop-blur-sm rounded-lg px-2 py-1 text-xs text-white font-medium">
-                    {session.videos.length} Video
-                    {session.videos.length !== 1 ? "s" : ""}
+                    {(session as any).videoCount} Video
+                    {(session as any).videoCount !== 1 ? "s" : ""}
                   </div>
                   <div className="absolute top-3 left-3 bg-white/20 backdrop-blur-sm rounded-lg px-2 py-1 text-xs text-white font-medium">
-                    {session.detections.length} Detection
-                    {session.detections.length !== 1 ? "s" : ""}
+                    TBD
                   </div>
                 </div>
 
@@ -272,14 +350,11 @@ const SessionReview: React.FC = () => {
                         />
                       </svg>
                       <span>
-                        {new Date(session.startTime).toLocaleDateString(
-                          "en-US",
-                          {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          }
-                        )}
+                        {new Date(session.startTime).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
                       </span>
                     </div>
 
@@ -329,7 +404,7 @@ const SessionReview: React.FC = () => {
                   </div>
 
                   {/* Session Stats */}
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <div className="flex items-center justify-between pt-3 border-top border-gray-100">
                     <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">
                       Duration
                     </span>
@@ -351,8 +426,9 @@ const SessionReview: React.FC = () => {
     );
   }
 
-  // Player View - Video Playback
+  // Player View (video -> tabs -> optional video selection), all full width
   const currentVideo = selectedSession?.videos[selectedVideoIndex];
+  const currentVideoUrl = currentVideo?.public_video_url ?? null;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -368,12 +444,7 @@ const SessionReview: React.FC = () => {
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           Back to Gallery
         </button>
@@ -393,55 +464,31 @@ const SessionReview: React.FC = () => {
                       stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                      />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
                   <div>
                     <h2 className="text-xl font-semibold text-gray-900">
-                      {selectedSession.patient.first_name}{" "}
-                      {selectedSession.patient.last_name}
+                      {selectedSession.patient.first_name} {selectedSession.patient.last_name}
                     </h2>
                     <p className="text-sm text-gray-600">
-                      Session from{" "}
-                      {new Date(selectedSession.startTime).toLocaleDateString()}
+                      Session from {new Date(selectedSession.startTime).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
                 <div className="mt-4 sm:mt-0 flex items-center space-x-4 text-sm text-gray-600">
                   <div className="flex items-center space-x-1">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                     <span>{selectedSession.videos.length} Videos</span>
                   </div>
                   <div className="flex items-center space-x-1">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                      />
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                     <span>{selectedSession.detections.length} Detections</span>
                   </div>
@@ -452,163 +499,120 @@ const SessionReview: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        {/* Video Player Section */}
-        <div className="xl:col-span-3">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Video Playback
-                </h3>
-                {currentVideo && selectedSession && (
-                  <div className="text-sm text-gray-600">
-                    Video {selectedVideoIndex + 1} of{" "}
-                    {selectedSession.videos.length}
-                  </div>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {currentVideo ? (
-                <div className="space-y-4">
-                  <div className="bg-gray-900 rounded-lg overflow-hidden aspect-video">
-                    <VideoPlayer
-                      videoUrl={currentVideo.public_video_url || null}
-                      currentTimestamp={currentTimestamp}
-                      onTimeUpdate={handleTimeUpdate}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-sm text-gray-600">
-                    <div className="flex items-center space-x-4">
-                      <span>
-                        <strong>File:</strong>{" "}
-                        {currentVideo.file_path?.split("/").pop() || "Unknown"}
-                      </span>
-                      <span>
-                        <strong>Timestamp:</strong>{" "}
-                        {Math.floor(currentTimestamp)}s
-                      </span>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 transition-colors">
-                        <svg
-                          className="w-3 h-3 mr-1 inline"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                          />
-                        </svg>
-                        Full Screen
-                      </button>
-                      <button className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 transition-colors">
-                        <svg
-                          className="w-3 h-3 mr-1 inline"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                          />
-                        </svg>
-                        Download
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center">
-                    <svg
-                      className="w-12 h-12 mx-auto mb-3 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <p className="text-gray-500">No video available</p>
-                  </div>
+      {/* Stack: Video -> Tabs -> (optional) Video Selection), all full width */}
+      <div className="space-y-6">
+        {/* Video */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Video Playback</h3>
+              {currentVideo && selectedSession && (
+                <div className="text-sm text-gray-600">
+                  Video {selectedVideoIndex + 1} of {selectedSession.videos.length}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {currentVideo ? (
+              <div className="space-y-4">
+                <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
+                  <VideoPlayer
+                    videoUrl={currentVideoUrl}
+                    currentTimestamp={currentTimestamp}
+                    onTimeUpdate={handleTimeUpdate}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-sm text-gray-600">
+                  <div className="flex items-center space-x-4">
+                    <span>
+                      <strong>File:</strong>{" "}
+                      {currentVideo.file_path?.split("/").pop() || "Unknown"}
+                    </span>
+                    <span>
+                      <strong>Timestamp:</strong> {Math.floor(currentTimestamp)}s
+                    </span>
 
-          {/* Video Selection Grid */}
-          {selectedSession && selectedSession.videos.length > 1 && (
-            <Card className="mt-6">
-              <CardHeader>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Video Selection
-                </h3>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {selectedSession.videos.map((video, index) => (
-                    <button
-                      key={video.id}
-                      onClick={() => handleVideoSelect(index)}
-                      className={`relative p-4 rounded-lg border-2 transition-all text-sm font-medium ${index === selectedVideoIndex
+                  </div>
+                  <div className="flex space-x-2">
+                    <button className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 transition-colors">
+                      <svg className="w-3 h-3 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                      </svg>
+                      Full Screen
+                    </button>
+                    <button className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 transition-colors">
+                      <svg className="w-3 h-3 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Download
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="text-center">
+                  <svg className="w-12 h-12 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <p className="text-gray-500">No video available</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Tabs BELOW the video (full width). 
+            Ensure TabsContainer's outer <div> has "w-full" in its own file. */}
+        <TabsContainer
+          sessionId={selectedSession?.id ?? selectedSession?.patient.id ?? ""}
+          notes={notes}
+          setNotes={setNotes}
+          setCurrentTimestamp={setCurrentTimestamp}
+          currentVideoTime={currentTimestamp}
+          videoId={currentVideo?.id || ""}
+          patientId={selectedSession?.patient.id || ""}
+        />
+
+
+        {/* Optional: Video Selection grid (still full width) */}
+        {selectedSession && selectedSession.videos.length > 1 && (
+          <Card>
+            <CardHeader>
+              <h3 className="text-lg font-semibold text-gray-900">Video Selection</h3>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {selectedSession.videos.map((video, index) => (
+                  <button
+                    key={video.id}
+                    onClick={() => handleVideoSelect(index)}
+                    className={`relative p-4 rounded-lg border-2 transition-all text-sm font-medium ${
+                      index === selectedVideoIndex
                         ? "border-purple-500 bg-purple-50 text-purple-700"
                         : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-                        }`}
-                    >
-                      <div className="text-center">
-                        <svg
-                          className="w-6 h-6 mx-auto mb-1"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
-                        Video {index + 1}
-                      </div>
-                      {index === selectedVideoIndex && (
-                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full"></div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Sidebar with Tabs */}
-        <div className="xl:col-span-1">
-          <Card className="h-fit">
-            <TabsContainer
-              sessionId={selectedSession?.patient.id || ""}
-              notes={notes}
-              setNotes={setNotes}
-              setCurrentTimestamp={setCurrentTimestamp}
-              currentVideoTime={currentTimestamp}
-              videoId={currentVideo?.id || ""}
-              patientId={selectedSession?.patient.id || ""}
-            />
+                    }`}
+                  >
+                    <div className="text-center">
+                      <svg className="w-6 h-6 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Video {index + 1}
+                    </div>
+                    {index === selectedVideoIndex && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full"></div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
           </Card>
-        </div>
+        )}
       </div>
     </div>
   );
