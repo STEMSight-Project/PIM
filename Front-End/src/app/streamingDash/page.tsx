@@ -72,11 +72,9 @@ export default function LiveStreamingDashboard() {
     error,
     endSession,
     clearError,
-    refreshData,
     totalSessions,
     activeSessions,
     connectedRooms,
-    lastRefreshTime,
   } = useStreamingSessions();
 
   // Realtime hooks for live data
@@ -348,13 +346,6 @@ export default function LiveStreamingDashboard() {
               <p className="text-red-800 text-sm font-medium">Error Details:</p>
               <p className="text-red-700 text-sm mt-1">{error}</p>
             </div>
-            <button
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors duration-200"
-            >
-              <ArrowPathIcon className="w-5 h-5" />
-              Retry Connection
-            </button>
           </div>
         </div>
       </DashboardLayout>
@@ -418,15 +409,6 @@ export default function LiveStreamingDashboard() {
                     {totalSessions} total sessions
                   </span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <ClockIcon className="h-4 w-4 text-slate-500" />
-                  <span className="text-sm text-slate-600">
-                    Last updated:{" "}
-                    {lastRefreshTime
-                      ? lastRefreshTime.toLocaleTimeString()
-                      : "Never"}
-                  </span>
-                </div>
                 {/* Realtime connection status */}
                 <div className="flex items-center space-x-2">
                   <div
@@ -449,13 +431,6 @@ export default function LiveStreamingDashboard() {
                   Live data: {realtimeSessions.length} sessions,{" "}
                   {realtimeRooms.length} rooms
                 </span>
-                <Button
-                  onClick={refreshData}
-                  className="border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors duration-200"
-                >
-                  <ArrowPathIcon className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
               </div>
             </div>
           </div>
@@ -472,14 +447,6 @@ export default function LiveStreamingDashboard() {
                 <p className="text-red-600 text-sm">{error}</p>
               </div>
             </div>
-            <Button
-              onClick={refreshData}
-              variant="outline"
-              size="sm"
-              className="mt-3 border-red-300 text-red-700 hover:bg-red-50"
-            >
-              Try Again
-            </Button>
           </div>
         )}
 
@@ -498,13 +465,6 @@ export default function LiveStreamingDashboard() {
                 No patients are currently streaming. Active camera feeds will
                 appear here automatically.
               </p>
-              <Button
-                onClick={refreshData}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors duration-200"
-              >
-                <ArrowPathIcon className="h-5 w-5" />
-                Refresh Dashboard
-              </Button>
             </CardContent>
           </Card>
         ) : (
@@ -536,13 +496,6 @@ export default function LiveStreamingDashboard() {
                     </div>
                   </div>
                 </div>
-                <Button
-                  onClick={refreshData}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors duration-200"
-                >
-                  <ArrowPathIcon className="h-4 w-4" />
-                  Refresh
-                </Button>
               </div>
             </div>
 
