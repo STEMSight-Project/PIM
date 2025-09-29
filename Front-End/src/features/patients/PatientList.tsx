@@ -44,7 +44,45 @@ export function PatientList() {
     setIsCreating(true);
     setCreateError(null);
 
-    const result = await createPatient(patientData);
+    // Normalize phone: strip non-digit characters and validate presence/length
+    const normalizedPhone = patientData.phone
+      ? patientData.phone.replace(/\D/g, "")
+      : "";
+
+    // Backend requires primary_phone (mapped from phone)
+    if (!normalizedPhone) {
+      setCreateError("Phone number is required.");
+      setIsCreating(false);
+      return;
+    }
+
+    // Basic length check (assuming minimum 10 digits for a valid phone number) 
+    if (normalizedPhone.length < 10) {
+      setCreateError("Phone number must have at least 10 digits.");
+      setIsCreating(false);
+      return;
+    }
+
+    // Backend requires address with min_length 5 for validity
+    if (!patientData.address || patientData.address.trim().length < 5) {
+      setCreateError("Address is required and must be at least 5 characters.");
+      setIsCreating(false);
+      return;
+    }
+
+    // Date of birth is required for all patients to be created
+    if (!patientData.date_of_birth) {
+      setCreateError("Date of birth is required.");
+      setIsCreating(false);
+      return;
+    }
+
+    const payload: PatientCreateRequest = {
+      ...patientData,
+      phone: normalizedPhone,
+    };
+
+    const result = await createPatient(payload);
 
     if (result.success) {
       setShowCreateModal(false);
