@@ -64,7 +64,14 @@ async def get_all_patients():
         if result.data is None:
             return []
 
-        return result.data
+        # Ensure dates/datetimes are JSON serializable
+        def _serialize_row(r):
+            for k, v in list(r.items()):
+                if isinstance(v, (date, datetime)):
+                    r[k] = v.isoformat()
+            return r
+
+        return [_serialize_row(r) for r in result.data]
     except Exception as exc:
         logger.exception("Failed to retrieve patients: %s", exc)
         raise HTTPException(
@@ -91,6 +98,11 @@ async def get_patient(patient_id: str):
                 detail=f"Patient with id {patient_id} not found",
             )
 
+        # Serialize date/datetime fields to ISO strings
+        for k, v in list(result.data.items()):
+            if isinstance(v, (date, datetime)):
+                result.data[k] = v.isoformat()
+
         return result.data
     except HTTPException:
         raise
@@ -113,6 +125,10 @@ async def create_patient(patient: PatientCreate):
         # Convert patient data to dict for database insertion
         patient_data = patient.model_dump()
 
+        # Ensure date fields are JSON serializable before sending to Supabase
+        if isinstance(patient_data.get("dob"), (date, datetime)):
+            patient_data["dob"] = patient_data["dob"].isoformat()
+
         result = supabase.table("patients").insert(patient_data).execute()
 
         if not result.data or len(result.data) == 0:
@@ -121,7 +137,12 @@ async def create_patient(patient: PatientCreate):
                 detail="Failed to create patient",
             )
 
-        return result.data[0]
+        created = result.data[0]
+        for k, v in list(created.items()):
+            if isinstance(v, (date, datetime)):
+                created[k] = v.isoformat()
+
+        return created
     except HTTPException:
         raise
     except Exception as exc:
@@ -144,6 +165,10 @@ async def update_patient(patient_id: str, patient: PatientUpdate):
                 detail="No data provided for update",
             )
 
+        # Convert date fields to serializable strings and add updated timestamp
+        if isinstance(updated_values.get("dob"), (date, datetime)):
+            updated_values["dob"] = updated_values["dob"].isoformat()
+
         # Add updated timestamp
         updated_values["updated_at"] = datetime.utcnow().isoformat()
 
@@ -160,7 +185,12 @@ async def update_patient(patient_id: str, patient: PatientUpdate):
                 detail=f"Patient with id {patient_id} not found",
             )
 
-        return result.data[0]
+        updated = result.data[0]
+        for k, v in list(updated.items()):
+            if isinstance(v, (date, datetime)):
+                updated[k] = v.isoformat()
+
+        return updated
     except HTTPException:
         raise
     except Exception as exc:
