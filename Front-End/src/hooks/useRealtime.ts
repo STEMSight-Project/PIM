@@ -3,119 +3,95 @@
  * Provides easy-to-use hooks for consuming SSE streams
  */
 
-import {
-  RealtimeConnection,
-  RealtimeEvent,
-  RealtimeOptions,
-  realtimeService,
-} from "@/services/realtimeService";
-import type { StreamingRoom, StreamingSession } from "@/types";
+import { ambulanceStreamingService } from "@/services/streamingService";
+import type {
+  AmbulanceSession,
+  AmbulanceSessionEvent,
+  CameraRoom,
+  CameraRoomEvent,
+} from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export interface UseRealtimeSessionsOptions extends RealtimeOptions {
-  patientId?: string;
+// Hook options interfaces
+interface RealtimeOptions {
   enabled?: boolean;
+  autoReconnect?: boolean;
 }
 
-export interface UseRealtimeRoomsOptions extends RealtimeOptions {
-  enabled?: boolean;
+interface UseRealtimeAmbulanceSessionsOptions extends RealtimeOptions {
+  ambulanceId?: string;
 }
 
-export interface UseRealtimePatientOptions extends RealtimeOptions {
-  patientId: string;
+interface UseRealtimeCameraRoomsOptions extends RealtimeOptions {}
+
+export interface UseRealtimeAmbulanceOptions {
+  ambulanceId: string;
   enabled?: boolean;
 }
 
 /**
- * Hook for subscribing to real-time streaming sessions updates
+ * Hook for subscribing to real-time ambulance sessions updates
  */
-export function useRealtimeSessions(options: UseRealtimeSessionsOptions = {}) {
-  const [sessions, setSessions] = useState<StreamingSession[]>([]);
+export function useRealtimeAmbulanceSessions(
+  options: UseRealtimeAmbulanceSessionsOptions = {}
+) {
+  const [sessions, setSessions] = useState<AmbulanceSession[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastEvent, setLastEvent] = useState<RealtimeEvent | null>(null);
-  const connectionRef = useRef<RealtimeConnection | null>(null);
+  const [events, setEvents] = useState<AmbulanceSessionEvent[]>([]);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
-  const { patientId, enabled = true, ...realtimeOptions } = options;
+  const { ambulanceId, enabled = true } = options;
 
-  const handleMessage = useCallback((event: RealtimeEvent) => {
-    console.log("🎯 SESSIONS - Received realtime event:", event);
-    setLastEvent(event);
-    setError(null);
+  const handleMessage = useCallback((event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      console.log("🎯 AMBULANCE SESSIONS - Received SSE event:", data);
 
-    switch (event.type) {
-      case "connected":
-        setIsConnected(true);
-        console.log("📡 Connected to sessions stream");
-        break;
+      setError(null);
 
-      case "database_change":
-        console.log("🔄 SESSIONS - Processing database change:", event);
-        if (event.table === "streaming_sessions") {
-          setSessions((prev) => {
-            console.log(
-              "📊 SESSIONS - Current sessions before update:",
-              prev.length
-            );
-            const newSessions = [...prev];
-            const sessionData = event.new as StreamingSession;
+      if (data.event_type && data.session) {
+        const sessionEvent: AmbulanceSessionEvent = {
+          event_type: data.event_type,
+          session: data.session,
+          timestamp: data.timestamp || new Date().toISOString(),
+        };
 
-            if (event.event === "INSERT" && sessionData) {
-              // Add new session
-              console.log("➕ SESSIONS - Adding new session:", sessionData.id);
-              newSessions.push(sessionData);
-            } else if (event.event === "UPDATE" && sessionData) {
-              // Update existing session
+        setEvents((prev) => [...prev, sessionEvent]);
+
+        // Update sessions based on event type
+        setSessions((prev) => {
+          const newSessions = [...prev];
+
+          switch (data.event_type) {
+            case "session_created":
+              console.log("➕ Adding new ambulance session:", data.session.id);
+              newSessions.push(data.session);
+              break;
+
+            case "session_updated":
               const index = newSessions.findIndex(
-                (s) => s.id === sessionData.id
+                (s) => s.id === data.session.id
               );
               if (index >= 0) {
-                console.log(
-                  "🔄 SESSIONS - Updating existing session at index:",
-                  index
-                );
-                newSessions[index] = sessionData;
+                console.log("🔄 Updating ambulance session:", data.session.id);
+                newSessions[index] = data.session;
               } else {
-                console.log(
-                  "➕ SESSIONS - Adding session (not found for update):",
-                  sessionData.id
-                );
-                newSessions.push(sessionData);
+                newSessions.push(data.session);
               }
-            } else if (event.event === "DELETE" && event.old) {
-              // Remove deleted session
-              const oldData = event.old as StreamingSession;
-              console.log("🗑️ SESSIONS - Removing session:", oldData.id);
-              return newSessions.filter((s) => s.id !== oldData.id);
-            }
+              break;
 
-            console.log(
-              "📊 SESSIONS - Sessions after update:",
-              newSessions.length
-            );
-            return newSessions;
-          });
-        } else {
-          console.log(
-            "⚠️ SESSIONS - Ignoring event for different table:",
-            event.table
-          );
-        }
-        break;
+            case "session_ended":
+              console.log("🗑️ Ending ambulance session:", data.session.id);
+              return newSessions.filter((s) => s.id !== data.session.id);
+          }
 
-      case "error":
-        console.error("❌ SESSIONS - Realtime error:", event.error);
-        setError(event.error || "Unknown realtime error");
-        setIsConnected(false);
-        break;
-
-      case "heartbeat":
-        console.log("💓 SESSIONS - Heartbeat received");
-        // Keep connection alive
-        break;
-
-      default:
-        console.log("❓ SESSIONS - Unknown event type:", event.type);
+          return newSessions;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to parse ambulance session SSE event:", err);
+      setError("Failed to parse real-time event");
     }
   }, []);
 
@@ -123,22 +99,34 @@ export function useRealtimeSessions(options: UseRealtimeSessionsOptions = {}) {
     if (!enabled) return;
 
     try {
-      const connection = realtimeService.subscribeToSessions(
-        handleMessage,
-        patientId,
-        realtimeOptions
-      );
-      connectionRef.current = connection;
+      console.log("🔗 Connecting to ambulance sessions SSE stream");
+      const eventSource =
+        ambulanceStreamingService.getRealtimeAmbulanceSessions();
+
+      eventSource.onopen = () => {
+        setIsConnected(true);
+        console.log("📡 Connected to ambulance sessions stream");
+      };
+
+      eventSource.onmessage = handleMessage;
+
+      eventSource.onerror = (err) => {
+        console.error("❌ Ambulance sessions SSE error:", err);
+        setError("Connection to real-time updates failed");
+        setIsConnected(false);
+      };
+
+      eventSourceRef.current = eventSource;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect");
       setIsConnected(false);
     }
-  }, [enabled, patientId, handleMessage, realtimeOptions]);
+  }, [enabled, handleMessage]);
 
   const disconnect = useCallback(() => {
-    if (connectionRef.current) {
-      connectionRef.current.close();
-      connectionRef.current = null;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
     setIsConnected(false);
   }, []);
@@ -157,100 +145,95 @@ export function useRealtimeSessions(options: UseRealtimeSessionsOptions = {}) {
 
   return {
     sessions,
+    events,
     isConnected,
     error,
-    lastEvent,
     connect,
     disconnect,
     setSessions, // Allow manual session updates
+    clearEvents: useCallback(() => setEvents([]), []),
   };
 }
 
 /**
  * Hook for subscribing to real-time streaming rooms updates
  */
-export function useRealtimeRooms(options: UseRealtimeRoomsOptions = {}) {
-  const [rooms, setRooms] = useState<StreamingRoom[]>([]);
+export function useRealtimeRooms(options: UseRealtimeCameraRoomsOptions = {}) {
+  const [rooms, setRooms] = useState<CameraRoom[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastEvent, setLastEvent] = useState<RealtimeEvent | null>(null);
-  const connectionRef = useRef<RealtimeConnection | null>(null);
+  const [events, setEvents] = useState<CameraRoomEvent[]>([]);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const { enabled = true, ...realtimeOptions } = options;
 
-  const handleMessage = useCallback((event: RealtimeEvent) => {
-    console.log("🎯 ROOMS - Received realtime event:", event);
-    setLastEvent(event);
+  const handleMessage = useCallback((event: MessageEvent) => {
+    console.log("🎯 ROOMS - Received SSE event:", event.data);
     setError(null);
 
-    switch (event.type) {
-      case "connected":
-        setIsConnected(true);
-        console.log("📡 Connected to rooms stream");
-        break;
+    try {
+      const eventData =
+        typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      const roomEvent: CameraRoomEvent = {
+        event_type: eventData.event_type,
+        room: eventData.room,
+        timestamp: eventData.timestamp || new Date().toISOString(),
+      };
 
-      case "database_change":
-        console.log("🔄 ROOMS - Processing database change:", event);
-        if (event.table === "streaming_rooms") {
-          setRooms((prev) => {
-            console.log("📊 ROOMS - Current rooms before update:", prev.length);
-            const newRooms = [...prev];
-            const roomData = event.new as StreamingRoom;
+      setEvents((prev) => [...prev, roomEvent]);
 
-            if (event.event === "INSERT" && roomData) {
-              console.log("➕ ROOMS - Adding new room:", roomData.id);
-              newRooms.push(roomData);
-            } else if (event.event === "UPDATE" && roomData) {
-              const index = newRooms.findIndex((r) => r.id === roomData.id);
-              if (index >= 0) {
-                console.log(
-                  "🔄 ROOMS - Updating existing room at index:",
-                  index
-                );
-                console.log(
-                  "🔄 ROOMS - Old connected:",
-                  newRooms[index].connected,
-                  "-> New connected:",
-                  roomData.connected
-                );
-                newRooms[index] = roomData;
-              } else {
-                console.log(
-                  "➕ ROOMS - Adding room (not found for update):",
-                  roomData.id
-                );
-                newRooms.push(roomData);
-              }
-            } else if (event.event === "DELETE" && event.old) {
-              const oldData = event.old as StreamingRoom;
-              console.log("🗑️ ROOMS - Removing room:", oldData.id);
-              return newRooms.filter((r) => r.id !== oldData.id);
-            }
-
-            console.log("📊 ROOMS - Rooms after update:", newRooms.length);
-            return newRooms;
-          });
-        } else {
+      switch (roomEvent.event_type) {
+        case "room_created":
+        case "room_updated":
+        case "room_connected":
           console.log(
-            "⚠️ ROOMS - Ignoring event for different table:",
-            event.table
+            "🔄 ROOMS - Processing room update:",
+            roomEvent.event_type
           );
-        }
-        break;
+          if (roomEvent.room) {
+            setRooms((prev) => {
+              const exists = prev.find((r) => r.id === roomEvent.room.id);
+              if (exists) {
+                console.log(
+                  "🔄 ROOMS - Updating existing room:",
+                  roomEvent.room.id
+                );
+                return prev.map((r) =>
+                  r.id === roomEvent.room.id ? { ...r, ...roomEvent.room } : r
+                );
+              }
+              console.log("➕ ROOMS - Adding new room:", roomEvent.room.id);
+              return [...prev, roomEvent.room];
+            });
+          }
+          break;
 
-      case "error":
-        console.error("❌ ROOMS - Realtime error:", event.error);
-        setError(event.error || "Unknown realtime error");
-        setIsConnected(false);
-        break;
+        case "room_disconnected":
+          console.log("� ROOMS - Room disconnected:", roomEvent.room?.id);
+          if (roomEvent.room) {
+            setRooms((prev) =>
+              prev.map((r) =>
+                r.id === roomEvent.room.id
+                  ? {
+                      ...r,
+                      connected: false,
+                      connection_ended_at: roomEvent.timestamp,
+                    }
+                  : r
+              )
+            );
+          }
+          break;
 
-      case "heartbeat":
-        console.log("💓 ROOMS - Heartbeat received");
-        // Keep connection alive
-        break;
-
-      default:
-        console.log("❓ ROOMS - Unknown event type:", event.type);
+        default:
+          console.warn(
+            "❓ ROOMS - Unknown room event type:",
+            roomEvent.event_type
+          );
+      }
+    } catch (error) {
+      console.error("❌ ROOMS - Error processing event:", error);
+      setError(`Failed to process event: ${error}`);
     }
   }, []);
 
@@ -258,21 +241,31 @@ export function useRealtimeRooms(options: UseRealtimeRoomsOptions = {}) {
     if (!enabled) return;
 
     try {
-      const connection = realtimeService.subscribeToRooms(
-        handleMessage,
-        realtimeOptions
-      );
-      connectionRef.current = connection;
+      console.log("🔌 ROOMS - Connecting to camera rooms SSE...");
+      const eventSource = ambulanceStreamingService.getRealtimeCameraRooms();
+
+      eventSource.onmessage = handleMessage;
+      eventSource.onopen = () => {
+        setIsConnected(true);
+        console.log("✅ ROOMS - Connected to camera rooms SSE");
+      };
+      eventSource.onerror = (error) => {
+        console.error("❌ ROOMS - SSE connection error:", error);
+        setError("SSE connection failed");
+        setIsConnected(false);
+      };
+
+      eventSourceRef.current = eventSource;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect");
       setIsConnected(false);
     }
-  }, [enabled, realtimeOptions]);
+  }, [enabled, handleMessage]);
 
   const disconnect = useCallback(() => {
-    if (connectionRef.current) {
-      connectionRef.current.close();
-      connectionRef.current = null;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
     setIsConnected(false);
   }, []);
@@ -291,212 +284,17 @@ export function useRealtimeRooms(options: UseRealtimeRoomsOptions = {}) {
 
   return {
     rooms,
+    events,
     isConnected,
     error,
-    lastEvent,
     connect,
     disconnect,
     setRooms, // Allow manual room updates
+    clearEvents: useCallback(() => setEvents([]), []),
   };
 }
 
-/**
- * Hook for subscribing to real-time patient status updates
- */
-export function useRealtimePatient(options: UseRealtimePatientOptions) {
-  const [patientData, setPatientData] = useState<Record<string, any> | null>(
-    null
-  );
-  const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastEvent, setLastEvent] = useState<RealtimeEvent | null>(null);
-  const connectionRef = useRef<RealtimeConnection | null>(null);
-
-  const { patientId, enabled = true, ...realtimeOptions } = options;
-
-  const handleMessage = useCallback(
-    (event: RealtimeEvent) => {
-      setLastEvent(event);
-      setError(null);
-
-      switch (event.type) {
-        case "connected":
-          setIsConnected(true);
-          console.log(`📡 Connected to patient ${patientId} stream`);
-          break;
-
-        case "database_change":
-          if (event.table === "patients" && event.event === "UPDATE") {
-            const updatedPatient = event.new;
-            if (updatedPatient) {
-              setPatientData(updatedPatient);
-            }
-          }
-          break;
-
-        case "error":
-          setError(event.error || "Unknown realtime error");
-          setIsConnected(false);
-          break;
-
-        case "heartbeat":
-          // Keep connection alive
-          break;
-      }
-    },
-    [patientId]
-  );
-
-  const connect = useCallback(() => {
-    if (!enabled || !patientId) return;
-
-    try {
-      const connection = realtimeService.subscribeToPatientStatus(
-        patientId,
-        handleMessage,
-        realtimeOptions
-      );
-      connectionRef.current = connection;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect");
-      setIsConnected(false);
-    }
-  }, [enabled, patientId, realtimeOptions]);
-
-  const disconnect = useCallback(() => {
-    if (connectionRef.current) {
-      connectionRef.current.close();
-      connectionRef.current = null;
-    }
-    setIsConnected(false);
-  }, []);
-
-  useEffect(() => {
-    if (enabled && patientId) {
-      connect();
-    } else {
-      disconnect();
-    }
-
-    return () => {
-      disconnect();
-    };
-  }, [enabled, patientId]);
-
-  return {
-    patientData,
-    isConnected,
-    error,
-    lastEvent,
-    connect,
-    disconnect,
-    setPatientData, // Allow manual patient data updates
-  };
-}
-
-/**
- * Hook for general realtime service status and health
- */
-export function useRealtimeStatus() {
-  const [health, setHealth] = useState<any>(null);
-  const [connectionStatus, setConnectionStatus] = useState<Record<string, any>>(
-    {}
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const checkHealth = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const healthData = await realtimeService.checkHealth();
-      setHealth(healthData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Health check failed");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const updateConnectionStatus = useCallback(() => {
-    const status = realtimeService.getConnectionStatus();
-    setConnectionStatus(status);
-  }, []);
-
-  useEffect(() => {
-    checkHealth();
-    updateConnectionStatus();
-
-    // Update connection status periodically
-    const interval = setInterval(updateConnectionStatus, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return {
-    health,
-    connectionStatus,
-    isLoading,
-    error,
-    checkHealth,
-    updateConnectionStatus,
-  };
-}
-
-/**
- * Hook for testing realtime functionality
- */
-export function useRealtimeTest(patientId?: string) {
-  const [testEvents, setTestEvents] = useState<RealtimeEvent[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const connectionRef = useRef<RealtimeConnection | null>(null);
-
-  const handleMessage = useCallback((event: RealtimeEvent) => {
-    setTestEvents((prev) => [...prev, event]);
-    setError(null);
-
-    if (event.type === "connected") {
-      setIsConnected(true);
-    } else if (event.type === "error") {
-      setError(event.error || "Unknown error");
-      setIsConnected(false);
-    }
-  }, []);
-
-  const startTest = useCallback(() => {
-    setTestEvents([]);
-    setError(null);
-
-    try {
-      const connection = realtimeService.subscribeToTest(
-        handleMessage,
-        patientId
-      );
-      connectionRef.current = connection;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start test");
-    }
-  }, [patientId]);
-
-  const stopTest = useCallback(() => {
-    if (connectionRef.current) {
-      connectionRef.current.close();
-      connectionRef.current = null;
-    }
-    setIsConnected(false);
-  }, []);
-
-  const clearEvents = useCallback(() => {
-    setTestEvents([]);
-  }, []);
-
-  return {
-    testEvents,
-    isConnected,
-    error,
-    startTest,
-    stopTest,
-    clearEvents,
-  };
-}
+// Legacy functions removed - ambulance streaming system now uses:
+// - useRealtimeAmbulanceSessions() for ambulance session real-time updates
+// - useRealtimeRooms() for camera room real-time updates
+// - useAmbulanceStreaming() for complete ambulance streaming functionality

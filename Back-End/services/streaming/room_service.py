@@ -32,7 +32,7 @@ class Room:
             if self.is_active:
                 # Update room status in database
                 if self.room_db_id:
-                    await self._db_service.update_room_status(
+                    await self._db_service.update_camera_room_status(
                         self.room_db_id, connected=False
                     )
 
@@ -44,8 +44,11 @@ class Room:
                 self.is_active = False
                 logger.info("Room %s closed successfully", self.room_id)
 
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error("Error closing room %s: %s", self.room_id, str(e))
+            raise
         except Exception as e:
-            logger.error("Error closing room %s: %s", self.room_id, e)
+            logger.error("Unexpected error closing room %s: %s", self.room_id, str(e))
             raise
 
     async def handle_disconnection(self):
@@ -56,7 +59,7 @@ class Room:
 
             # Update room status to disconnected (but keep session active)
             if self.room_db_id:
-                await self._db_service.update_room_status(
+                await self._db_service.update_camera_room_status(
                     self.room_db_id, connected=False
                 )
 
@@ -74,9 +77,16 @@ class Room:
                 self.room_id,
             )
 
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error(
+                "Error handling disconnection for room %s: %s", self.room_id, str(e)
+            )
+            raise
         except Exception as e:
             logger.error(
-                "Error handling disconnection for room %s: %s", self.room_id, e
+                "Unexpected error handling disconnection for room %s: %s",
+                self.room_id,
+                str(e),
             )
             raise
 
@@ -89,15 +99,20 @@ class Room:
 
             # Update room status in database
             if self.room_db_id:
-                await self._db_service.update_room_status(
+                await self._db_service.update_camera_room_status(
                     self.room_db_id, connected=True
                 )
 
             self.is_active = True
             logger.info("Room %s reactivated successfully", self.room_id)
 
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error("Error reactivating room %s: %s", self.room_id, str(e))
+            raise
         except Exception as e:
-            logger.error("Error reactivating room %s: %s", self.room_id, e)
+            logger.error(
+                "Unexpected error reactivating room %s: %s", self.room_id, str(e)
+            )
             raise
 
     async def _handle_reconnection_timeout(self):
@@ -116,9 +131,16 @@ class Room:
         except asyncio.CancelledError:
             # Reconnection happened, timeout was cancelled
             logger.info("Reconnection timeout cancelled for room %s", self.room_id)
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error(
+                "Error in reconnection timeout for room %s: %s", self.room_id, str(e)
+            )
+            raise
         except Exception as e:
             logger.error(
-                "Error in reconnection timeout for room %s: %s", self.room_id, e
+                "Unexpected error in reconnection timeout for room %s: %s",
+                self.room_id,
+                str(e),
             )
             raise
 
@@ -160,30 +182,46 @@ class Room:
         """Update room status to disconnected when no connections remain."""
         try:
             if self.room_db_id:
-                await self._db_service.update_room_status(
+                await self._db_service.update_camera_room_status(
                     self.room_db_id, connected=False
                 )
                 logger.info(
                     "Updated room %s status to disconnected in database", self.room_id
                 )
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error(
+                "Database error updating room %s status to disconnected: %s",
+                self.room_id,
+                str(e),
+            )
         except Exception as e:
             logger.error(
-                "Error updating room %s status to disconnected: %s", self.room_id, e
+                "Unexpected error updating room %s status to disconnected: %s",
+                self.room_id,
+                str(e),
             )
 
     async def _update_room_connected(self):
         """Update room status to connected when first connection is added."""
         try:
             if self.room_db_id:
-                await self._db_service.update_room_status(
+                await self._db_service.update_camera_room_status(
                     self.room_db_id, connected=True
                 )
                 logger.info(
                     "Updated room %s status to connected in database", self.room_id
                 )
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error(
+                "Database error updating room %s status to connected: %s",
+                self.room_id,
+                str(e),
+            )
         except Exception as e:
             logger.error(
-                "Error updating room %s status to connected: %s", self.room_id, e
+                "Unexpected error updating room %s status to connected: %s",
+                self.room_id,
+                str(e),
             )
 
 
@@ -246,15 +284,17 @@ class RoomManager:
             except asyncio.CancelledError:
                 logger.info("Room cleanup task cancelled")
                 break
+            except (OSError, ConnectionError, RuntimeError) as e:
+                logger.error("Database error in periodic cleanup: %s", str(e))
             except Exception as e:
-                logger.error("Error in periodic cleanup: %s", e)
+                logger.error("Unexpected error in periodic cleanup: %s", str(e))
 
     async def _cleanup_inactive_rooms(self):
         """Clean up rooms that are no longer active."""
         try:
             # Clean up database first
             db_service = StreamingDatabaseService()
-            cleaned_count = await db_service.cleanup_inactive_rooms()
+            cleaned_count = await db_service.cleanup_inactive_camera_rooms()
 
             # Clean up in-memory rooms that are inactive
             inactive_rooms = [
@@ -273,8 +313,10 @@ class RoomManager:
                     len(inactive_rooms),
                 )
 
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error("Database error during room cleanup: %s", str(e))
         except Exception as e:
-            logger.error("Error during room cleanup: %s", e)
+            logger.error("Unexpected error during room cleanup: %s", str(e))
 
 
 # Global room manager instance
