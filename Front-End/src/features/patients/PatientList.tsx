@@ -183,7 +183,7 @@ export function PatientList() {
                           <EyeIcon className="h-4 w-4" />
                         </Button>
                       </Link>
-                      <Link href={`/patients/${patient.id}/edit`}>
+                      <Link href={`/patient-edit/${patient.id}/edit`}>
                         <Button variant="ghost" size="sm">
                           <PencilIcon className="h-4 w-4" />
                         </Button>

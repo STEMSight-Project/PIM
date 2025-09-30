@@ -9,17 +9,17 @@ import { useMedicalHistory, usePatients } from "@/hooks";
 import type { Patient } from "@/types/medical";
 import { formatDate } from "@/utils/cn";
 import {
-    ArrowLeftIcon,
-    CalendarIcon,
-    ChartBarIcon,
-    DocumentTextIcon,
-    EnvelopeIcon,
-    EyeIcon,
-    MapPinIcon,
-    PencilIcon,
-    PhoneIcon,
-    UserIcon,
-    VideoCameraIcon,
+  ArrowLeftIcon,
+  CalendarIcon,
+  ChartBarIcon,
+  DocumentTextIcon,
+  EnvelopeIcon,
+  EyeIcon,
+  MapPinIcon,
+  PencilIcon,
+  PhoneIcon,
+  UserIcon,
+  VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -128,12 +128,13 @@ export default function PatientDetailPage() {
               variant="outline"
               onClick={() => router.push(`/medical-history/${patientId}`)}
               className="bg-white text-purple-600 border-white hover:bg-purple-50"
-            >
+            > 
               <DocumentTextIcon className="h-4 w-4 mr-2" />
               Full Medical History
             </Button>
             <Button 
               variant="outline"
+              onClick={() => router.push(`/patient-edit/${patient.id}/edit`)}
               className="bg-purple-800 hover:bg-purple-900 text-white border-purple-800"
             >
               <PencilIcon className="h-4 w-4 mr-2" />
