@@ -2,10 +2,11 @@
 
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
-import { useRealtimeRooms, useRealtimeSessions } from "@/hooks/useRealtime";
+import { useRealtimeRooms } from "@/hooks/useRealtime";
 import { useStreaming } from "@/hooks/useStreaming";
 import { patientService, streamingService } from "@/services";
-import type { Patient, StreamingRoom, StreamingSession } from "@/types";
+import type { Patient, StreamingSession } from "@/types";
+import type { CameraRoom } from "@/types";
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
@@ -81,23 +82,17 @@ export default function PatientStreamingPage() {
   const [initialSessions, setInitialSessions] = useState<StreamingSession[]>(
     []
   );
-  const [initialRooms, setInitialRooms] = useState<StreamingRoom[]>([]);
+  // CameraRoom from new API doesn't include patient_id, so we augment it locally
+  type PatientCameraRoom = CameraRoom & { patient_id: string };
+
+  const [initialRooms, setInitialRooms] = useState<PatientCameraRoom[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   // Merged state for display - combines initial data with realtime updates
   const [mergedSessions, setMergedSessions] = useState<StreamingSession[]>([]);
-  const [mergedRooms, setMergedRooms] = useState<StreamingRoom[]>([]);
+  const [mergedRooms, setMergedRooms] = useState<PatientCameraRoom[]>([]);
 
-  // Realtime hooks for live updates (don't rely on these for initial data)
-  const {
-    sessions: realtimeSessions,
-    isConnected: sessionsConnected,
-    error: sessionsError,
-  } = useRealtimeSessions({
-    patientId,
-    enabled: true,
-  });
-
+  // Realtime hooks for live updates (rooms remain realtime)
   const {
     rooms: realtimeRooms,
     isConnected: roomsConnected,
@@ -147,47 +142,35 @@ export default function PatientStreamingPage() {
     );
   }, [initialSessions, initialRooms]);
 
-  // Apply realtime session updates to merged data
-  useEffect(() => {
-    if (realtimeSessions.length > 0) {
-      setMergedSessions((prev) => {
-        const updated = [...prev];
+  // NOTE: session-level realtime events are not available on the new API.
+  // We continue to rely on initialSessions + room-level realtime updates
+  // to infer changes to session state where possible.
 
-        realtimeSessions.forEach((session) => {
-          const index = updated.findIndex((s) => s.id === session.id);
-          if (index >= 0) {
-            // Update existing session
-            updated[index] = session;
-            console.log(`🔄 PATIENT PAGE - Updated session: ${session.id}`);
-          } else {
-            // Add new session
-            updated.push(session);
-            console.log(`➕ PATIENT PAGE - Added new session: ${session.id}`);
-          }
-        });
-
-        return updated;
-      });
-    }
-  }, [realtimeSessions]);
-
-  // Apply realtime room updates to merged data
+  // Apply realtime room updates to merged data (rooms are PatientCameraRoom)
   useEffect(() => {
     if (realtimeRooms.length > 0) {
       setMergedRooms((prev) => {
         const updated = [...prev];
 
         realtimeRooms.forEach((room) => {
+          // Try to find existing by id
           const index = updated.findIndex((r) => r.id === room.id);
+          const augmented: PatientCameraRoom = {
+            ...room,
+            // keep patient_id if we already have it in prev entry
+            patient_id:
+              (index >= 0 && updated[index].patient_id) || patientId || "",
+          };
+
           if (index >= 0) {
             // Update existing room
-            updated[index] = room;
+            updated[index] = { ...updated[index], ...augmented };
             console.log(
               `🔄 PATIENT PAGE - Updated room: ${room.id} connected: ${room.connected}`
             );
           } else {
             // Add new room
-            updated.push(room);
+            updated.push(augmented);
             console.log(`➕ PATIENT PAGE - Added new room: ${room.id}`);
           }
         });
@@ -198,13 +181,13 @@ export default function PatientStreamingPage() {
   }, [realtimeRooms]);
 
   useEffect(() => {
-    // Set error if either realtime connection has issues
-    if (sessionsError || roomsError) {
-      setError(sessionsError || roomsError || null);
+    // Set error if realtime rooms connection has issues
+    if (roomsError) {
+      setError(roomsError || null);
     } else {
       setError(null);
     }
-  }, [sessionsError, roomsError]);
+  }, [roomsError]);
 
   const fetchPatientData = async () => {
     try {
@@ -224,43 +207,34 @@ export default function PatientStreamingPage() {
   const fetchInitialData = async () => {
     try {
       setDataLoading(true);
-
-      // Fetch sessions with rooms (this gives us both sessions and rooms data)
-      const sessionsResponse = await streamingService.getSessionsWithRooms();
+      // Use existing API: getSessions returns sessions (may include rooms in separate calls)
+      const sessionsResponse = await streamingService.getSessions();
       if (sessionsResponse.data) {
-        // Extract sessions
-        const sessions = sessionsResponse.data.map((sessionWithRooms) => ({
-          id: sessionWithRooms.id,
-          patient_id: sessionWithRooms.patient_id,
-          status: sessionWithRooms.status,
-          started_at: sessionWithRooms.started_at,
-          ended_at: sessionWithRooms.ended_at,
-          created_at: sessionWithRooms.started_at, // Fallback
-          updated_at: sessionWithRooms.started_at, // Fallback
-        }));
+        // Map sessions to StreamingSession shape
+        const sessions = sessionsResponse.data.map((s: any) => ({
+          id: s.id,
+          patient_id: s.patient_id,
+          status: s.status,
+          started_at: s.started_at,
+          ended_at: s.ended_at,
+          created_at: s.created_at || s.started_at,
+          updated_at: s.updated_at || s.started_at,
+        })) as StreamingSession[];
 
-        // Extract all rooms from all sessions with proper type mapping
-        const rooms: StreamingRoom[] = sessionsResponse.data.flatMap(
-          (sessionWithRooms) =>
-            sessionWithRooms.streaming_rooms.map((room) => ({
-              id: room.id,
-              patient_id: sessionWithRooms.patient_id,
-              room_id: room.room_id,
-              session_id: room.session_id,
-              device_name: room.device_name || "",
-              connected: room.connected,
-              started_at: room.created_at, // Use created_at as started_at
-              ended_at: room.ended_at,
-              last_seen: room.updated_at, // Use updated_at as last_seen
-              created_at: room.created_at,
-              updated_at: room.updated_at,
-            }))
-        );
+        // Rooms are fetched from a separate endpoint per session (if available).
+        // For backwards compatibility, try to fetch rooms for each session and
+        // aggregate them. If the API doesn't provide room endpoints, we fall back
+        // to an empty room list.
+        const roomsAccumulator: PatientCameraRoom[] = [];
+
+        // The backend no longer exposes a per-session rooms endpoint in the
+        // unified API. We keep roomsAccumulator empty and rely on realtime room
+        // events to populate rooms where available.
 
         setInitialSessions(sessions);
-        setInitialRooms(rooms);
+        setInitialRooms(roomsAccumulator);
         console.log(
-          `📥 PATIENT PAGE - Loaded ${sessions.length} initial sessions, ${rooms.length} initial rooms`
+          `📥 PATIENT PAGE - Loaded ${sessions.length} initial sessions, ${roomsAccumulator.length} initial rooms`
         );
       }
     } catch (err) {
@@ -357,14 +331,14 @@ export default function PatientStreamingPage() {
               sessions active •{" "}
               {
                 mergedRooms.filter(
-                  (r: StreamingRoom) =>
+                  (r: PatientCameraRoom) =>
                     r.patient_id === patientId && r.connected
                 ).length
               }
               /
               {
                 mergedRooms.filter(
-                  (r: StreamingRoom) => r.patient_id === patientId
+                  (r: PatientCameraRoom) => r.patient_id === patientId
                 ).length
               }{" "}
               rooms connected
@@ -401,7 +375,7 @@ export default function PatientStreamingPage() {
       )}
 
       {/* Realtime connection warnings */}
-      {(!sessionsConnected || !roomsConnected) && (
+      {!roomsConnected && (
         <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
           <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500 mt-0.5" />
           <div className="flex-1">
@@ -409,9 +383,7 @@ export default function PatientStreamingPage() {
               Realtime connection issues detected. Some data may not be live.
             </p>
             <div className="text-sm text-yellow-600 mt-1">
-              {!sessionsConnected && (
-                <div>• Sessions realtime: Disconnected</div>
-              )}
+              <div>• Sessions realtime: unavailable with new API</div>
               {!roomsConnected && <div>• Rooms realtime: Disconnected</div>}
             </div>
           </div>
@@ -600,7 +572,7 @@ export default function PatientStreamingPage() {
                       const isExpanded = isSessionExpanded(session.id);
                       // Get rooms that belong to this session
                       const sessionRooms = mergedRooms.filter(
-                        (r: StreamingRoom) => r.session_id === session.id
+                        (r: PatientCameraRoom) => r.session_id === session.id
                       );
 
                       return (
@@ -690,7 +662,7 @@ export default function PatientStreamingPage() {
                                     <VideoCameraIcon className="h-4 w-4 mr-2 text-gray-500" />
                                     Rooms in this session:
                                   </h5>
-                                  {sessionRooms.map((room: StreamingRoom) => (
+                                  {sessionRooms.map((room: PatientCameraRoom) => (
                                     <div
                                       key={room.id}
                                       className={`p-3 rounded-lg border cursor-pointer transition-all ${
@@ -708,10 +680,7 @@ export default function PatientStreamingPage() {
                                         <div className="flex items-center space-x-2">
                                           <VideoCameraIcon className="h-4 w-4 text-gray-500" />
                                           <span className="text-sm font-medium">
-                                            {room.device_name ||
-                                              `Room ${
-                                                room.room_id.split("-")[0]
-                                              }...`}
+                                            {room.device_name || `Room ${room.room_id.split("-")[0]}...`}
                                           </span>
                                           {selectedRoomId === room.room_id && (
                                             <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
@@ -723,26 +692,14 @@ export default function PatientStreamingPage() {
                                         <div className="flex items-center space-x-2">
                                           <div
                                             className={`h-2 w-2 rounded-full ${
-                                              room.connected
-                                                ? "bg-green-500"
-                                                : "bg-gray-400"
+                                              room.connected ? "bg-green-500" : "bg-gray-400"
                                             }`}
                                           />
                                           <Badge
-                                            variant={
-                                              room.connected
-                                                ? "default"
-                                                : "secondary"
-                                            }
-                                            className={
-                                              room.connected
-                                                ? "bg-green-500 text-white"
-                                                : ""
-                                            }
+                                            variant={room.connected ? "default" : "secondary"}
+                                            className={room.connected ? "bg-green-500 text-white" : ""}
                                           >
-                                            {room.connected
-                                              ? "Connected"
-                                              : "Disconnected"}
+                                            {room.connected ? "Connected" : "Disconnected"}
                                           </Badge>
                                         </div>
                                       </div>
@@ -750,20 +707,16 @@ export default function PatientStreamingPage() {
                                       <div className="text-xs text-gray-600 space-y-1 ml-6">
                                         <p>Room ID: {room.room_id}</p>
                                         <p>
-                                          Started:{" "}
-                                          {new Date(
-                                            room.started_at
-                                          ).toLocaleString()}
+                                          Started: {" "}
+                                          {room.connection_started_at
+                                            ? new Date(room.connection_started_at).toLocaleString()
+                                            : "—"}
                                         </p>
                                         <p>
-                                          Last Seen:{" "}
-                                          {new Date(
-                                            room.last_seen
-                                          ).toLocaleString()}
+                                          Last Seen: {" "}
+                                          {room.last_seen ? new Date(room.last_seen).toLocaleString() : "—"}
                                         </p>
-                                        {room.device_name && (
-                                          <p>Device: {room.device_name}</p>
-                                        )}
+                                        {room.device_name && <p>Device: {room.device_name}</p>}
                                       </div>
                                     </div>
                                   ))}
@@ -798,13 +751,7 @@ export default function PatientStreamingPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Realtime Sessions:</span>
-                <span
-                  className={
-                    sessionsConnected ? "text-green-600" : "text-red-600"
-                  }
-                >
-                  {sessionsConnected ? "Connected" : "Disconnected"}
-                </span>
+                <span className="text-gray-500">Unavailable (use rooms realtime)</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Realtime Rooms:</span>

@@ -143,6 +143,36 @@ npm run dev
 - Two client patterns: `SUPABASE_AUTH` for user sessions, `SUPABASE` for data queries
 - Import from `core.common`: `supabase`, `supabase_auth`, `logger`
 
+### Testing Credentials
+
+**For API endpoint testing and authentication:**
+
+- **Email**: `nguyenphuctran@csus.edu`
+- **Password**: `Patrick2911@1`
+
+Use these credentials for:
+
+- Testing protected API endpoints that require Bearer token authentication
+- Validating authentication flows in development
+- Backend integration testing with real user sessions
+- JWT token generation for API testing tools (Postman, curl, etc.)
+
+**Authentication Flow for Testing:**
+
+```bash
+# Login to get JWT token
+curl -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "nguyenphuctran@csus.edu",
+    "password": "Patrick2911@1"
+  }'
+
+# Use returned access_token in Authorization header
+curl -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  "http://localhost:8000/protected-endpoint"
+```
+
 ### Router Authentication Patterns
 
 **Two types of routers based on authentication requirements:**

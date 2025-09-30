@@ -1,7 +1,7 @@
 "use client";
 
-import { streamingService } from "@/services";
-import type { StreamingSession } from "@/services/streamingService";
+import { ambulanceStreamingService } from "@/services/streamingService";
+import type { AmbulanceSession } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UseStreamingReturn {
@@ -21,14 +21,14 @@ interface UseStreamingReturn {
   canManualRetry: boolean;
   isUserCancelledReconnection: boolean;
 
-  currentSession: StreamingSession | null;
+  currentSession: AmbulanceSession | null;
 
   // Refs for external access
   videoRef: React.RefObject<HTMLVideoElement | null>;
   peerConnectionRef: React.RefObject<RTCPeerConnection | null>;
 
   // Actions
-  startStreaming: (patientId: string) => Promise<void>;
+  startStreaming: (ambulanceId: string, cameraId?: string) => Promise<void>;
   stopStreaming: () => void;
   clearError: () => void;
   toggleFullscreen: () => void;
@@ -58,7 +58,7 @@ export function useStreaming(): UseStreamingReturn {
   const [isUserCancelledReconnection, setIsUserCancelledReconnection] =
     useState(false);
 
-  const [currentSession, setCurrentSession] = useState<StreamingSession | null>(
+  const [currentSession, setCurrentSession] = useState<AmbulanceSession | null>(
     null
   );
   const maxReconnectionAttempts = 5;
@@ -66,7 +66,8 @@ export function useStreaming(): UseStreamingReturn {
   const videoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const currentPatientIdRef = useRef<string | null>(null);
+  const currentAmbulanceIdRef = useRef<string | null>(null);
+  const currentCameraIdRef = useRef<string | null>(null);
   const reconnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUserStoppedRef = useRef(false);
 
@@ -89,20 +90,11 @@ export function useStreaming(): UseStreamingReturn {
   }, []);
 
   const updateSessionStatus = useCallback(
-    async (
-      sessionId: string,
-      status: "active" | "ended" | "error" | "disconnected",
-      isLive?: boolean
-    ) => {
+    async (sessionId: string, isActive: boolean) => {
       try {
-        const updateData: any = { status };
-        if (isLive !== undefined) {
-          updateData.is_live = isLive;
-        }
-
-        const response = await streamingService.updateSession(
+        const response = await ambulanceStreamingService.updateAmbulanceSession(
           sessionId,
-          updateData
+          { is_active: isActive }
         );
         if (response.data) {
           setCurrentSession(response.data);
@@ -115,27 +107,28 @@ export function useStreaming(): UseStreamingReturn {
   );
 
   const findActiveSession = useCallback(
-    async (patientId: string): Promise<StreamingSession | null> => {
+    async (ambulanceId: string): Promise<AmbulanceSession | null> => {
       try {
-        // Look for active sessions for this patient (started by RPi devices)
-        const sessionsResponse = await streamingService.getSessions({
-          patient_id: patientId,
-          status: "active", // Only get live/active sessions
-        });
+        // Look for active sessions for this ambulance (started by RPi devices)
+        const sessionsResponse =
+          await ambulanceStreamingService.getAmbulanceSessions({
+            ambulance_id: ambulanceId,
+            is_active: true, // Only get active sessions
+          });
 
         if (sessionsResponse.data && sessionsResponse.data.length > 0) {
           const session = sessionsResponse.data[0];
-          console.log("Found existing active session:", session.id);
+          console.log("Found existing active ambulance session:", session.id);
           setCurrentSession(session);
           return session;
         }
 
         // No active session found - RPi device hasn't started streaming yet
-        console.log("No active session found for patient:", patientId);
+        console.log("No active session found for ambulance:", ambulanceId);
         setCurrentSession(null);
         return null;
       } catch (error) {
-        console.error("Error finding active session:", error);
+        console.error("Error finding active ambulance session:", error);
         setCurrentSession(null);
         return null;
       }
@@ -151,7 +144,7 @@ export function useStreaming(): UseStreamingReturn {
   const handleAutoReconnection = useCallback(() => {
     if (
       isUserStoppedRef.current ||
-      !currentPatientIdRef.current ||
+      !currentAmbulanceIdRef.current ||
       isUserCancelledReconnection
     ) {
       return;
@@ -202,7 +195,11 @@ export function useStreaming(): UseStreamingReturn {
     );
 
     reconnectionTimeoutRef.current = setTimeout(async () => {
-      if (isUserStoppedRef.current || !currentPatientIdRef.current) {
+      if (
+        isUserStoppedRef.current ||
+        !currentAmbulanceIdRef.current ||
+        !currentCameraIdRef.current
+      ) {
         return;
       }
 
@@ -215,7 +212,7 @@ export function useStreaming(): UseStreamingReturn {
           peerConnectionRef.current.close();
         }
 
-        const pc = await createPeerConnection(currentPatientIdRef.current);
+        const pc = await createPeerConnection(currentCameraIdRef.current!);
         peerConnectionRef.current = pc;
 
         console.log(`Reconnection attempt ${nextAttempt} successful`);
@@ -288,7 +285,7 @@ export function useStreaming(): UseStreamingReturn {
   }, []);
 
   const createPeerConnection = useCallback(
-    async (patientId: string): Promise<RTCPeerConnection> => {
+    async (cameraId: string): Promise<RTCPeerConnection> => {
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -411,12 +408,15 @@ export function useStreaming(): UseStreamingReturn {
         );
       });
 
-      // Send offer to server and get answer
+      // Send offer to server and get answer using ambulance camera streaming
       try {
-        const response = await streamingService.publishViewer(patientId, {
-          sdp: pc.localDescription!.sdp,
-          type: pc.localDescription!.type,
-        });
+        const response = await ambulanceStreamingService.connectCameraViewer(
+          cameraId,
+          {
+            sdp: pc.localDescription!.sdp,
+            type: pc.localDescription!.type as any,
+          }
+        );
 
         if (response.data && response.data.sdp && response.data.type) {
           // Validate that the type is a valid RTCSdpType
@@ -438,7 +438,9 @@ export function useStreaming(): UseStreamingReturn {
               type: responseType,
             })
           );
-          console.log("Remote description set successfully");
+          console.log(
+            "Remote description set successfully for ambulance camera"
+          );
         } else {
           const errorMessage =
             response.error || "No SDP answer received from server";
@@ -462,46 +464,66 @@ export function useStreaming(): UseStreamingReturn {
   );
 
   const startStreaming = useCallback(
-    async (patientId: string): Promise<void> => {
+    async (ambulanceId: string, cameraId?: string): Promise<void> => {
       if (isConnecting || isConnected) {
         console.warn("Streaming already in progress");
         return;
       }
 
-      if (!patientId) {
-        setError("Patient ID is required for streaming");
+      if (!ambulanceId) {
+        setError("Ambulance ID is required for streaming");
         return;
       }
 
       try {
         setIsConnecting(true);
         setError(null);
-        setUserFriendlyStatus("Looking for active camera...");
+        setUserFriendlyStatus("Looking for active ambulance camera...");
         isUserStoppedRef.current = false;
-        currentPatientIdRef.current = patientId;
+        currentAmbulanceIdRef.current = ambulanceId;
         resetReconnectionState();
 
         // Look for existing active session (started by RPi device)
-        const session = await findActiveSession(patientId);
+        const session = await findActiveSession(ambulanceId);
         if (!session) {
           throw new Error(
-            "No active camera session found. Please ensure the camera device is connected and streaming."
+            "No active ambulance session found. Please ensure the ambulance camera device is connected and streaming."
           );
         }
+
+        // If no specific camera ID provided, get cameras for this ambulance
+        let targetCameraId = cameraId;
+        if (!targetCameraId) {
+          const camerasResponse =
+            await ambulanceStreamingService.getAmbulanceCameras(ambulanceId);
+          if (camerasResponse.data && camerasResponse.data.length > 0) {
+            targetCameraId = camerasResponse.data[0].id; // Use first available camera
+          } else {
+            throw new Error("No cameras found for this ambulance");
+          }
+        }
+
+        // Store the camera ID after it's determined
+        currentCameraIdRef.current = targetCameraId;
 
         // Clean up any existing connection
         if (peerConnectionRef.current) {
           peerConnectionRef.current.close();
         }
 
-        const pc = await createPeerConnection(patientId);
+        if (!targetCameraId) {
+          throw new Error("Camera ID is required for streaming");
+        }
+        const pc = await createPeerConnection(targetCameraId);
         peerConnectionRef.current = pc;
 
         console.log(
-          "Streaming connection established with session:",
-          session.id
+          "Ambulance streaming connection established with session:",
+          session.id,
+          "camera:",
+          targetCameraId
         );
-        setUserFriendlyStatus("Connected successfully!");
+        setUserFriendlyStatus("Connected to ambulance camera successfully!");
       } catch (err) {
         let message = "Failed to start streaming";
         let userMessage = "Unable to connect to camera";
@@ -535,7 +557,8 @@ export function useStreaming(): UseStreamingReturn {
         console.error("Error starting streaming:", err);
         setIsConnecting(false);
         setIsReconnecting(false);
-        currentPatientIdRef.current = null;
+        currentAmbulanceIdRef.current = null;
+        currentCameraIdRef.current = null;
 
         // Note: Don't update session status - we're just a viewer, errors don't affect RPi session
       }
@@ -553,7 +576,8 @@ export function useStreaming(): UseStreamingReturn {
 
   const stopStreaming = useCallback(() => {
     isUserStoppedRef.current = true;
-    currentPatientIdRef.current = null;
+    currentAmbulanceIdRef.current = null;
+    currentCameraIdRef.current = null;
     resetReconnectionState();
 
     // Don't end the session - it's managed by RPi device
@@ -580,15 +604,18 @@ export function useStreaming(): UseStreamingReturn {
   }, [resetReconnectionState]);
 
   const reconnect = useCallback(async (): Promise<void> => {
-    if (!currentPatientIdRef.current) {
-      setError("No patient ID available for reconnection");
+    if (!currentAmbulanceIdRef.current) {
+      setError("No ambulance ID available for reconnection");
       return;
     }
 
-    console.log("Manual reconnection initiated");
+    console.log("Manual ambulance reconnection initiated");
     setIsUserCancelledReconnection(false);
     resetReconnectionState();
-    await startStreaming(currentPatientIdRef.current);
+    await startStreaming(
+      currentAmbulanceIdRef.current,
+      currentCameraIdRef.current || undefined
+    );
   }, [startStreaming, resetReconnectionState]);
 
   const cancelReconnection = useCallback(() => {
