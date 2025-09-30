@@ -134,7 +134,7 @@ export default function PatientDetailPage() {
             </Button>
             <Button 
               variant="outline"
-              onClick={() => router.push('/patient-edit/${patient.id}/edit')}
+              onClick={() => router.push(`/patient-edit/${patient.id}/edit`)}
               className="bg-purple-800 hover:bg-purple-900 text-white border-purple-800"
             >
               <PencilIcon className="h-4 w-4 mr-2" />
