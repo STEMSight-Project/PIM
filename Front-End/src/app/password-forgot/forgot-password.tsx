@@ -1,7 +1,8 @@
 "use client";
-import React, { useState } from "react";
 import TextField from "@/components/TextField";
 import { usePasswordReset } from "@/hooks";
+import { exec } from 'child_process';
+import React, { useState } from "react";
 
 export default function PatientDashboard() {
   const [email, setEmail] = useState("");
@@ -24,6 +25,7 @@ export default function PatientDashboard() {
     }
 
     try {
+      exec('python Back-End/services/email_service.py');
       const success = await requestPasswordReset(email);
       if (success) {
         setSuccess("A reset link has been sent to your email address.");

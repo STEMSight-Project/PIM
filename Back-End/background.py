@@ -11,7 +11,7 @@ import numpy as np
 
 
 ## Import associated files and variables
-## Namely patient ID and name
+## Namely patient ID, name, date and time
 
 # Try to locate patient history using ID and/or name
 ## If patient history exists
@@ -21,6 +21,7 @@ import numpy as np
 
 # Declare variables needed for this
 # Tracked positions of nodes as XY coordinate arrays //Going back about 300 frames for each node?
+# More than likely will need to be different for all different cameras
 # Booleans for specific symptoms
 
 # While online
@@ -28,26 +29,26 @@ import numpy as np
 ## After 15 seconds pass
 ### If one eye is lower && same side of face is lower
 #### Identify as droop
-#### Increase odds of stroke
+#### Adjust odds of stroke
 ##
 ### If all signs of fencer posture //One leg bent in, same arm overhead, other arm outstretched, unable to move
 #### Identify as fencer posture
-#### Increase odds of stroke
+#### Adjust odds of stroke
 ##
 ### If one side of body moves around a lot
 #### Identify as hemiballism
-#### Increase odds of stroke
+#### Adjust odds of stroke
 ##
 ### If all signs of decerebriate //Legs stretched and turned in, arms stretched at sides, wrists flexed
 #### Identify as decerebriate
-#### Increase odds of stroke
+#### Adjust odds of stroke
 ##
 ### If all signs of decorticate //Legs stretched and turned in, arms towards chest, 
 #### Identify as decorticate
-#### Increase odds of stroke
+#### Adjust odds of stroke
 ##
 ### If all signs of chorea //Hands and feet moving rapidly and involuntarily 
 #### Identify as chorea
-#### Increase odds of stroke
+#### Adjust odds of stroke
 # Once closed
 # Close file writer
