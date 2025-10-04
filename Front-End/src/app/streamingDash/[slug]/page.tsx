@@ -4,9 +4,12 @@ import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
 import { useRealtimeRooms } from "@/hooks/useRealtime";
 import { useStreaming } from "@/hooks/useStreaming";
-import { patientService, streamingService } from "@/services";
-import type { Patient, StreamingSession } from "@/types";
-import type { CameraRoom } from "@/types";
+import { ambulanceStreamingService } from "@/services";
+import type {
+  AmbulanceSession,
+  AmbulanceStreamingStatus,
+  CameraRoom,
+} from "@/types";
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
@@ -18,7 +21,7 @@ import {
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // Simple Badge component
 const Badge = ({
@@ -52,7 +55,6 @@ export default function PatientStreamingPage() {
   const patientId = params.slug as string;
   const roomId = searchParams.get("room"); // Get room ID from URL params
 
-  const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(roomId);
@@ -79,17 +81,19 @@ export default function PatientStreamingPage() {
     expandedSessions.has(sessionId);
 
   // Initial data state - fetched once on load
-  const [initialSessions, setInitialSessions] = useState<StreamingSession[]>(
+  const [initialSessions, setInitialSessions] = useState<AmbulanceSession[]>(
     []
   );
   // CameraRoom from new API doesn't include patient_id, so we augment it locally
   type PatientCameraRoom = CameraRoom & { patient_id: string };
+  // AmbulanceSession might include patient_id in some contexts
+  type PatientAmbulanceSession = AmbulanceSession & { patient_id?: string };
 
   const [initialRooms, setInitialRooms] = useState<PatientCameraRoom[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [, setDataLoading] = useState(true);
 
   // Merged state for display - combines initial data with realtime updates
-  const [mergedSessions, setMergedSessions] = useState<StreamingSession[]>([]);
+  const [mergedSessions, setMergedSessions] = useState<AmbulanceSession[]>([]);
   const [mergedRooms, setMergedRooms] = useState<PatientCameraRoom[]>([]);
 
   // Realtime hooks for live updates (rooms remain realtime)
@@ -126,12 +130,54 @@ export default function PatientStreamingPage() {
     cancelReconnection,
   } = useStreaming();
 
-  useEffect(() => {
-    if (patientId) {
-      fetchPatientData();
-      fetchInitialData();
+  const fetchInitialData = useCallback(async () => {
+    try {
+      setDataLoading(true);
+      // Get all ambulance sessions
+      const sessionsResponse =
+        await ambulanceStreamingService.getAmbulanceSessions({});
+
+      if (sessionsResponse.data) {
+        // Get all sessions without patient filtering
+        const sessions = sessionsResponse.data;
+
+        // Get all camera rooms from ambulance streaming status
+        const statusResponse =
+          await ambulanceStreamingService.getAmbulancesStreamingStatus();
+        const roomsAccumulator: PatientCameraRoom[] = [];
+
+        if (statusResponse.data && Array.isArray(statusResponse.data)) {
+          statusResponse.data.forEach((status: AmbulanceStreamingStatus) => {
+            if (status.camera_rooms && Array.isArray(status.camera_rooms)) {
+              status.camera_rooms.forEach((room: CameraRoom) => {
+                roomsAccumulator.push({
+                  ...room,
+                  patient_id: "", // No specific patient context needed
+                });
+              });
+            }
+          });
+        }
+
+        setInitialSessions(sessions);
+        setInitialRooms(roomsAccumulator);
+        console.log(
+          `📥 ROOM VIEWER - Loaded ${sessions.length} initial sessions, ${roomsAccumulator.length} initial rooms`
+        );
+      }
+    } catch (err) {
+      console.error("Failed to load initial data:", err);
+      setError("Failed to load streaming data");
+    } finally {
+      setDataLoading(false);
+      setLoading(false);
     }
-  }, [patientId]);
+  }, []);
+
+  useEffect(() => {
+    // Fetch initial data for all rooms
+    fetchInitialData();
+  }, [fetchInitialData]);
 
   // Initialize merged data when initial data is loaded
   useEffect(() => {
@@ -157,21 +203,20 @@ export default function PatientStreamingPage() {
           const index = updated.findIndex((r) => r.id === room.id);
           const augmented: PatientCameraRoom = {
             ...room,
-            // keep patient_id if we already have it in prev entry
-            patient_id:
-              (index >= 0 && updated[index].patient_id) || patientId || "",
+            // No specific patient context needed for room viewer
+            patient_id: (index >= 0 && updated[index].patient_id) || "",
           };
 
           if (index >= 0) {
             // Update existing room
             updated[index] = { ...updated[index], ...augmented };
             console.log(
-              `🔄 PATIENT PAGE - Updated room: ${room.id} connected: ${room.connected}`
+              `🔄 ROOM VIEWER - Updated room: ${room.id} connected: ${room.connected}`
             );
           } else {
             // Add new room
             updated.push(augmented);
-            console.log(`➕ PATIENT PAGE - Added new room: ${room.id}`);
+            console.log(`➕ ROOM VIEWER - Added new room: ${room.id}`);
           }
         });
 
@@ -189,62 +234,6 @@ export default function PatientStreamingPage() {
     }
   }, [roomsError]);
 
-  const fetchPatientData = async () => {
-    try {
-      const response = await patientService.getById(patientId);
-      if (response.error || !response.data) {
-        setError("Patient not found");
-        return;
-      }
-      setPatient(response.data);
-    } catch (err) {
-      setError("Failed to load patient data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchInitialData = async () => {
-    try {
-      setDataLoading(true);
-      // Use existing API: getSessions returns sessions (may include rooms in separate calls)
-      const sessionsResponse = await streamingService.getSessions();
-      if (sessionsResponse.data) {
-        // Map sessions to StreamingSession shape
-        const sessions = sessionsResponse.data.map((s: any) => ({
-          id: s.id,
-          patient_id: s.patient_id,
-          status: s.status,
-          started_at: s.started_at,
-          ended_at: s.ended_at,
-          created_at: s.created_at || s.started_at,
-          updated_at: s.updated_at || s.started_at,
-        })) as StreamingSession[];
-
-        // Rooms are fetched from a separate endpoint per session (if available).
-        // For backwards compatibility, try to fetch rooms for each session and
-        // aggregate them. If the API doesn't provide room endpoints, we fall back
-        // to an empty room list.
-        const roomsAccumulator: PatientCameraRoom[] = [];
-
-        // The backend no longer exposes a per-session rooms endpoint in the
-        // unified API. We keep roomsAccumulator empty and rely on realtime room
-        // events to populate rooms where available.
-
-        setInitialSessions(sessions);
-        setInitialRooms(roomsAccumulator);
-        console.log(
-          `📥 PATIENT PAGE - Loaded ${sessions.length} initial sessions, ${roomsAccumulator.length} initial rooms`
-        );
-      }
-    } catch (err) {
-      console.error("Failed to load initial data:", err);
-      setError("Failed to load streaming data");
-    } finally {
-      setDataLoading(false);
-    }
-  };
-
   const handleStartStream = () => {
     clearStreamingError();
     startStreaming(patientId);
@@ -254,10 +243,7 @@ export default function PatientStreamingPage() {
     stopStreaming();
   };
 
-  const handleReconnect = () => {
-    clearStreamingError();
-    reconnect();
-  };
+  // Reconnect functionality available via reconnect() from useStreaming
 
   const getConnectionStatus = () => {
     if (isConnecting || isReconnecting) return "Connecting...";
@@ -276,10 +262,129 @@ export default function PatientStreamingPage() {
   if (loading) {
     return (
       <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading patient stream...</p>
+        {/* Loading Header */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="h-10 w-24 bg-gray-200 rounded-md animate-pulse"></div>
+          <div className="flex-1">
+            <div className="h-8 w-64 bg-gray-200 rounded animate-pulse mb-2"></div>
+            <div className="h-4 w-96 bg-gray-100 rounded animate-pulse"></div>
+          </div>
+          <div className="h-6 w-20 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Loading Video Stream */}
+          <div className="lg:col-span-2">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="h-6 w-40 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="h-6 w-16 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="relative aspect-video bg-gradient-to-br from-purple-50 to-violet-50 rounded-lg overflow-hidden border border-purple-100">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="relative mb-6">
+                        {/* Main spinner */}
+                        <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-200 border-t-purple-600 mx-auto"></div>
+                        {/* Pulse effect */}
+                        <div className="absolute inset-0 animate-ping rounded-full h-16 w-16 border-2 border-purple-400 opacity-30 mx-auto"></div>
+                      </div>
+                      <h3 className="text-xl font-semibold text-purple-900 mb-2">
+                        Loading Patient Stream
+                      </h3>
+                      <p className="text-purple-700">
+                        Preparing camera connection and patient data...
+                      </p>
+                      <div className="mt-4 flex items-center justify-center space-x-2">
+                        <div className="h-2 w-2 bg-purple-500 rounded-full animate-bounce"></div>
+                        <div
+                          className="h-2 w-2 bg-purple-500 rounded-full animate-bounce"
+                          style={{ animationDelay: "0.1s" }}
+                        ></div>
+                        <div
+                          className="h-2 w-2 bg-purple-500 rounded-full animate-bounce"
+                          style={{ animationDelay: "0.2s" }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Loading Controls */}
+                <div className="flex items-center justify-center gap-4 mt-4">
+                  <div className="h-10 w-32 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Loading Side Panel */}
+          <div className="space-y-6">
+            {/* Loading Patient Info */}
+            <Card>
+              <CardHeader>
+                <div className="h-6 w-36 bg-gray-200 rounded animate-pulse"></div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-2">
+                  <div className="h-4 w-16 bg-gray-100 rounded animate-pulse"></div>
+                  <div className="h-5 w-32 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4 w-20 bg-gray-100 rounded animate-pulse"></div>
+                  <div className="h-5 w-24 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4 w-12 bg-gray-100 rounded animate-pulse"></div>
+                  <div className="h-5 w-16 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Loading Sessions */}
+            <Card>
+              <CardHeader>
+                <div className="h-6 w-32 bg-gray-200 rounded animate-pulse mb-2"></div>
+                <div className="h-4 w-48 bg-gray-100 rounded animate-pulse"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="border border-gray-200 rounded-lg p-4"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-3">
+                          <div className="h-5 w-5 bg-gray-200 rounded animate-pulse"></div>
+                          <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+                        </div>
+                        <div className="h-6 w-16 bg-gray-200 rounded animate-pulse"></div>
+                      </div>
+                      <div className="h-3 w-40 bg-gray-100 rounded animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Loading Connection Info */}
+            <Card>
+              <CardHeader>
+                <div className="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex justify-between">
+                    <div className="h-4 w-24 bg-gray-100 rounded animate-pulse"></div>
+                    <div className="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
@@ -303,45 +408,18 @@ export default function PatientStreamingPage() {
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
             <VideoCameraIcon className="h-8 w-8 text-blue-600" />
-            {patient
-              ? `${patient.first_name} ${patient.last_name}`
-              : "Patient Stream"}
+            Camera Room Viewer
           </h1>
           <p className="text-gray-600 mt-1">
-            Live streaming session with realtime updates
+            Live streaming from multiple camera rooms
             {selectedRoomId && (
               <span className="ml-2 text-blue-600 font-medium">
-                • Room: {selectedRoomId.split("-")[0]}...
+                • Active Room: Room Name
               </span>
             )}
             <span className="ml-2 text-gray-500">
-              •{" "}
-              {
-                mergedSessions.filter(
-                  (s: StreamingSession) =>
-                    s.patient_id === patientId && s.status === "active"
-                ).length
-              }
-              /
-              {
-                mergedSessions.filter(
-                  (s: StreamingSession) => s.patient_id === patientId
-                ).length
-              }{" "}
-              sessions active •{" "}
-              {
-                mergedRooms.filter(
-                  (r: PatientCameraRoom) =>
-                    r.patient_id === patientId && r.connected
-                ).length
-              }
-              /
-              {
-                mergedRooms.filter(
-                  (r: PatientCameraRoom) => r.patient_id === patientId
-                ).length
-              }{" "}
-              rooms connected
+              • {mergedRooms.filter((r) => r.connected).length}/
+              {mergedRooms.length} rooms online
             </span>
           </p>
         </div>
@@ -362,7 +440,7 @@ export default function PatientStreamingPage() {
             <Button
               onClick={() => {
                 setError(null);
-                fetchPatientData();
+                fetchInitialData();
               }}
               variant="outline"
               size="sm"
@@ -426,10 +504,25 @@ export default function PatientStreamingPage() {
                   <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
                     <div className="text-center text-white">
                       <VideoCameraIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium">Camera Ready</p>
-                      <p className="text-sm opacity-75">
-                        Start watching to view live camera feed
-                      </p>
+                      {selectedRoomId ? (
+                        <>
+                          <p className="text-lg font-medium">Camera Ready</p>
+                          <p className="text-sm opacity-75 mb-2">
+                            Room: Room Name
+                          </p>
+                          <p className="text-sm opacity-75">
+                            Start watching to view live camera feed
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-lg font-medium">Select a Room</p>
+                          <p className="text-sm opacity-75">
+                            Choose a camera room from the sidebar to start
+                            watching
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -479,11 +572,11 @@ export default function PatientStreamingPage() {
                 {!isStreaming ? (
                   <Button
                     onClick={handleStartStream}
-                    disabled={isConnecting}
+                    disabled={isConnecting || !selectedRoomId}
                     className="flex items-center gap-2"
                   >
                     <PlayIcon className="h-4 w-4" />
-                    Start Watching
+                    {selectedRoomId ? "Start Watching" : "Select Room First"}
                   </Button>
                 ) : (
                   <Button
@@ -495,6 +588,12 @@ export default function PatientStreamingPage() {
                     Stop Watching
                   </Button>
                 )}
+
+                {selectedRoomId && (
+                  <div className="text-xs text-gray-500 text-center">
+                    <p>Watching: Room Name</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -502,73 +601,120 @@ export default function PatientStreamingPage() {
 
         {/* Side Panel */}
         <div className="space-y-6">
-          {/* Patient Info */}
-          {patient && (
-            <Card>
-              <CardHeader>
-                <h3 className="text-lg font-semibold">Patient Information</h3>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Name
-                  </label>
-                  <p className="text-gray-900">
-                    {patient.first_name} {patient.last_name}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Date of Birth
-                  </label>
-                  <p className="text-gray-900">
-                    {new Date(patient.date_of_birth).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Gender
-                  </label>
-                  <p className="text-gray-900 capitalize">{patient.gender}</p>
-                </div>
-                {patient.email && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">
-                      Email
-                    </label>
-                    <p className="text-gray-900">{patient.email}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* All Sessions with Expandable Rooms */}
+          {/* Room Selection */}
           <Card>
             <CardHeader>
-              <h3 className="text-lg font-semibold">Patient Sessions</h3>
+              <h3 className="text-lg font-semibold">Available Rooms</h3>
               <p className="text-sm text-gray-500">
-                Click on a session to expand and view rooms inside it
+                Select a room to watch its live stream
               </p>
             </CardHeader>
             <CardContent>
               {(() => {
-                // Get ALL sessions for this patient (not just active ones)
-                const patientSessions = mergedSessions.filter(
-                  (s: StreamingSession) => s.patient_id === patientId
-                );
+                // Get all unique rooms from merged data
+                const allRooms = mergedRooms;
 
-                if (patientSessions.length === 0) {
+                if (allRooms.length === 0) {
                   return (
                     <p className="text-gray-500 text-sm">
-                      No sessions found for this patient.
+                      No camera rooms available.
                     </p>
                   );
                 }
 
                 return (
                   <div className="space-y-3">
-                    {patientSessions.map((session: StreamingSession) => {
+                    {allRooms.map((room: PatientCameraRoom) => (
+                      <div
+                        key={room.id}
+                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                          selectedRoomId === room.room_id
+                            ? "border-blue-300 bg-blue-50 shadow-sm"
+                            : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+                        }`}
+                        onClick={() => {
+                          setSelectedRoomId(room.room_id);
+                          // Automatically start streaming when room is selected
+                          if (!isStreaming) {
+                            handleStartStream();
+                          }
+                        }}
+                        title="Click to select this room for streaming"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <VideoCameraIcon className="h-5 w-5 text-gray-500" />
+                            <div>
+                              <span className="text-sm font-medium">
+                                {room.room_id || "Room Name"}
+                              </span>
+                              {selectedRoomId === room.room_id && (
+                                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded ml-2">
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            <div
+                              className={`h-3 w-3 rounded-full ${
+                                room.connected
+                                  ? "bg-green-500 animate-pulse"
+                                  : "bg-gray-400"
+                              }`}
+                            />
+                            <Badge
+                              variant={room.connected ? "default" : "secondary"}
+                              className={
+                                room.connected ? "bg-green-500 text-white" : ""
+                              }
+                            >
+                              {room.connected ? "Online" : "Offline"}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="text-xs text-gray-600 space-y-1">
+                          {room.camera_id && <p>Camera ID: {room.camera_id}</p>}
+                          <p>
+                            Last Seen:{" "}
+                            {room.last_seen
+                              ? new Date(room.last_seen).toLocaleString()
+                              : "Never"}
+                          </p>
+                          {room.session_id && <p>Session Active</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+
+          {/* All Sessions with Expandable Rooms */}
+          <Card>
+            <CardHeader>
+              <h3 className="text-lg font-semibold">All Sessions</h3>
+              <p className="text-sm text-gray-500">
+                Click on a session to expand and view rooms inside it
+              </p>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                // Get ALL sessions (no patient filtering)
+                const allSessions = mergedSessions;
+
+                if (allSessions.length === 0) {
+                  return (
+                    <p className="text-gray-500 text-sm">No sessions found.</p>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {allSessions.map((session: AmbulanceSession) => {
                       const isExpanded = isSessionExpanded(session.id);
                       // Get rooms that belong to this session
                       const sessionRooms = mergedRooms.filter(
@@ -613,19 +759,17 @@ export default function PatientStreamingPage() {
                               <div className="flex items-center space-x-2">
                                 <Badge
                                   variant={
-                                    session.status === "active"
-                                      ? "default"
-                                      : "secondary"
+                                    session.is_active ? "default" : "secondary"
                                   }
                                   className={
-                                    session.status === "active"
+                                    session.is_active
                                       ? "bg-green-500 text-white"
-                                      : session.status === "ended"
+                                      : session.ended_at
                                       ? "bg-gray-500 text-white"
                                       : "bg-red-500 text-white"
                                   }
                                 >
-                                  {session.status}
+                                  {session.is_active ? "active" : "ended"}
                                 </Badge>
                                 <span className="text-xs text-gray-400">
                                   {isExpanded
@@ -662,64 +806,86 @@ export default function PatientStreamingPage() {
                                     <VideoCameraIcon className="h-4 w-4 mr-2 text-gray-500" />
                                     Rooms in this session:
                                   </h5>
-                                  {sessionRooms.map((room: PatientCameraRoom) => (
-                                    <div
-                                      key={room.id}
-                                      className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                                        selectedRoomId === room.room_id
-                                          ? "border-blue-300 bg-blue-50 shadow-sm"
-                                          : "border-gray-200 bg-gray-50 hover:bg-gray-100"
-                                      }`}
-                                      onClick={(e) => {
-                                        e.stopPropagation(); // Prevent session collapse
-                                        setSelectedRoomId(room.room_id);
-                                      }}
-                                      title="Click to select this room for streaming"
-                                    >
-                                      <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center space-x-2">
-                                          <VideoCameraIcon className="h-4 w-4 text-gray-500" />
-                                          <span className="text-sm font-medium">
-                                            {room.device_name || `Room ${room.room_id.split("-")[0]}...`}
-                                          </span>
-                                          {selectedRoomId === room.room_id && (
-                                            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                                              Selected
+                                  {sessionRooms.map(
+                                    (room: PatientCameraRoom) => (
+                                      <div
+                                        key={room.id}
+                                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                                          selectedRoomId === room.room_id
+                                            ? "border-blue-300 bg-blue-50 shadow-sm"
+                                            : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+                                        }`}
+                                        onClick={(e) => {
+                                          e.stopPropagation(); // Prevent session collapse
+                                          setSelectedRoomId(room.room_id);
+                                        }}
+                                        title="Click to select this room for streaming"
+                                      >
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center space-x-2">
+                                            <VideoCameraIcon className="h-4 w-4 text-gray-500" />
+                                            <span className="text-sm font-medium">
+                                              {room.camera_id || "Room Name"}
                                             </span>
+                                            {selectedRoomId ===
+                                              room.room_id && (
+                                              <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                                                Selected
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <div className="flex items-center space-x-2">
+                                            <div
+                                              className={`h-2 w-2 rounded-full ${
+                                                room.connected
+                                                  ? "bg-green-500"
+                                                  : "bg-gray-400"
+                                              }`}
+                                            />
+                                            <Badge
+                                              variant={
+                                                room.connected
+                                                  ? "default"
+                                                  : "secondary"
+                                              }
+                                              className={
+                                                room.connected
+                                                  ? "bg-green-500 text-white"
+                                                  : ""
+                                              }
+                                            >
+                                              {room.connected
+                                                ? "Connected"
+                                                : "Disconnected"}
+                                            </Badge>
+                                          </div>
+                                        </div>
+
+                                        <div className="text-xs text-gray-600 space-y-1 ml-6">
+                                          {room.camera_id && (
+                                            <p>Camera ID: {room.camera_id}</p>
                                           )}
-                                        </div>
-
-                                        <div className="flex items-center space-x-2">
-                                          <div
-                                            className={`h-2 w-2 rounded-full ${
-                                              room.connected ? "bg-green-500" : "bg-gray-400"
-                                            }`}
-                                          />
-                                          <Badge
-                                            variant={room.connected ? "default" : "secondary"}
-                                            className={room.connected ? "bg-green-500 text-white" : ""}
-                                          >
-                                            {room.connected ? "Connected" : "Disconnected"}
-                                          </Badge>
+                                          <p>
+                                            Started:{" "}
+                                            {room.connection_started_at
+                                              ? new Date(
+                                                  room.connection_started_at
+                                                ).toLocaleString()
+                                              : "—"}
+                                          </p>
+                                          <p>
+                                            Last Seen:{" "}
+                                            {room.last_seen
+                                              ? new Date(
+                                                  room.last_seen
+                                                ).toLocaleString()
+                                              : "—"}
+                                          </p>
                                         </div>
                                       </div>
-
-                                      <div className="text-xs text-gray-600 space-y-1 ml-6">
-                                        <p>Room ID: {room.room_id}</p>
-                                        <p>
-                                          Started: {" "}
-                                          {room.connection_started_at
-                                            ? new Date(room.connection_started_at).toLocaleString()
-                                            : "—"}
-                                        </p>
-                                        <p>
-                                          Last Seen: {" "}
-                                          {room.last_seen ? new Date(room.last_seen).toLocaleString() : "—"}
-                                        </p>
-                                        {room.device_name && <p>Device: {room.device_name}</p>}
-                                      </div>
-                                    </div>
-                                  ))}
+                                    )
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -751,7 +917,9 @@ export default function PatientStreamingPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Realtime Sessions:</span>
-                <span className="text-gray-500">Unavailable (use rooms realtime)</span>
+                <span className="text-gray-500">
+                  Unavailable (use rooms realtime)
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Realtime Rooms:</span>
@@ -761,22 +929,28 @@ export default function PatientStreamingPage() {
                   {roomsConnected ? "Connected" : "Disconnected"}
                 </span>
               </div>
-              {currentSession && currentSession.id && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Session ID:</span>
-                  <span className="font-mono text-xs">
-                    {currentSession.id.split("-")[0]}...
-                  </span>
-                </div>
-              )}
               {selectedRoomId && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Selected Room:</span>
-                  <span className="font-mono text-xs">
-                    {selectedRoomId.split("-")[0]}...
-                  </span>
+                  <span className="text-gray-900">Room Name</span>
                 </div>
               )}
+              {currentSession && currentSession.id && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Session Status:</span>
+                  <span className="text-green-600">Active</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-500">Available Rooms:</span>
+                <span>{mergedRooms.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Online Rooms:</span>
+                <span className="text-green-600">
+                  {mergedRooms.filter((r) => r.connected).length}
+                </span>
+              </div>
             </CardContent>
           </Card>
         </div>

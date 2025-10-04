@@ -22,7 +22,7 @@ interface UseRealtimeAmbulanceSessionsOptions extends RealtimeOptions {
   ambulanceId?: string;
 }
 
-interface UseRealtimeCameraRoomsOptions extends RealtimeOptions {}
+type UseRealtimeCameraRoomsOptions = RealtimeOptions;
 
 export interface UseRealtimeAmbulanceOptions {
   ambulanceId: string;
@@ -41,7 +41,7 @@ export function useRealtimeAmbulanceSessions(
   const [events, setEvents] = useState<AmbulanceSessionEvent[]>([]);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const { ambulanceId, enabled = true } = options;
+  const { enabled = true } = options;
 
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
@@ -141,7 +141,7 @@ export function useRealtimeAmbulanceSessions(
     return () => {
       disconnect();
     };
-  }, [enabled]);
+  }, [enabled, connect, disconnect]);
 
   return {
     sessions,
@@ -165,7 +165,7 @@ export function useRealtimeRooms(options: UseRealtimeCameraRoomsOptions = {}) {
   const [events, setEvents] = useState<CameraRoomEvent[]>([]);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const { enabled = true, ...realtimeOptions } = options;
+  const { enabled = true } = options;
 
   const handleMessage = useCallback((event: MessageEvent) => {
     console.log("🎯 ROOMS - Received SSE event:", event.data);
@@ -280,7 +280,7 @@ export function useRealtimeRooms(options: UseRealtimeCameraRoomsOptions = {}) {
     return () => {
       disconnect();
     };
-  }, [enabled]);
+  }, [enabled, connect, disconnect]);
 
   return {
     rooms,
@@ -293,8 +293,3 @@ export function useRealtimeRooms(options: UseRealtimeCameraRoomsOptions = {}) {
     clearEvents: useCallback(() => setEvents([]), []),
   };
 }
-
-// Legacy functions removed - ambulance streaming system now uses:
-// - useRealtimeAmbulanceSessions() for ambulance session real-time updates
-// - useRealtimeRooms() for camera room real-time updates
-// - useAmbulanceStreaming() for complete ambulance streaming functionality

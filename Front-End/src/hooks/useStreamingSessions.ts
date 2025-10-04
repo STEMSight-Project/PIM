@@ -10,10 +10,7 @@
  * ambulance/camera status.
  */
 
-import type {
-  AmbulanceStreamingStatus,
-  CameraRoom,
-} from "@/types";
+import type { AmbulanceStreamingStatus } from "@/types";
 import { useAmbulanceStreaming } from "./useAmbulanceStreaming";
 
 // Reuse the exported AmbulanceWithSession shape from useAmbulanceStreaming

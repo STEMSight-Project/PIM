@@ -104,7 +104,7 @@ export interface CameraRoom {
   session_id: string;
   camera_id: string;
   room_id: string;
-  device_name: string;
+  camera_name: string;
   connected: boolean;
   connection_started_at: string;
   connection_ended_at?: string;

@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { CheckCircle, XCircle, Clock } from "lucide-react";
-import { usePatientEvents } from "@/hooks/usePatientEvents";
 import { Detection } from "@/components/session-review/types";
+import { usePatientEvents } from "@/hooks/usePatientEvents";
+import { CheckCircle, Clock, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface TimelineProps {
   setCurrentTimestamp: (time: number) => void;
@@ -12,11 +12,10 @@ interface TimelineProps {
   currentEvents?: Detection[]; // Use Detection type from session-review
 }
 
-const Timeline = ({ 
-  setCurrentTimestamp, 
-  videoId, 
-  patientId,
-  currentEvents 
+const Timeline = ({
+  setCurrentTimestamp,
+  videoId,
+  currentEvents,
 }: TimelineProps) => {
   const {
     events: hookEvents,
@@ -24,12 +23,12 @@ const Timeline = ({
     error,
     fetchEventsForVideo,
     updateEventStatus,
-    clearError
+    clearError,
   } = usePatientEvents();
 
   // Always use hookEvents if we're fetching, otherwise use currentEvents
   const [shouldUseFetchedEvents, setShouldUseFetchedEvents] = useState(false);
-  const events = shouldUseFetchedEvents ? hookEvents : (currentEvents || []);
+  const events = shouldUseFetchedEvents ? hookEvents : currentEvents || [];
 
   useEffect(() => {
     if (videoId && !currentEvents) {
@@ -47,7 +46,7 @@ const Timeline = ({
 
   // Convert timestamp to number if it's a string, then to MM:SS format for display
   const getTimestampAsNumber = (timestamp: string | number): number => {
-    if (typeof timestamp === 'string') {
+    if (typeof timestamp === "string") {
       return parseFloat(timestamp) || 0;
     }
     return timestamp;
@@ -57,21 +56,23 @@ const Timeline = ({
     const seconds = getTimestampAsNumber(timestamp);
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    return `${minutes.toString().padStart(2, "0")}:${remainingSeconds
+      .toString()
+      .padStart(2, "0")}`;
   };
 
   // Mapping for detection types to colors
   const getEventColor = (type: string): string => {
     const typeColorMap: Record<string, string> = {
-      'myoclonus': 'red',
-      'tremor': 'yellow', 
-      'decerebrate': 'purple',
-      'decorticate': 'blue',
-      'seizure': 'red',
-      'abnormal_movement': 'orange',
+      myoclonus: "red",
+      tremor: "yellow",
+      decerebrate: "purple",
+      decorticate: "blue",
+      seizure: "red",
+      abnormal_movement: "orange",
       // Add more mappings as needed
     };
-    return typeColorMap[type.toLowerCase()] || 'gray';
+    return typeColorMap[type.toLowerCase()] || "gray";
   };
 
   const getColorClass = (color: string) => {
@@ -90,7 +91,7 @@ const Timeline = ({
   const handleJumpToEvent = (timestamp: string | number) => {
     const seconds = getTimestampAsNumber(timestamp);
     console.log("Timeline: Jump to event clicked", seconds, "seconds");
-    
+
     // Small trick to allow clicking the same timestamp multiple times
     setCurrentTimestamp(seconds - 0.5);
     setTimeout(() => {
@@ -156,7 +157,7 @@ const Timeline = ({
           </h3>
           <div className="text-red-600 text-sm">
             Error loading events: {error}
-            <button 
+            <button
               onClick={clearError}
               className="ml-2 text-blue-600 hover:text-blue-800"
             >
@@ -175,7 +176,9 @@ const Timeline = ({
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
             Activity Timeline
           </h3>
-          <p className="text-sm text-gray-500">No events detected for this video</p>
+          <p className="text-sm text-gray-500">
+            No events detected for this video
+          </p>
         </div>
       </div>
     );
@@ -211,7 +214,9 @@ const Timeline = ({
 
               {/* Event dot */}
               <div
-                className={`absolute top-2 left-0 w-4 h-4 -ml-2 rounded-full border-2 border-white shadow-sm ${getColorClass(color)}`}
+                className={`absolute top-2 left-0 w-4 h-4 -ml-2 rounded-full border-2 border-white shadow-sm ${getColorClass(
+                  color
+                )}`}
               ></div>
 
               {/* Event card */}
@@ -219,7 +224,9 @@ const Timeline = ({
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-1">
-                      {event.type.charAt(0).toUpperCase() + event.type.slice(1).replace('_', ' ')} Detected
+                      {event.type.charAt(0).toUpperCase() +
+                        event.type.slice(1).replace("_", " ")}{" "}
+                      Detected
                     </h4>
                     {event.confidence && (
                       <div className="flex items-center">

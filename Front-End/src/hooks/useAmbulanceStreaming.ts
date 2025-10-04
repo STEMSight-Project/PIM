@@ -47,12 +47,7 @@ export const useAmbulanceStreaming = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
 
-  // Real-time event sources
-  const [sessionsEventSource, setSessionsEventSource] =
-    useState<EventSource | null>(null);
-  const [roomsEventSource, setRoomsEventSource] = useState<EventSource | null>(
-    null
-  );
+  // Real-time event sources (handled by separate hooks)
 
   // Clear error state
   const clearError = useCallback(() => {
@@ -77,7 +72,12 @@ export const useAmbulanceStreaming = () => {
           throw new Error(statusResponse.error);
         }
         if (statusResponse.data) {
-          setStreamingStatus(statusResponse.data);
+          // Normalize streaming status to an array to avoid runtime shape issues
+          setStreamingStatus(
+            Array.isArray(statusResponse.data) ? statusResponse.data : []
+          );
+        } else {
+          setStreamingStatus([]);
         }
 
         // Fetch all sessions
@@ -86,8 +86,10 @@ export const useAmbulanceStreaming = () => {
         if (sessionsResponse.error) {
           throw new Error(sessionsResponse.error);
         }
-
-        const sessionsData = sessionsResponse.data || [];
+        // Ensure sessionsData is an array (API may return an object or null)
+        const sessionsData = Array.isArray(sessionsResponse.data)
+          ? sessionsResponse.data
+          : [];
         setSessions(sessionsData);
 
         // Create ambulance data structure with sessions
@@ -177,7 +179,7 @@ export const useAmbulanceStreaming = () => {
         setLoading(false);
       }
     },
-    [fetchSessions]
+    [refreshData]
   );
 
   // End an ambulance session
@@ -206,7 +208,7 @@ export const useAmbulanceStreaming = () => {
         setLoading(false);
       }
     },
-    [fetchSessions]
+    [refreshData]
   );
 
   // Connect to WebRTC camera as viewer
@@ -217,7 +219,7 @@ export const useAmbulanceStreaming = () => {
           cameraId,
           {
             sdp: sdpOffer.sdp || "",
-            type: sdpOffer.type as any,
+            type: sdpOffer.type as "offer" | "answer",
           }
         );
 
@@ -250,14 +252,19 @@ export const useAmbulanceStreaming = () => {
   const statistics = {
     totalSessions: sessions.length,
     activeSessions: sessions.filter((session) => session.is_active).length,
-    connectedRooms: streamingStatus.reduce(
-      (total, status) => total + status.connected_camera_rooms,
-      0
-    ),
-    totalRooms: streamingStatus.reduce(
-      (total, status) => total + status.total_camera_rooms,
-      0
-    ),
+    // Guard against streamingStatus being non-array (API may return object/null)
+    connectedRooms: Array.isArray(streamingStatus)
+      ? streamingStatus.reduce(
+          (total, status) => total + (status?.connected_camera_rooms || 0),
+          0
+        )
+      : 0,
+    totalRooms: Array.isArray(streamingStatus)
+      ? streamingStatus.reduce(
+          (total, status) => total + (status?.total_camera_rooms || 0),
+          0
+        )
+      : 0,
   };
 
   return {
@@ -302,8 +309,12 @@ export const useAmbulanceStreaming = () => {
  * ```
  */
 export const useAmbulanceStreamingRealtime = () => {
-  const [sessionEvents, setSessionEvents] = useState<any[]>([]);
-  const [roomEvents, setRoomEvents] = useState<any[]>([]);
+  const [sessionEvents, setSessionEvents] = useState<
+    Array<Record<string, unknown>>
+  >([]);
+  const [roomEvents, setRoomEvents] = useState<Array<Record<string, unknown>>>(
+    []
+  );
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {

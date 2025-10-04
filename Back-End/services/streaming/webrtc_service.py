@@ -2,12 +2,15 @@
 WebRTC service for handling peer connections and media relay.
 """
 
-from typing import Optional
+import asyncio
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Set
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaRelay
 from core.common import logger
 from services.streaming.room_service import room_manager
 from services.streaming.models import SDPBody
+from services.streaming.database_service import StreamingDatabaseService
 
 
 class WebRTCService:
@@ -15,6 +18,145 @@ class WebRTCService:
 
     def __init__(self):
         self.relay = MediaRelay()
+
+        # Camera activity monitoring (for status updates only)
+        self.camera_monitors: Dict[str, Dict] = {}  # room_id -> monitoring data
+        self.inactive_timeout = (
+            30  # seconds without activity before marking disconnected
+        )
+
+        # Background monitoring task
+        self.monitoring_task = None
+        self._start_monitoring()
+
+    def _start_monitoring(self):
+        """Start background monitoring task."""
+        if self.monitoring_task is None or self.monitoring_task.done():
+            self.monitoring_task = asyncio.create_task(self._monitor_cameras())
+            logger.info("Started camera monitoring task")
+
+    async def _monitor_cameras(self):
+        """Background task to monitor camera activity and update database status."""
+        while True:
+            try:
+                await asyncio.sleep(10)  # Check every 10 seconds
+                current_time = datetime.utcnow()
+
+                inactive_rooms = []
+                sessions_to_check = set()
+
+                for room_id, monitor_data in list(self.camera_monitors.items()):
+                    last_activity = monitor_data.get("last_activity")
+                    camera_room_id = monitor_data.get("camera_room_id")
+                    session_id = monitor_data.get("session_id")
+
+                    if last_activity and camera_room_id:
+                        time_since_activity = (
+                            current_time - last_activity
+                        ).total_seconds()
+
+                        if time_since_activity > self.inactive_timeout:
+                            logger.warning(
+                                "Camera in room %s inactive for %d seconds, marking as disconnected",
+                                room_id,
+                                int(time_since_activity),
+                            )
+
+                            # Update camera room status to disconnected
+                            try:
+                                await StreamingDatabaseService.update_camera_room_status(
+                                    camera_room_id, connected=False
+                                )
+                                logger.info(
+                                    "Updated camera room %s status to disconnected",
+                                    camera_room_id,
+                                )
+
+                                if session_id:
+                                    sessions_to_check.add(session_id)
+
+                                inactive_rooms.append(room_id)
+
+                            except Exception as e:
+                                logger.error(
+                                    "Failed to update camera room %s status: %s",
+                                    camera_room_id,
+                                    e,
+                                )
+
+                # Check sessions for deactivation
+                for session_id in sessions_to_check:
+                    try:
+                        await self._check_and_deactivate_session(session_id)
+                    except Exception as e:
+                        logger.error("Failed to check session %s: %s", session_id, e)
+
+                # Clean up inactive monitors
+                for room_id in inactive_rooms:
+                    self.camera_monitors.pop(room_id, None)
+
+            except Exception as e:
+                logger.error("Error in camera monitoring: %s", e)
+                await asyncio.sleep(5)
+
+    async def _check_and_deactivate_session(self, session_id: str):
+        """Check if all cameras in session are disconnected and deactivate if so."""
+        try:
+            # Get all camera rooms for this session
+            camera_rooms = (
+                await StreamingDatabaseService.get_camera_rooms_by_session_id(
+                    session_id
+                )
+            )
+
+            if not camera_rooms:
+                return
+
+            # Check if any camera is still connected
+            connected_rooms = [
+                room for room in camera_rooms if room.get("connected", False)
+            ]
+
+            if not connected_rooms:
+                logger.info(
+                    "All %d cameras disconnected for session %s, deactivating session",
+                    len(camera_rooms),
+                    session_id,
+                )
+
+                await StreamingDatabaseService.end_ambulance_session(session_id)
+                logger.info(
+                    "Session %s deactivated due to all cameras being disconnected",
+                    session_id,
+                )
+
+        except Exception as e:
+            logger.error(
+                "Error checking session %s for deactivation: %s", session_id, e
+            )
+
+    def register_camera_room(
+        self, room_id: str, camera_room_id: str, session_id: Optional[str] = None
+    ):
+        """Register a camera room for activity monitoring."""
+        self.camera_monitors[room_id] = {
+            "camera_room_id": camera_room_id,
+            "session_id": session_id,
+            "last_activity": datetime.utcnow(),
+            "registered_at": datetime.utcnow(),
+        }
+
+        logger.info(
+            "Registered camera room %s (session: %s) for monitoring in room %s",
+            camera_room_id,
+            session_id,
+            room_id,
+        )
+
+    def _update_activity(self, room_id: str):
+        """Update last activity timestamp for a room."""
+        if room_id in self.camera_monitors:
+            self.camera_monitors[room_id]["last_activity"] = datetime.utcnow()
 
     async def create_streamer_connection(self, room_id: str, sdp_body: SDPBody) -> dict:
         """Create a WebRTC connection for a streamer (publisher)."""
@@ -37,12 +179,18 @@ class WebRTCService:
                 )
                 if pc.connectionState == "closed":
                     room.remove_peer_connection(pc)
+                    # Handle camera disconnection
+                    await self._handle_camera_disconnection(room_id)
                 elif pc.connectionState == "failed":
                     await room.handle_disconnection()
+                    await self._handle_camera_disconnection(room_id)
 
             @pc.on("track")
             def on_track(track: MediaStreamTrack):
                 logger.info("Received %s track in room %s", track.kind, room_id)
+
+                # Update activity when track is received
+                self._update_activity(room_id)
 
                 # Relay track to all other connections in the room
                 relayed_track = self.relay.subscribe(track)
@@ -55,6 +203,7 @@ class WebRTCService:
                 @track.on("ended")
                 async def on_ended():
                     logger.info("Track ended in room %s", room_id)
+                    await self._handle_camera_disconnection(room_id)
 
             # Set remote description
             await pc.setRemoteDescription(
@@ -167,6 +316,83 @@ class WebRTCService:
         except Exception as e:
             logger.error("Error getting stats for room %s: %s", room_id, e)
             return {"error": str(e)}
+
+    async def _handle_camera_disconnection(self, room_id: str):
+        """Handle camera disconnection and update database."""
+        if room_id in self.camera_monitors:
+            monitor_data = self.camera_monitors[room_id]
+            camera_room_id = monitor_data.get("camera_room_id")
+            session_id = monitor_data.get("session_id")
+
+            if camera_room_id:
+                try:
+                    # Update camera room status to disconnected
+                    await StreamingDatabaseService.update_camera_room_status(
+                        camera_room_id, connected=False
+                    )
+
+                    logger.info(
+                        "Camera room %s disconnected and status updated", camera_room_id
+                    )
+
+                    # Check if session should be deactivated
+                    if session_id:
+                        await self._check_and_deactivate_session(session_id)
+
+                except Exception as e:
+                    logger.error(
+                        "Failed to handle camera disconnection for room %s: %s",
+                        room_id,
+                        e,
+                    )
+
+            # Clean up monitoring data
+            self.camera_monitors.pop(room_id, None)
+
+    def get_monitoring_status(self) -> Dict:
+        """Get current camera monitoring status."""
+        current_time = datetime.utcnow()
+        return {
+            "monitoring_active": self.monitoring_task
+            and not self.monitoring_task.done(),
+            "monitored_rooms": len(self.camera_monitors),
+            "inactive_timeout_seconds": self.inactive_timeout,
+            "rooms": {
+                room_id: {
+                    "camera_room_id": data.get("camera_room_id"),
+                    "session_id": data.get("session_id"),
+                    "last_activity": (
+                        data.get("last_activity").isoformat()
+                        if data.get("last_activity")
+                        else None
+                    ),
+                    "seconds_since_activity": (
+                        (current_time - data.get("last_activity")).total_seconds()
+                        if data.get("last_activity")
+                        else None
+                    ),
+                    "is_active": (
+                        (current_time - data.get("last_activity")).total_seconds()
+                        <= self.inactive_timeout
+                        if data.get("last_activity")
+                        else False
+                    ),
+                }
+                for room_id, data in self.camera_monitors.items()
+            },
+        }
+
+    async def cleanup(self):
+        """Clean up monitoring resources."""
+        if self.monitoring_task and not self.monitoring_task.done():
+            self.monitoring_task.cancel()
+            try:
+                await self.monitoring_task
+            except asyncio.CancelledError:
+                pass
+
+        self.camera_monitors.clear()
+        logger.info("WebRTC service cleanup completed")
 
 
 # Global WebRTC service instance

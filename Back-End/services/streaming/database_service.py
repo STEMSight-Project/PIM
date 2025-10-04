@@ -5,6 +5,7 @@ Updated to work with ambulance-based schema: ambulances, cameras, ambulance_stre
 
 from typing import Optional, List, Dict, Any
 from core.common import supabase, logger
+from core.timestamps import get_current_timestamp
 
 
 class StreamingDatabaseService:
@@ -235,6 +236,122 @@ class StreamingDatabaseService:
             raise
 
     @staticmethod
+    async def get_ambulance_sessions(
+        ambulance_id: Optional[str] = None,
+        is_active: Optional[bool] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Get ambulance streaming sessions with optional filters (alias for compatibility)."""
+        return await StreamingDatabaseService.get_all_ambulance_sessions(
+            ambulance_id, is_active, limit
+        )
+
+    @staticmethod
+    async def create_ambulance_session(
+        ambulance_id: str, session_type: str = "standard_streaming"
+    ) -> Dict[str, Any]:
+        """Create a new ambulance streaming session."""
+        try:
+            session_result = (
+                supabase.table("ambulance_streaming_sessions")
+                .insert(
+                    {
+                        "ambulance_id": ambulance_id,
+                        "session_type": session_type,
+                        "is_active": True,
+                    }
+                )
+                .execute()
+            )
+
+            if not session_result.data:
+                raise Exception("Failed to create ambulance streaming session")
+
+            logger.info("Created new session for ambulance %s", ambulance_id)
+            return session_result.data[0]
+
+        except Exception as e:
+            logger.error("Error creating session for ambulance %s: %s", ambulance_id, e)
+            raise
+
+    @staticmethod
+    async def get_camera_rooms_by_session(session_id: str) -> List[Dict[str, Any]]:
+        """Get all camera rooms for a specific session."""
+        try:
+            result = (
+                supabase.table("camera_streaming_rooms")
+                .select("*, cameras(*)")
+                .eq("session_id", session_id)
+                .execute()
+            )
+
+            return result.data or []
+
+        except Exception as e:
+            logger.error(
+                "Error fetching camera rooms for session %s: %s", session_id, e
+            )
+            raise
+
+    @staticmethod
+    async def get_all_camera_rooms() -> List[Dict[str, Any]]:
+        """Get all camera streaming rooms."""
+        try:
+            result = (
+                supabase.table("camera_streaming_rooms")
+                .select("*, cameras(*)")
+                .execute()
+            )
+
+            return result.data or []
+
+        except Exception as e:
+            logger.error("Error fetching all camera rooms: %s", e)
+            raise
+
+    @staticmethod
+    async def get_camera_rooms_by_camera_id(camera_id: str) -> List[Dict[str, Any]]:
+        """Get all camera streaming rooms for a specific camera (including disconnected ones for reconnection)."""
+        try:
+            result = (
+                supabase.table("camera_streaming_rooms")
+                .select("*, cameras(*)")
+                .eq("camera_id", camera_id)
+                # Remove connected=True filter to allow reconnection to existing rooms
+                .order(
+                    "connected", desc=True
+                )  # Connected rooms first, then disconnected
+                .order("created_at", desc=True)  # Most recent first within each group
+                .execute()
+            )
+
+            return result.data or []
+
+        except Exception as e:
+            logger.error("Error fetching camera rooms for camera %s: %s", camera_id, e)
+            raise
+
+    @staticmethod
+    async def get_camera_rooms_by_session_id(session_id: str) -> List[Dict[str, Any]]:
+        """Get all camera streaming rooms for a specific session."""
+        try:
+            result = (
+                supabase.table("camera_streaming_rooms")
+                .select("*, cameras(*)")
+                .eq("session_id", session_id)
+                .order("created_at", desc=True)
+                .execute()
+            )
+
+            return result.data or []
+
+        except Exception as e:
+            logger.error(
+                "Error fetching camera rooms for session %s: %s", session_id, e
+            )
+            raise
+
+    @staticmethod
     async def get_all_ambulance_sessions(
         ambulance_id: Optional[str] = None,
         is_active: Optional[bool] = None,
@@ -298,9 +415,10 @@ class StreamingDatabaseService:
             ambulances_status = []
             for ambulance in result.data or []:
                 sessions = ambulance.get("ambulance_streaming_sessions", [])
+                print(ambulance)
                 for session in sessions:
                     camera_rooms = session.get("camera_streaming_rooms", [])
-
+                    print(camera_rooms)
                     ambulances_status.append(
                         {
                             "ambulance_id": ambulance["id"],
@@ -321,7 +439,7 @@ class StreamingDatabaseService:
                                     "room_id": r["room_id"],
                                     "camera_id": r["camera_id"],
                                     "camera_name": (
-                                        r["cameras"]["name"]
+                                        r["cameras"]["camera_name"]
                                         if r["cameras"]
                                         else "Unknown"
                                     ),
@@ -334,7 +452,7 @@ class StreamingDatabaseService:
                             ],
                         }
                     )
-
+            print(ambulances_status)
             return ambulances_status
 
         except Exception as e:

@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 
+
 class Env(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_STORAGE_URL: str
@@ -9,13 +10,18 @@ class Env(BaseSettings):
     JWT_SECRET: str
     REDIRECT_PASSWORD_URL: str
     NEXT_PUBLIC_API_URL: str
-    SB_ADMIN_ACCOUNT:str
-    SB_ADMIN_PASSWORD:str
+    SB_ADMIN_ACCOUNT: str
+    SB_ADMIN_PASSWORD: str
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    # Use pydantic v2 style model_config to set env file and allow extra env vars.
+    # Allowing extra prevents pydantic from raising errors when the .env contains
+    # keys that aren't explicitly declared here (e.g. mail_username, frontend_url).
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+        "extra": "allow",
+    }
 
 
 ENVIRONMENT = Env()
