@@ -5,6 +5,7 @@ from api_router.doctor import router as doctor_router
 from api_router.medical_history import router as medical_history_router
 from api_router.video import router as video_router
 from api_router.ambulance_streaming import router as ambulance_streaming_router
+from api_router.streaming import router as streaming_router
 from api_router.ambulance import router as ambulance_router
 from api_router.note import router as note_router
 from api_router.patient_event import router as patient_event_router
@@ -28,6 +29,7 @@ api_router.include_router(
     prefix="/ambulance-streaming",
     tags=["Ambulance Streaming"],
 )
+api_router.include_router(streaming_router, prefix="/streaming", tags=["Streaming"])
 api_router.include_router(ambulance_router, prefix="/ambulances", tags=["Ambulances"])
 api_router.include_router(realtime_router, prefix="/realtime", tags=["Real-time"])
 api_router.include_router(note_router, prefix="/note", tags=["Notes"])

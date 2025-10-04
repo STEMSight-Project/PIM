@@ -10,6 +10,9 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from core.common import logger, supabase
 from security.jwt_verify import current_user
+from services.streaming.database_service import StreamingDatabaseService
+from services.streaming.webrtc_service import webrtc_service
+from services.streaming.room_service import room_manager
 
 router = APIRouter()
 
@@ -36,15 +39,12 @@ class SDPBody(BaseModel):
     type: str
 
 
-# Import the updated database service
-from services.streaming.database_service import StreamingDatabaseService
-
 # ==============================================================================
 # AMBULANCE STREAMING SESSIONS ENDPOINTS
 # ==============================================================================
 
 
-@router.post("/ambulance-sessions", dependencies=[Depends(current_user)])
+@router.post("/ambulance-sessions")
 async def create_ambulance_session(session_data: AmbulanceSessionCreate):
     """Create a new ambulance streaming session."""
     try:
@@ -68,7 +68,7 @@ async def create_ambulance_session(session_data: AmbulanceSessionCreate):
             session["id"],
             session_data.ambulance_id,
         )
-        return {"data": session, "error": None}
+        return session
 
     except HTTPException:
         raise
@@ -88,7 +88,7 @@ async def get_ambulance_sessions(
         sessions = await StreamingDatabaseService.get_all_ambulance_sessions(
             ambulance_id, is_active, limit
         )
-        return {"data": sessions, "error": None}
+        return sessions
 
     except Exception as e:
         logger.error("Error fetching ambulance sessions: %s", e)
@@ -104,7 +104,7 @@ async def get_ambulance_session(session_id: str):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        return {"data": session, "error": None}
+        return session
 
     except HTTPException:
         raise
@@ -122,7 +122,7 @@ async def end_ambulance_session(session_id: str):
         session = await StreamingDatabaseService.end_ambulance_session(session_id)
 
         logger.info("Ended ambulance session %s", session_id)
-        return {"data": session, "error": None}
+        return session
 
     except HTTPException:
         raise
@@ -136,7 +136,7 @@ async def end_ambulance_session(session_id: str):
 # ==============================================================================
 
 
-@router.post("/camera-rooms", dependencies=[Depends(current_user)])
+@router.post("/camera-rooms")
 async def create_camera_room(room_data: CameraRoomCreate, session_id: str):
     """Create a new camera streaming room."""
     try:
@@ -151,7 +151,7 @@ async def create_camera_room(room_data: CameraRoomCreate, session_id: str):
         logger.info(
             "Created camera room %s for camera %s", room_id, room_data.camera_id
         )
-        return {"data": room, "error": None}
+        return room
 
     except Exception as e:
         logger.error("Error creating camera room: %s", e)
@@ -167,7 +167,7 @@ async def get_camera_room(room_id: str):
         if not room:
             raise HTTPException(status_code=404, detail="Camera room not found")
 
-        return {"data": room, "error": None}
+        return room
 
     except HTTPException:
         raise
@@ -188,7 +188,7 @@ async def disconnect_camera_room(room_id: str):
         await StreamingDatabaseService.update_camera_room_status(room["id"], False)
 
         logger.info("Disconnected camera room %s", room_id)
-        return {"data": {"disconnected": True}, "error": None}
+        return {"disconnected": True}
 
     except HTTPException:
         raise
@@ -209,7 +209,8 @@ async def get_ambulances_streaming_status():
         ambulances_status = (
             await StreamingDatabaseService.get_ambulances_streaming_status()
         )
-        return {"data": ambulances_status, "error": None}
+        print(ambulances_status)
+        return ambulances_status
 
     except Exception as e:
         logger.error("Error fetching ambulances streaming status: %s", e)
@@ -221,7 +222,7 @@ async def get_ambulance_cameras(ambulance_id: str):
     """Get all cameras for a specific ambulance."""
     try:
         cameras = await StreamingDatabaseService.get_ambulance_cameras(ambulance_id)
-        return {"data": cameras, "error": None}
+        return cameras
 
     except Exception as e:
         logger.error("Error fetching cameras for ambulance %s: %s", ambulance_id, e)
@@ -237,7 +238,7 @@ async def get_camera_details(camera_id: str):
         if not camera:
             raise HTTPException(status_code=404, detail="Camera not found")
 
-        return {"data": camera, "error": None}
+        return camera
 
     except HTTPException:
         raise
@@ -256,19 +257,51 @@ async def camera_streamer(camera_id: str, body: SDPBody):
     """Establish WebRTC connection for camera streamer (publisher)."""
     try:
         # Find active camera room for this camera
-        # This is a simplified version - in real implementation you'd need
-        # to integrate with your WebRTC service and room management
+        camera_rooms = await StreamingDatabaseService.get_camera_rooms_by_camera_id(
+            camera_id
+        )
 
-        logger.info("Setting up streamer for camera %s", camera_id)
+        if not camera_rooms:
+            raise HTTPException(
+                status_code=404, detail="No active camera room found for this camera"
+            )
 
-        # For now, return a placeholder response
-        # In actual implementation, integrate with your WebRTC service
-        return {
-            "sdp": "placeholder_answer_sdp",
-            "type": "answer",
-            "camera_id": camera_id,
-        }
+        # Use the first active room
+        camera_room = camera_rooms[0]
+        room_id = camera_room.get("room_id")
 
+        if not room_id:
+            raise HTTPException(status_code=400, detail="Camera room has no room_id")
+
+        logger.info("Setting up streamer for camera %s in room %s", camera_id, room_id)
+
+        # Create or get WebRTC room
+        room = room_manager.get_room(room_id)
+        if not room:
+            room = room_manager.create_room(
+                room_id=room_id,
+                session_id=camera_room.get("session_id"),
+                room_db_id=camera_room.get("id"),
+            )
+
+        # Register camera room for monitoring
+        webrtc_service.register_camera_room(
+            room_id, camera_room["id"], camera_room.get("session_id")
+        )
+
+        # Create WebRTC connection for streamer
+        sdp_response = await webrtc_service.create_streamer_connection(room_id, body)
+
+        # Update camera room status to connected
+        await StreamingDatabaseService.update_camera_room_status(
+            camera_room["id"], connected=True
+        )
+
+        # Return only SDP fields (no camera_id to avoid WebRTC errors)
+        return {"sdp": sdp_response["sdp"], "type": sdp_response["type"]}
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error setting up camera streamer for %s: %s", camera_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -279,18 +312,148 @@ async def camera_viewer(camera_id: str, body: SDPBody):
     """Establish WebRTC connection for camera viewer (subscriber)."""
     try:
         # Find active camera room for this camera
-        logger.info("Setting up viewer for camera %s", camera_id)
+        camera_rooms = await StreamingDatabaseService.get_camera_rooms_by_camera_id(
+            camera_id
+        )
 
-        # For now, return a placeholder response
-        # In actual implementation, integrate with your WebRTC service
-        return {
-            "sdp": "placeholder_answer_sdp",
-            "type": "answer",
-            "camera_id": camera_id,
-        }
+        if not camera_rooms:
+            raise HTTPException(
+                status_code=404, detail="No active camera room found for this camera"
+            )
 
+        # Use the first active room
+        camera_room = camera_rooms[0]
+        room_id = camera_room.get("room_id")
+
+        if not room_id:
+            raise HTTPException(status_code=400, detail="Camera room has no room_id")
+
+        logger.info("Setting up viewer for camera %s in room %s", camera_id, room_id)
+
+        # Get existing WebRTC room (should exist from streamer)
+        room = room_manager.get_room(room_id)
+        if not room:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No active streaming session found for camera {camera_id}",
+            )
+
+        # Create WebRTC connection for viewer
+        sdp_response = await webrtc_service.create_viewer_connection(room_id, body)
+
+        # Return only SDP fields (no camera_id to avoid WebRTC errors)
+        return {"sdp": sdp_response["sdp"], "type": sdp_response["type"]}
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error setting up camera viewer for %s: %s", camera_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ==============================================================================
+# WEBRTC ADDITIONAL ENDPOINTS
+# ==============================================================================
+
+
+@router.post("/camera/{camera_id}/ice-candidate")
+async def handle_ice_candidate(camera_id: str, candidate_data: dict):
+    """Handle ICE candidate for camera streaming."""
+    try:
+        # Find active camera room for this camera
+        camera_rooms = await StreamingDatabaseService.get_camera_rooms_by_camera_id(
+            camera_id
+        )
+
+        if not camera_rooms:
+            raise HTTPException(status_code=404, detail="No active camera room found")
+
+        room_id = camera_rooms[0].get("room_id")
+
+        if not room_id:
+            raise HTTPException(status_code=400, detail="Camera room has no room_id")
+
+        # Handle ICE candidate
+        success = await webrtc_service.handle_ice_candidate(room_id, candidate_data)
+
+        if not success:
+            raise HTTPException(
+                status_code=500, detail="Failed to handle ICE candidate"
+            )
+
+        return {"success": True}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error handling ICE candidate for camera %s: %s", camera_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/camera/{camera_id}/stats")
+async def get_camera_connection_stats(camera_id: str):
+    """Get WebRTC connection statistics for a camera."""
+    try:
+        # Find active camera room for this camera
+        camera_rooms = await StreamingDatabaseService.get_camera_rooms_by_camera_id(
+            camera_id
+        )
+
+        if not camera_rooms:
+            raise HTTPException(status_code=404, detail="No active camera room found")
+
+        room_id = camera_rooms[0].get("room_id")
+
+        if not room_id:
+            raise HTTPException(status_code=400, detail="Camera room has no room_id")
+
+        # Get connection statistics
+        stats = webrtc_service.get_connection_stats(room_id)
+
+        return {"camera_id": camera_id, "room_id": room_id, **stats}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error getting stats for camera %s: %s", camera_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/camera/{camera_id}/disconnect")
+async def disconnect_camera_stream(camera_id: str):
+    """Disconnect camera streaming and close WebRTC connections."""
+    try:
+        # Find active camera room for this camera
+        camera_rooms = await StreamingDatabaseService.get_camera_rooms_by_camera_id(
+            camera_id
+        )
+
+        if not camera_rooms:
+            raise HTTPException(status_code=404, detail="No active camera room found")
+
+        camera_room = camera_rooms[0]
+        room_id = camera_room.get("room_id")
+
+        if room_id:
+            # Close WebRTC room
+            room = room_manager.get_room(room_id)
+            if room:
+                await room.close()
+                room_manager.remove_room(room_id)
+
+        # Update database status
+        await StreamingDatabaseService.update_camera_room_status(
+            camera_room["id"], connected=False
+        )
+
+        logger.info("Disconnected camera %s from room %s", camera_id, room_id)
+
+        return {"camera_id": camera_id, "room_id": room_id, "disconnected": True}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error disconnecting camera %s: %s", camera_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -458,8 +621,20 @@ async def cleanup_inactive_camera_rooms(threshold_minutes: int = 30):
         cleaned_count = await StreamingDatabaseService.cleanup_inactive_camera_rooms(
             threshold_minutes
         )
-        return {"data": {"cleaned_rooms": cleaned_count}, "error": None}
+        return {"cleaned_rooms": cleaned_count}
 
     except Exception as e:
         logger.error("Error cleaning up inactive camera rooms: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/maintenance/monitoring-status", dependencies=[Depends(current_user)])
+async def get_camera_monitoring_status():
+    """Get real-time camera monitoring and data transfer status."""
+    try:
+        status = webrtc_service.get_monitoring_status()
+        return status
+
+    except Exception as e:
+        logger.error("Error getting monitoring status: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e

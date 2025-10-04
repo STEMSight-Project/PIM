@@ -51,17 +51,21 @@ export { noteService } from "./noteService";
 export type { Note, NoteCreateRequest, NoteUpdateRequest } from "./noteService";
 
 // Live streaming services for real-time video sessions
-export { streamingService } from "./streamingService";
+// Ambulance streaming service (new)
 export type {
-  RoomInfo,
+  AmbulanceCamera,
+  AmbulanceSession,
+  AmbulanceSessionCreate,
+  AmbulanceSessionUpdate,
+  AmbulanceStreamingStatus,
+  CameraRoom,
+  CameraRoomCreate,
   SDPData,
-  SessionWithRooms,
-  StreamCreateRequest,
-  StreamingRoom,
   StreamResponse,
-  StreamSession,
-  StreamStats,
-  StreamUpdateRequest,
+} from "@/types";
+export {
+  ambulanceStreamingService,
+  streamingService,
 } from "./streamingService";
 
 // Historical session review services for post-session analysis

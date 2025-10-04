@@ -62,36 +62,27 @@ const Badge = ({
 };
 
 export default function LiveStreamingDashboard() {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const {
     ambulances,
     loading,
     error,
     endSession,
-    clearError,
     totalSessions,
     activeSessions,
     connectedRooms,
   } = useAmbulanceStreaming();
 
   // Realtime hooks for live data
-  const {
-    sessions: realtimeSessions,
-    isConnected: sessionsConnected,
-    error: sessionsError,
-  } = useRealtimeAmbulanceSessions({
-    enabled: true,
-  });
+  const { sessions: realtimeSessions, isConnected: sessionsConnected } =
+    useRealtimeAmbulanceSessions({
+      enabled: true,
+    });
 
   const { rooms: realtimeRooms, isConnected: roomsConnected } =
     useRealtimeRooms({
       enabled: true,
     });
-
-  // Use ambulances data directly (real-time updates are handled in the hook)
-  const [selectedAmbulance, setSelectedAmbulance] = useState<string | null>(
-    null
-  );
 
   // Real-time updates are now handled directly in useAmbulanceStreaming hook
   // No need for manual data merging
@@ -104,6 +95,11 @@ export default function LiveStreamingDashboard() {
       router.push("/");
     }
   }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    console.log("Realtime Sessions:", realtimeSessions);
+    console.log("Realtime Rooms:", realtimeRooms);
+  }, [realtimeRooms, realtimeSessions]);
 
   if (isLoading) {
     return (
@@ -499,11 +495,11 @@ export default function LiveStreamingDashboard() {
                                 ></div>
                                 <div>
                                   <p className="text-sm font-medium text-slate-800">
-                                    {room.device_name ||
+                                    {room.camera_id ||
                                       room.room_id.split("-")[0]}
                                   </p>
                                   <p className="text-xs text-slate-500">
-                                    Room: {room.device_name ?? room.room_id}
+                                    Room: {room.camera_id ?? room.room_id}
                                   </p>
                                 </div>
                               </div>

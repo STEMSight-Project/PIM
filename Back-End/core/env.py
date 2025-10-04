@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
 
+
 class Env(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_STORAGE_URL: str
@@ -12,7 +13,6 @@ class Env(BaseSettings):
     NEXT_PUBLIC_API_URL: str
     SB_ADMIN_ACCOUNT: str
     SB_ADMIN_PASSWORD: str
-    
     # Email Configuration
     MAIL_USERNAME: Optional[str] = None
     MAIL_PASSWORD: Optional[str] = None
@@ -26,7 +26,7 @@ class Env(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
-        extra = "ignore"  # Ignore extra fields in .env file
+
 
 
 ENVIRONMENT = Env()

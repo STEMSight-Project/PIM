@@ -102,7 +102,7 @@ export default function RecentLiveSessionPage() {
 
         await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate loading
         setSessions(mockSessions);
-      } catch (err) {
+      } catch {
         setError("Failed to load recent live sessions");
       } finally {
         setIsLoading(false);

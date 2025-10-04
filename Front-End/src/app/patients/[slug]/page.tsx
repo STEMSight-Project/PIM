@@ -124,15 +124,15 @@ export default function PatientDetailPage() {
             </div>
           </div>
           <div className="flex space-x-3">
-            <Button 
+            <Button
               variant="outline"
               onClick={() => router.push(`/medical-history/${patientId}`)}
               className="bg-white text-purple-600 border-white hover:bg-purple-50"
-            > 
+            >
               <DocumentTextIcon className="h-4 w-4 mr-2" />
               Full Medical History
             </Button>
-            <Button 
+            <Button
               variant="outline"
               onClick={() => router.push(`/patient-edit/${patient.id}/edit`)}
               className="bg-purple-800 hover:bg-purple-900 text-white border-purple-800"
@@ -149,7 +149,11 @@ export default function PatientDetailPage() {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() =>
+                  setActiveTab(
+                    tab.id as "overview" | "history" | "detections" | "videos"
+                  )
+                }
                 className={`group inline-flex items-center py-3 px-4 rounded-md font-medium text-sm transition-all ${
                   activeTab === tab.id
                     ? "bg-purple-600 text-white shadow-md"
@@ -174,8 +178,12 @@ export default function PatientDetailPage() {
                     <DocumentTextIcon className="h-6 w-6 text-white" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-purple-700">Medical Records</p>
-                    <p className="text-2xl font-bold text-purple-900">{medicalHistories.length}</p>
+                    <p className="text-sm font-medium text-purple-700">
+                      Medical Records
+                    </p>
+                    <p className="text-2xl font-bold text-purple-900">
+                      {medicalHistories.length}
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -185,7 +193,9 @@ export default function PatientDetailPage() {
                     <VideoCameraIcon className="h-6 w-6 text-white" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-blue-700">Sessions</p>
+                    <p className="text-sm font-medium text-blue-700">
+                      Sessions
+                    </p>
                     <p className="text-2xl font-bold text-blue-900">12</p>
                   </div>
                 </div>
@@ -196,7 +206,9 @@ export default function PatientDetailPage() {
                     <EyeIcon className="h-6 w-6 text-white" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-green-700">Detections</p>
+                    <p className="text-sm font-medium text-green-700">
+                      Detections
+                    </p>
                     <p className="text-2xl font-bold text-green-900">156</p>
                   </div>
                 </div>
@@ -207,7 +219,9 @@ export default function PatientDetailPage() {
                     <ChartBarIcon className="h-6 w-6 text-white" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-orange-700">Avg Confidence</p>
+                    <p className="text-sm font-medium text-orange-700">
+                      Avg Confidence
+                    </p>
                     <p className="text-2xl font-bold text-orange-900">94.2%</p>
                   </div>
                 </div>
@@ -236,7 +250,9 @@ export default function PatientDetailPage() {
                   <div className="flex items-center p-3 bg-white rounded-lg border border-purple-100">
                     <UserIcon className="h-5 w-5 text-purple-500 mr-3" />
                     <div>
-                      <p className="text-sm font-medium text-purple-900">Gender</p>
+                      <p className="text-sm font-medium text-purple-900">
+                        Gender
+                      </p>
                       <p className="text-sm text-purple-700 capitalize">
                         {patient.gender}
                       </p>
@@ -246,8 +262,12 @@ export default function PatientDetailPage() {
                     <div className="flex items-center p-3 bg-white rounded-lg border border-purple-100">
                       <EnvelopeIcon className="h-5 w-5 text-purple-500 mr-3" />
                       <div>
-                        <p className="text-sm font-medium text-purple-900">Email</p>
-                        <p className="text-sm text-purple-700">{patient.email}</p>
+                        <p className="text-sm font-medium text-purple-900">
+                          Email
+                        </p>
+                        <p className="text-sm text-purple-700">
+                          {patient.email}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -255,8 +275,12 @@ export default function PatientDetailPage() {
                     <div className="flex items-center p-3 bg-white rounded-lg border border-purple-100">
                       <PhoneIcon className="h-5 w-5 text-purple-500 mr-3" />
                       <div>
-                        <p className="text-sm font-medium text-purple-900">Phone</p>
-                        <p className="text-sm text-purple-700">{patient.phone}</p>
+                        <p className="text-sm font-medium text-purple-900">
+                          Phone
+                        </p>
+                        <p className="text-sm text-purple-700">
+                          {patient.phone}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -267,7 +291,9 @@ export default function PatientDetailPage() {
                         <p className="text-sm font-medium text-purple-900">
                           Address
                         </p>
-                        <p className="text-sm text-purple-700">{patient.address}</p>
+                        <p className="text-sm text-purple-700">
+                          {patient.address}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -317,12 +343,17 @@ export default function PatientDetailPage() {
                 {medicalHistories.slice(0, 3).length === 0 ? (
                   <div className="text-center py-6">
                     <DocumentTextIcon className="mx-auto h-8 w-8 text-purple-400" />
-                    <p className="mt-2 text-sm text-purple-600">No medical records yet</p>
+                    <p className="mt-2 text-sm text-purple-600">
+                      No medical records yet
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {medicalHistories.slice(0, 3).map((record) => (
-                      <div key={record.id} className="bg-white p-3 rounded-lg border border-purple-100">
+                      <div
+                        key={record.id}
+                        className="bg-white p-3 rounded-lg border border-purple-100"
+                      >
                         <div className="flex justify-between items-start">
                           <h4 className="font-medium text-purple-900 text-sm">
                             {record.diagnosis}
@@ -338,9 +369,11 @@ export default function PatientDetailPage() {
                         )}
                       </div>
                     ))}
-                    <Button 
-                      variant="outline" 
-                      onClick={() => router.push(`/medical-history/${patientId}`)}
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        router.push(`/medical-history/${patientId}`)
+                      }
                       className="w-full mt-3 text-purple-700 border-purple-300 hover:bg-purple-100"
                     >
                       View All Medical Records
@@ -360,7 +393,9 @@ export default function PatientDetailPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                        <span className="text-sm font-medium text-green-900">Normal Posture</span>
+                        <span className="text-sm font-medium text-green-900">
+                          Normal Posture
+                        </span>
                       </div>
                       <span className="text-xs text-green-600">96.4%</span>
                     </div>
@@ -370,7 +405,9 @@ export default function PatientDetailPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
-                        <span className="text-sm font-medium text-orange-900">Forward Head</span>
+                        <span className="text-sm font-medium text-orange-900">
+                          Forward Head
+                        </span>
                       </div>
                       <span className="text-xs text-orange-600">89.1%</span>
                     </div>
@@ -380,14 +417,16 @@ export default function PatientDetailPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
-                        <span className="text-sm font-medium text-red-900">Slouching</span>
+                        <span className="text-sm font-medium text-red-900">
+                          Slouching
+                        </span>
                       </div>
                       <span className="text-xs text-red-600">92.7%</span>
                     </div>
                     <p className="text-xs text-red-700 mt-1">5 hours ago</p>
                   </div>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => setActiveTab("detections")}
                     className="w-full mt-3 text-green-700 border-green-300 hover:bg-green-100"
                   >
@@ -445,11 +484,11 @@ export default function PatientDetailPage() {
                 ))}
               </div>
             )}
-            
+
             {medicalHistories.length > 0 && (
               <div className="mt-6 text-center">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => router.push(`/medical-history/${patientId}`)}
                   className="w-full"
                 >

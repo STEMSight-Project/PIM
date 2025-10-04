@@ -21,8 +21,6 @@ interface PatientFormData {
   emergency_contact: string;
 }
 
-
-
 export default function PatientEdit({ patientId }: PatientEditProps) {
   const router = useRouter();
   const { getPatient, updatePatient } = usePatients();
@@ -65,7 +63,7 @@ export default function PatientEdit({ patientId }: PatientEditProps) {
         } else {
           setError(res.error || "Failed to load patient");
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error(err);
         setError("Server error");
       } finally {
@@ -93,14 +91,20 @@ export default function PatientEdit({ patientId }: PatientEditProps) {
     // First name validation
     if (!trimmedData.first_name) {
       errors.push("First name is required.");
-    } else if (trimmedData.first_name.length < 1 || trimmedData.first_name.length > 50) {
+    } else if (
+      trimmedData.first_name.length < 1 ||
+      trimmedData.first_name.length > 50
+    ) {
       errors.push("First name must be between 1 and 50 characters.");
     }
 
     // Last name validation
     if (!trimmedData.last_name) {
       errors.push("Last name is required.");
-    } else if (trimmedData.last_name.length < 1 || trimmedData.last_name.length > 50) {
+    } else if (
+      trimmedData.last_name.length < 1 ||
+      trimmedData.last_name.length > 50
+    ) {
       errors.push("Last name must be between 1 and 50 characters.");
     }
 
@@ -121,17 +125,26 @@ export default function PatientEdit({ patientId }: PatientEditProps) {
     }
 
     // Email validation
-    if (trimmedData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedData.email)) {
+    if (
+      trimmedData.email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedData.email)
+    ) {
       errors.push("Invalid email format.");
     }
 
     // Phone validation (optional, but if provided, check format)
-    if (trimmedData.phone && !/^\+?[\d\s\-\(\)]{10,}$/.test(trimmedData.phone)) {
+    if (
+      trimmedData.phone &&
+      !/^\+?[\d\s\-\(\)]{10,}$/.test(trimmedData.phone)
+    ) {
       errors.push("Invalid phone number format.");
     }
 
     // Emergency contact validation (optional, but if provided, check format)
-    if (trimmedData.emergency_contact && !/^\+?[\d\s\-\(\)]{10,}$/.test(trimmedData.emergency_contact)) {
+    if (
+      trimmedData.emergency_contact &&
+      !/^\+?[\d\s\-\(\)]{10,}$/.test(trimmedData.emergency_contact)
+    ) {
       errors.push("Invalid emergency contact phone format.");
     }
 
@@ -155,7 +168,7 @@ export default function PatientEdit({ patientId }: PatientEditProps) {
 
     const errors = validateForm(trimmedForm);
     if (errors.length > 0) {
-      setError(errors.join(' '));
+      setError(errors.join(" "));
       setIsSaving(false);
       return;
     }
@@ -191,30 +204,43 @@ export default function PatientEdit({ patientId }: PatientEditProps) {
             <Input
               label="First Name"
               value={form.first_name}
-              onChange={(e) => setForm((p) => ({ ...p, first_name: e.target.value }))}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, first_name: e.target.value }))
+              }
               required
             />
             <Input
               label="Last Name"
               value={form.last_name}
-              onChange={(e) => setForm((p) => ({ ...p, last_name: e.target.value }))}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, last_name: e.target.value }))
+              }
               required
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <Input
-            label="Date of Birth"
-            type="date"
-            value={form.date_of_birth}
-            onChange={(e) =>
-              setForm((p) => ({ ...p, date_of_birth: e.target.value }))} />
+              label="Date of Birth"
+              type="date"
+              value={form.date_of_birth}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, date_of_birth: e.target.value }))
+              }
+            />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Gender
+              </label>
               <select
                 className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={form.gender}
-                onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value as "male" | "female" | "other" }))}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    gender: e.target.value as "male" | "female" | "other",
+                  }))
+                }
               >
                 <option value="male">Male</option>
                 <option value="female">Female</option>
@@ -223,21 +249,42 @@ export default function PatientEdit({ patientId }: PatientEditProps) {
             </div>
           </div>
 
-          <Input 
-          label="Email" type="email" value={form.email} 
-          onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
+          <Input
+            label="Email"
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+          />
 
-          <Input label="Phone" type="tel" value={form.phone} 
-          onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
+          <Input
+            label="Phone"
+            type="tel"
+            value={form.phone}
+            onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+          />
 
-          <Input label="Address" value={form.address} 
-          onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
+          <Input
+            label="Address"
+            value={form.address}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, address: e.target.value }))
+            }
+          />
 
-          <Input label="Emergency Contact" value={form.emergency_contact} 
-          onChange={(e) => setForm((p) => ({ ...p, emergency_contact: e.target.value }))} />
+          <Input
+            label="Emergency Contact"
+            value={form.emergency_contact}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, emergency_contact: e.target.value }))
+            }
+          />
 
           <div className="flex space-x-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => router.back()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+            >
               Cancel
             </Button>
             <Button type="submit" isLoading={isSaving}>

@@ -10,7 +10,7 @@ from core.common import logger
 from security.jwt_verify import current_user
 from services.ambulance_service import AmbulanceService
 
-router = APIRouter(dependencies=[Depends(current_user)])
+router = APIRouter()
 
 
 # Pydantic models
@@ -34,7 +34,6 @@ class CameraCreate(BaseModel):
     location_in_ambulance: str
     static_id: str
     resolution: Optional[str] = "1920x1080"
-    frame_rate: Optional[int] = 30
     is_active: bool = True
 
 
