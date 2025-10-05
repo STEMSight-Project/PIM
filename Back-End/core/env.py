@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 
 class Env(BaseSettings):
@@ -12,16 +13,20 @@ class Env(BaseSettings):
     NEXT_PUBLIC_API_URL: str
     SB_ADMIN_ACCOUNT: str
     SB_ADMIN_PASSWORD: str
+    # Email Configuration
+    MAIL_USERNAME: Optional[str] = None
+    MAIL_PASSWORD: Optional[str] = None
+    MAIL_FROM: Optional[str] = None
+    MAIL_SERVER: str = "smtp.gmail.com"
+    MAIL_PORT: int = 587
+    MAIL_FROM_NAME: str = "STEMSight"
+    FRONTEND_URL: str = "http://localhost:3000"
 
-    # Use pydantic v2 style model_config to set env file and allow extra env vars.
-    # Allowing extra prevents pydantic from raising errors when the .env contains
-    # keys that aren't explicitly declared here (e.g. mail_username, frontend_url).
-    model_config = {
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-        "case_sensitive": False,
-        "extra": "allow",
-    }
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+
 
 
 ENVIRONMENT = Env()

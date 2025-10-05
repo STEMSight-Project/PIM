@@ -12,16 +12,14 @@ export function usePasswordReset() {
   const router = useRouter();
 
   useEffect(() => {
-    // Extract token from URL hash on component mount
+    // Extract token from URL query parameters on component mount
     if (typeof window !== "undefined") {
-      const hash = window.location.hash.substring(1);
-      const params = new URLSearchParams(hash);
-      const accessToken = params.get("access_token");
+      const urlParams = new URLSearchParams(window.location.search);
+      const resetToken = urlParams.get("token");
 
-      if (accessToken) {
-        setToken(accessToken);
-        // Remove token from URL for security
-        window.history.replaceState(null, "", window.location.pathname);
+      if (resetToken) {
+        setToken(resetToken);
+        // Keep token in URL for now - user might refresh page
       }
     }
   }, []);
@@ -65,13 +63,18 @@ export function usePasswordReset() {
 
     try {
       const resetData = { token, new_password: password };
-      const { error } = await authService.confirmPasswordReset(resetData);
+      const response = await authService.confirmPasswordReset(resetData);
 
-      if (error) {
-        throw new Error(error);
+      if (response.error) {
+        throw new Error(response.error);
       }
 
       setSuccess("Password successfully reset! Redirecting to login...");
+
+      // Clear the token from URL
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
 
       // Redirect after a delay
       setTimeout(() => {
