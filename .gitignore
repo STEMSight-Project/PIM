@@ -1,6 +1,26 @@
 *.pyc
 __pycache__/
 
-#Secure File with Sensitive Data
+# Python cache
+*.pyo
+*.pyd
+.Python
+
+# Secure File with Sensitive Data
 # .env
-Front-End/src/app/patients/\[slug\]/page.tsx
+
+# Test and documentation files
+Testing_files/**/*.md
+Testing_files/*_clean.py
+Testing_files/save_*.py
+
+# Old/deprecated files
+"for supabase, couldnt log in"
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Package lock files in root
+/package-lock.json

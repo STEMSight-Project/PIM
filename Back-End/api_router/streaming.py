@@ -253,3 +253,54 @@ async def get_streaming_sessions(
     except Exception as e:
         logger.error("Error getting streaming sessions: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/room/{room_id}/activity")
+async def get_room_activity_status(room_id: str):
+    """
+    Get stream activity status for a room including timeout monitoring.
+    """
+    try:
+        room = room_manager.get_room(room_id)
+        if not room:
+            raise HTTPException(status_code=404, detail=f"Room {room_id} not found")
+
+        activity_info = room.get_connection_info()
+
+        return {
+            "room_id": room_id,
+            "activity_status": activity_info,
+            "message": f"Room has been active for {activity_info['seconds_since_data']} seconds. Timeout occurs at {activity_info['timeout_seconds']} seconds.",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error getting room activity status for %s: %s", room_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/rooms/status")
+async def get_all_rooms_status():
+    """
+    Get activity status for all active rooms.
+    """
+    try:
+        all_rooms = room_manager.get_all_rooms()
+
+        rooms_status = []
+        for room_id, room in all_rooms.items():
+            activity_info = room.get_connection_info()
+            rooms_status.append(
+                {
+                    "room_id": room_id,
+                    "activity_info": activity_info,
+                    "status": "active" if activity_info["is_active"] else "inactive",
+                }
+            )
+
+        return {"total_rooms": len(rooms_status), "rooms": rooms_status}
+
+    except Exception as e:
+        logger.error("Error getting all rooms status: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e

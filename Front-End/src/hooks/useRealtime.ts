@@ -22,15 +22,14 @@ interface UseRealtimeAmbulanceSessionsOptions extends RealtimeOptions {
   ambulanceId?: string;
 }
 
-type UseRealtimeCameraRoomsOptions = RealtimeOptions;
-
 export interface UseRealtimeAmbulanceOptions {
   ambulanceId: string;
   enabled?: boolean;
 }
 
 /**
- * Hook for subscribing to real-time ambulance sessions updates
+ * Hook for subscribing to real-time ambulance sessions with embedded rooms
+ * Listens to both session and room changes to keep data synchronized
  */
 export function useRealtimeAmbulanceSessions(
   options: UseRealtimeAmbulanceSessionsOptions = {}
@@ -38,21 +37,26 @@ export function useRealtimeAmbulanceSessions(
   const [sessions, setSessions] = useState<AmbulanceSession[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [events, setEvents] = useState<AmbulanceSessionEvent[]>([]);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [events, setEvents] = useState<
+    (AmbulanceSessionEvent | CameraRoomEvent)[]
+  >([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const sessionEventSourceRef = useRef<EventSource | null>(null);
+  const roomEventSourceRef = useRef<EventSource | null>(null);
 
-  const { enabled = true } = options;
+  const { enabled = true, ambulanceId } = options;
 
-  const handleMessage = useCallback((event: MessageEvent) => {
+  const handleSessionMessage = useCallback((event: MessageEvent) => {
     try {
       const data = JSON.parse(event.data);
-      console.log("🎯 AMBULANCE SESSIONS - Received SSE event:", data);
+      console.log("🎯 SESSIONS - Received SSE event:", data);
 
       setError(null);
 
       if (data.event_type && data.session) {
         const sessionEvent: AmbulanceSessionEvent = {
-          event_type: data.event_type,
+          name: data.type,
+          event_type: data.event,
           session: data.session,
           timestamp: data.timestamp || new Date().toISOString(),
         };
@@ -63,27 +67,31 @@ export function useRealtimeAmbulanceSessions(
         setSessions((prev) => {
           const newSessions = [...prev];
 
-          switch (data.event_type) {
-            case "session_created":
-              console.log("➕ Adding new ambulance session:", data.session.id);
-              newSessions.push(data.session);
-              break;
-
-            case "session_updated":
-              const index = newSessions.findIndex(
-                (s) => s.id === data.session.id
-              );
-              if (index >= 0) {
-                console.log("🔄 Updating ambulance session:", data.session.id);
-                newSessions[index] = data.session;
-              } else {
-                newSessions.push(data.session);
+          switch (sessionEvent.event_type) {
+            case "UPDATE":
+            case "INSERT":
+            case "DELETE":
+              {
+                const index = newSessions.findIndex(
+                  (s) => s.id === data.session.id
+                );
+                if (index >= 0) {
+                  console.log(
+                    "🔄 Updating ambulance session:",
+                    data.session.id
+                  );
+                  // Preserve existing rooms when updating session
+                  newSessions[index] = {
+                    ...data.session,
+                    camera_rooms: newSessions[index].camera_rooms || [],
+                  };
+                } else {
+                  newSessions.push({ ...data.session, camera_rooms: [] });
+                }
               }
               break;
-
-            case "session_ended":
-              console.log("🗑️ Ending ambulance session:", data.session.id);
-              return newSessions.filter((s) => s.id !== data.session.id);
+            default:
+              console.warn("Unknown session event type:", data.event_type);
           }
 
           return newSessions;
@@ -95,38 +103,201 @@ export function useRealtimeAmbulanceSessions(
     }
   }, []);
 
-  const connect = useCallback(() => {
+  const handleRoomMessage = useCallback((event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+
+      setError(null);
+
+      const eventData = typeof data === "string" ? JSON.parse(data) : data;
+      const roomData = eventData.new || eventData.room || eventData.record;
+
+      if (roomData && roomData.session_id) {
+        const roomEvent: CameraRoomEvent = {
+          name: eventData.table || "camera_rooms",
+          event_type: eventData.type || eventData.event_type,
+          room: roomData,
+          timestamp: eventData.timestamp || new Date().toISOString(),
+        };
+
+        setEvents((prev) => [...prev, roomEvent]);
+
+        // Update the session that contains this room
+        setSessions((prev) => {
+          return prev.map((session) => {
+            if (session.id === roomData.session_id) {
+              const currentRooms = session.camera_rooms || [];
+
+              switch (eventData.type || eventData.event_type) {
+                case "INSERT":
+                case "UPDATE":
+                  console.log(
+                    "🔄 ROOMS - Updating room in session:",
+                    session.id,
+                    "room:",
+                    roomData.id
+                  );
+                  const existingIndex = currentRooms.findIndex(
+                    (r: CameraRoom) => r.id === roomData.id
+                  );
+
+                  if (existingIndex >= 0) {
+                    // Update existing room
+                    const updatedRooms = [...currentRooms];
+                    updatedRooms[existingIndex] = {
+                      ...updatedRooms[existingIndex],
+                      ...roomData,
+                    };
+                    return { ...session, camera_rooms: updatedRooms };
+                  } else {
+                    // Add new room
+                    return {
+                      ...session,
+                      camera_rooms: [...currentRooms, roomData],
+                    };
+                  }
+
+                case "DELETE":
+                  console.log(
+                    "🗑️ ROOMS - Removing room from session:",
+                    session.id,
+                    "room:",
+                    roomData.id
+                  );
+                  return {
+                    ...session,
+                    camera_rooms: currentRooms.filter(
+                      (r: CameraRoom) => r.id !== roomData.id
+                    ),
+                  };
+
+                default:
+                  return session;
+              }
+            }
+            return session;
+          });
+        });
+      }
+    } catch (err) {
+      console.error("Failed to parse camera room SSE event:", err);
+      setError("Failed to parse room real-time event");
+    }
+  }, []);
+
+  const fetchInitialSessions = useCallback(async () => {
     if (!enabled) return;
 
     try {
-      console.log("🔗 Connecting to ambulance sessions SSE stream");
-      const eventSource =
+      setIsLoading(true);
+      console.log("🔄 Fetching initial ambulance sessions with rooms...");
+
+      // Fetch sessions first
+      const filters = ambulanceId ? { ambulance_id: ambulanceId } : {};
+      const sessionsResponse =
+        await ambulanceStreamingService.getAmbulanceSessions(filters);
+
+      if (sessionsResponse.data && !sessionsResponse.error) {
+        // Fetch all camera rooms
+        const roomsResponse = await ambulanceStreamingService.getCameraRooms();
+
+        if (roomsResponse.data && !roomsResponse.error) {
+          // Combine sessions with their camera rooms
+          const sessionsWithRooms = sessionsResponse.data.map((session) => ({
+            ...session,
+            camera_rooms: (roomsResponse.data || []).filter(
+              (room) => room.session_id === session.id
+            ),
+          }));
+
+          setSessions(sessionsWithRooms);
+          console.log(
+            `✅ Loaded ${sessionsWithRooms.length} initial ambulance sessions with rooms`
+          );
+        } else {
+          // Sessions without rooms if rooms fetch fails
+          const sessionsWithEmptyRooms = sessionsResponse.data.map(
+            (session) => ({
+              ...session,
+              camera_rooms: [],
+            })
+          );
+          setSessions(sessionsWithEmptyRooms);
+          console.warn(
+            "⚠️ Failed to fetch rooms, sessions loaded without rooms:",
+            roomsResponse.error
+          );
+        }
+      } else {
+        console.warn(
+          "⚠️ Failed to fetch initial sessions:",
+          sessionsResponse.error
+        );
+        setError(sessionsResponse.error || "Failed to load initial sessions");
+      }
+    } catch (err) {
+      console.error("❌ Error fetching initial sessions:", err);
+      setError(err instanceof Error ? err.message : "Failed to load sessions");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [enabled, ambulanceId]);
+
+  const connect = useCallback(async () => {
+    if (!enabled) return;
+
+    // First fetch initial data
+    await fetchInitialSessions();
+
+    try {
+      console.log("🔗 Connecting to ambulance sessions and rooms SSE streams");
+
+      // Connect to sessions stream
+      const sessionEventSource =
         ambulanceStreamingService.getRealtimeAmbulanceSessions();
 
-      eventSource.onopen = () => {
-        setIsConnected(true);
+      sessionEventSource.onopen = () => {
         console.log("📡 Connected to ambulance sessions stream");
       };
-
-      eventSource.onmessage = handleMessage;
-
-      eventSource.onerror = (err) => {
+      sessionEventSource.onmessage = handleSessionMessage;
+      sessionEventSource.onerror = (err) => {
         console.error("❌ Ambulance sessions SSE error:", err);
-        setError("Connection to real-time updates failed");
+        setError("Connection to sessions real-time updates failed");
         setIsConnected(false);
       };
 
-      eventSourceRef.current = eventSource;
+      // Connect to rooms stream
+      const roomEventSource =
+        ambulanceStreamingService.getRealtimeCameraRooms();
+
+      roomEventSource.onopen = () => {
+        console.log("📡 Connected to camera rooms stream");
+        // Only set connected when both streams are ready
+        setIsConnected(true);
+      };
+      roomEventSource.onmessage = handleRoomMessage;
+      roomEventSource.onerror = (err) => {
+        console.error("❌ Camera rooms SSE error:", err);
+        setError("Connection to rooms real-time updates failed");
+        setIsConnected(false);
+      };
+
+      sessionEventSourceRef.current = sessionEventSource;
+      roomEventSourceRef.current = roomEventSource;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect");
       setIsConnected(false);
     }
-  }, [enabled, handleMessage]);
+  }, [enabled, handleSessionMessage, handleRoomMessage, fetchInitialSessions]);
 
   const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    if (sessionEventSourceRef.current) {
+      sessionEventSourceRef.current.close();
+      sessionEventSourceRef.current = null;
+    }
+    if (roomEventSourceRef.current) {
+      roomEventSourceRef.current.close();
+      roomEventSourceRef.current = null;
     }
     setIsConnected(false);
   }, []);
@@ -141,155 +312,21 @@ export function useRealtimeAmbulanceSessions(
     return () => {
       disconnect();
     };
-  }, [enabled, connect, disconnect]);
+  }, [enabled]);
 
   return {
     sessions,
     events,
     isConnected,
+    isLoading,
     error,
     connect,
     disconnect,
     setSessions, // Allow manual session updates
     clearEvents: useCallback(() => setEvents([]), []),
+    refetchInitialData: fetchInitialSessions,
   };
 }
 
-/**
- * Hook for subscribing to real-time streaming rooms updates
- */
-export function useRealtimeRooms(options: UseRealtimeCameraRoomsOptions = {}) {
-  const [rooms, setRooms] = useState<CameraRoom[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [events, setEvents] = useState<CameraRoomEvent[]>([]);
-  const eventSourceRef = useRef<EventSource | null>(null);
-
-  const { enabled = true } = options;
-
-  const handleMessage = useCallback((event: MessageEvent) => {
-    console.log("🎯 ROOMS - Received SSE event:", event.data);
-    setError(null);
-
-    try {
-      const eventData =
-        typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-      const roomEvent: CameraRoomEvent = {
-        event_type: eventData.event_type,
-        room: eventData.room,
-        timestamp: eventData.timestamp || new Date().toISOString(),
-      };
-
-      setEvents((prev) => [...prev, roomEvent]);
-
-      switch (roomEvent.event_type) {
-        case "room_created":
-        case "room_updated":
-        case "room_connected":
-          console.log(
-            "🔄 ROOMS - Processing room update:",
-            roomEvent.event_type
-          );
-          if (roomEvent.room) {
-            setRooms((prev) => {
-              const exists = prev.find((r) => r.id === roomEvent.room.id);
-              if (exists) {
-                console.log(
-                  "🔄 ROOMS - Updating existing room:",
-                  roomEvent.room.id
-                );
-                return prev.map((r) =>
-                  r.id === roomEvent.room.id ? { ...r, ...roomEvent.room } : r
-                );
-              }
-              console.log("➕ ROOMS - Adding new room:", roomEvent.room.id);
-              return [...prev, roomEvent.room];
-            });
-          }
-          break;
-
-        case "room_disconnected":
-          console.log("� ROOMS - Room disconnected:", roomEvent.room?.id);
-          if (roomEvent.room) {
-            setRooms((prev) =>
-              prev.map((r) =>
-                r.id === roomEvent.room.id
-                  ? {
-                      ...r,
-                      connected: false,
-                      connection_ended_at: roomEvent.timestamp,
-                    }
-                  : r
-              )
-            );
-          }
-          break;
-
-        default:
-          console.warn(
-            "❓ ROOMS - Unknown room event type:",
-            roomEvent.event_type
-          );
-      }
-    } catch (error) {
-      console.error("❌ ROOMS - Error processing event:", error);
-      setError(`Failed to process event: ${error}`);
-    }
-  }, []);
-
-  const connect = useCallback(() => {
-    if (!enabled) return;
-
-    try {
-      console.log("🔌 ROOMS - Connecting to camera rooms SSE...");
-      const eventSource = ambulanceStreamingService.getRealtimeCameraRooms();
-
-      eventSource.onmessage = handleMessage;
-      eventSource.onopen = () => {
-        setIsConnected(true);
-        console.log("✅ ROOMS - Connected to camera rooms SSE");
-      };
-      eventSource.onerror = (error) => {
-        console.error("❌ ROOMS - SSE connection error:", error);
-        setError("SSE connection failed");
-        setIsConnected(false);
-      };
-
-      eventSourceRef.current = eventSource;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect");
-      setIsConnected(false);
-    }
-  }, [enabled, handleMessage]);
-
-  const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    setIsConnected(false);
-  }, []);
-
-  useEffect(() => {
-    if (enabled) {
-      connect();
-    } else {
-      disconnect();
-    }
-
-    return () => {
-      disconnect();
-    };
-  }, [enabled, connect, disconnect]);
-
-  return {
-    rooms,
-    events,
-    isConnected,
-    error,
-    connect,
-    disconnect,
-    setRooms, // Allow manual room updates
-    clearEvents: useCallback(() => setEvents([]), []),
-  };
-}
+// Note: useRealtimeRooms hook removed - rooms are now embedded within sessions
+// Use useRealtimeAmbulanceSessions which includes camera_rooms for each session

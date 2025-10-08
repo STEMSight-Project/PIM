@@ -378,7 +378,7 @@ async def publish(
             if not camera_id:
                 raise Exception("Could not select a camera")
 
-            # Step 2b: Now create the camera room using the actual camera ID
+            # Step 2b: Check if camera room already exists, create if not
             camera_room_payload = {
                 "camera_id": camera_id,
                 "room_id": room_name,
@@ -386,43 +386,66 @@ async def publish(
             }
             create_camera_room_url = f"{base_url}/ambulance-streaming/camera-rooms"
 
-            LOGGER.info(f"Creating camera room for camera ID {camera_id}: {room_name}")
-            async with session.post(
-                create_camera_room_url,
-                json=camera_room_payload,
-                params={"session_id": session_id},
-            ) as resp:
-                if resp.status == 200:
-                    camera_room = await resp.json()
-                    LOGGER.info(f"✅ Ambulance camera room created: {camera_room}")
-                    # camera_id is already set from camera creation above
-                    streaming_url = (
-                        f"{base_url}/ambulance-streaming/camera/{camera_id}/streamer"
-                    )
-                elif resp.status == 409:
-                    # Camera room already exists, camera_id is already set from camera creation above
-                    LOGGER.info(
-                        f"🔄 Camera room exists, using existing camera ID: {camera_id}"
-                    )
-                    streaming_url = (
-                        f"{base_url}/ambulance-streaming/camera/{camera_id}/streamer"
-                    )
-                else:
-                    error_text = await resp.text()
-                    LOGGER.error(
-                        f"Camera room creation failed ({resp.status}): {error_text}"
-                    )
+            # First, try to get existing camera rooms for this session
+            existing_room_id = None
+            get_rooms_url = f"{base_url}/ambulance-streaming/camera-rooms"
+            LOGGER.info(f"🔍 Checking for existing camera room: {room_name}")
+            
+            async with session.get(
+                get_rooms_url,
+                params={"session_id": session_id, "limit": 100}
+            ) as get_resp:
+                if get_resp.status == 200:
+                    existing_rooms = await get_resp.json()
+                    for room in existing_rooms:
+                        if room.get("room_id") == room_name and room.get("camera_id") == camera_id:
+                            existing_room_id = room.get("id")
+                            LOGGER.info(f"✅ Found existing camera room (ID: {existing_room_id})")
+                            LOGGER.info(f"🔄 Rejoining existing room: {room_name}")
+                            break
 
-                    # Check if it's a duplicate room_id error (status 500 with duplicate key message)
-                    if "already exists" in error_text or "duplicate key" in error_text:
+            if existing_room_id:
+                # Room exists - rejoin it
+                LOGGER.info(f"♻️  Rejoining existing camera room for camera {room_name}")
+                streaming_url = f"{base_url}/ambulance-streaming/camera/{room_name}/streamer"
+            else:
+                # Room doesn't exist - create new one
+                LOGGER.info(f"🆕 Creating new camera room for camera ID {camera_id}: {room_name}")
+                async with session.post(
+                    create_camera_room_url,
+                    json=camera_room_payload,
+                    params={"session_id": session_id},
+                ) as resp:
+                    if resp.status == 200:
+                        camera_room = await resp.json()
+                        LOGGER.info(f"✅ Ambulance camera room created: {camera_room}")
+                        streaming_url = (
+                            f"{base_url}/ambulance-streaming/camera/{room_name}/streamer"
+                        )
+                    elif resp.status == 409:
+                        # Camera room already exists (race condition)
                         LOGGER.info(
-                            f"🔄 Room {room_name} already exists, attempting to use existing room"
+                            f"🔄 Camera room already exists (409), rejoining camera ID: {camera_id}"
                         )
-                        streaming_url = f"{base_url}/ambulance-streaming/camera/{camera_id}/streamer"
+                        streaming_url = (
+                            f"{base_url}/ambulance-streaming/camera/{room_name}/streamer"
+                        )
                     else:
-                        raise Exception(
-                            f"Camera endpoint failed: {resp.status} - {error_text}"
+                        error_text = await resp.text()
+                        LOGGER.error(
+                            f"Camera room creation failed ({resp.status}): {error_text}"
                         )
+
+                        # Check if it's a duplicate room_id error
+                        if "already exists" in error_text.lower() or "duplicate" in error_text.lower():
+                            LOGGER.info(
+                                f"🔄 Room {room_name} already exists (duplicate key), rejoining"
+                            )
+                            streaming_url = f"{base_url}/ambulance-streaming/camera/{camera_id}/streamer"
+                        else:
+                            raise Exception(
+                                f"Camera endpoint failed: {resp.status} - {error_text}"
+                            )
 
         except Exception as e:
             LOGGER.warning(f"Ambulance camera not available: {e}")
@@ -440,7 +463,7 @@ async def publish(
                 if resp.status == 200:
                     room_json = await resp.json()
                     room_id_created = (
-                        room_json.get("room_id") or room_payload["room_id"]
+                        room_json.get("room_name") or room_payload["room_id"]
                     )
                     LOGGER.info(f"✅ Regular room created: {room_id_created}")
                     streaming_url = (
@@ -460,36 +483,59 @@ async def publish(
             await pc.close()
             return
 
-        LOGGER.info(f"Connecting to: {streaming_url}")
+        LOGGER.info(f"📡 Connecting to streaming endpoint: {streaming_url}")
         answer_json = None
-        async with session.post(streaming_url, json=offer_payload) as resp:
-            if resp.status == 404:
-                LOGGER.error("Streaming endpoint not found")
-                safe_close_player(player)
-                await pc.close()
-                return
-            elif resp.status == 409:
-                LOGGER.warning("Streamer already connected. Reconnecting...")
-                await asyncio.sleep(1)
-                # Retry once
-                async with session.post(
-                    streaming_url, json=offer_payload
-                ) as retry_resp:
-                    if retry_resp.status != 200:
-                        LOGGER.error(
-                            f"Reconnection failed ({retry_resp.status}): {await retry_resp.text()}"
-                        )
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                async with session.post(streaming_url, json=offer_payload) as resp:
+                    if resp.status == 404:
+                        LOGGER.error("❌ Streaming endpoint not found")
                         safe_close_player(player)
                         await pc.close()
                         return
-                    answer_json = await retry_resp.json()
-            elif resp.status != 200:
-                LOGGER.error(f"Streaming failed ({resp.status}): {await resp.text()}")
-                safe_close_player(player)
-                await pc.close()
-                return
-            else:
-                answer_json = await resp.json()
+                    elif resp.status == 409:
+                        retry_count += 1
+                        LOGGER.warning(f"⚠️  Streamer already connected (attempt {retry_count}/{max_retries})")
+                        
+                        if retry_count < max_retries:
+                            LOGGER.info("🔄 Waiting 2 seconds before retry...")
+                            await asyncio.sleep(2)
+                            continue
+                        else:
+                            LOGGER.error("❌ Max retries reached. Room may have active streamer.")
+                            LOGGER.info("💡 Try stopping other broadcasters or wait for timeout")
+                            safe_close_player(player)
+                            await pc.close()
+                            return
+                    elif resp.status != 200:
+                        error_text = await resp.text()
+                        LOGGER.error(f"❌ Streaming failed ({resp.status}): {error_text}")
+                        safe_close_player(player)
+                        await pc.close()
+                        return
+                    else:
+                        answer_json = await resp.json()
+                        LOGGER.info("✅ Successfully connected to streaming endpoint")
+                        break
+                        
+            except Exception as e:
+                retry_count += 1
+                LOGGER.error(f"❌ Connection error (attempt {retry_count}/{max_retries}): {e}")
+                if retry_count < max_retries:
+                    await asyncio.sleep(2)
+                else:
+                    safe_close_player(player)
+                    await pc.close()
+                    return
+        
+        if not answer_json:
+            LOGGER.error("❌ Failed to get answer from streaming endpoint")
+            safe_close_player(player)
+            await pc.close()
+            return
 
     # Filter answer to only include SDP fields
     sdp_answer = {"sdp": answer_json.get("sdp"), "type": answer_json.get("type")}
@@ -591,14 +637,22 @@ def main() -> None:
     room_name = f"AMB-{ambulance_number}-ROOM-{room_number}"
 
     print(f"\n🎥 Starting Ambulance WebRTC Broadcaster")
+    print(f"{'='*60}")
     print(f"🚑 Ambulance: {ambulance_name}")
     print(f"🏠 Room: {room_name}")
     print(f"🌐 Server: {args.signaling}")
     print(f"📹 Video Device: {args.video_device or 'Default'}")
     print(f"🎤 Audio Device: {args.audio_device or 'Default'}")
     print(f"🏷️  Device Name: {args.device_name}")
-    print(f"🔄 Auto-reconnect: If ambulance/room exists")
-    print(f"{'='*60}")
+    print(f"\n� Connection Strategy:")
+    print(f"   1️⃣  Check if ambulance exists in database")
+    print(f"   2️⃣  Create/reconnect to ambulance session")
+    print(f"   3️⃣  Get existing camera or select from available")
+    print(f"   4️⃣  Check if camera room exists, create/rejoin")
+    print(f"   5️⃣  Connect to streaming endpoint (3 retry attempts)")
+    print(f"\n🔄 Auto-reconnect: Room will be reused if it exists")
+    print(f"⏱️  Stream Timeout: 30 seconds of inactivity")
+    print(f"{'='*60}\n")
 
     try:
         asyncio.run(

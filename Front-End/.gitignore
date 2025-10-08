@@ -22,7 +22,17 @@
 
 # misc
 .DS_Store
-# *.pem
+*.pem
+
+# SSL certificates
+localhost*.pem
+*.key
+*.crt
+
+# Unused test files
+LogDisplayPage.*
+settings.json
+vite.config.ts
 
 # debug
 npm-debug.log*

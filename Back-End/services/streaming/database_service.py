@@ -294,19 +294,64 @@ class StreamingDatabaseService:
             raise
 
     @staticmethod
-    async def get_all_camera_rooms() -> List[Dict[str, Any]]:
-        """Get all camera streaming rooms."""
+    async def get_all_camera_rooms(
+        connected: Optional[bool] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """Get all camera streaming rooms with optional filters."""
         try:
-            result = (
-                supabase.table("camera_streaming_rooms")
-                .select("*, cameras(*)")
-                .execute()
-            )
+            query = supabase.table("camera_streaming_rooms").select("*, cameras(*)")
+
+            if connected is not None:
+                query = query.eq("connected", connected)
+
+            query = query.order("created_at", desc=True).limit(limit)
+            result = query.execute()
 
             return result.data or []
 
         except Exception as e:
             logger.error("Error fetching all camera rooms: %s", e)
+            raise
+
+    @staticmethod
+    async def get_camera_rooms_by_ambulance_id(
+        ambulance_id: str, connected: Optional[bool] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """Get camera streaming rooms for a specific ambulance."""
+        try:
+            # First get active sessions for the ambulance
+            sessions_result = (
+                supabase.table("ambulance_streaming_sessions")
+                .select("id")
+                .eq("ambulance_id", ambulance_id)
+                .eq("is_active", True)
+                .execute()
+            )
+
+            if not sessions_result.data:
+                return []
+
+            session_ids = [session["id"] for session in sessions_result.data]
+
+            # Get camera rooms for these sessions
+            query = (
+                supabase.table("camera_streaming_rooms")
+                .select("*, cameras(*)")
+                .in_("session_id", session_ids)
+            )
+
+            if connected is not None:
+                query = query.eq("connected", connected)
+
+            query = query.order("created_at", desc=True).limit(limit)
+            result = query.execute()
+
+            return result.data or []
+
+        except Exception as e:
+            logger.error(
+                "Error fetching camera rooms for ambulance %s: %s", ambulance_id, e
+            )
             raise
 
     @staticmethod
@@ -332,16 +377,22 @@ class StreamingDatabaseService:
             raise
 
     @staticmethod
-    async def get_camera_rooms_by_session_id(session_id: str) -> List[Dict[str, Any]]:
+    async def get_camera_rooms_by_session_id(
+        session_id: str, connected: Optional[bool] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
         """Get all camera streaming rooms for a specific session."""
         try:
-            result = (
+            query = (
                 supabase.table("camera_streaming_rooms")
                 .select("*, cameras(*)")
                 .eq("session_id", session_id)
-                .order("created_at", desc=True)
-                .execute()
             )
+
+            if connected is not None:
+                query = query.eq("connected", connected)
+
+            query = query.order("created_at", desc=True).limit(limit)
+            result = query.execute()
 
             return result.data or []
 
@@ -394,65 +445,97 @@ class StreamingDatabaseService:
 
     @staticmethod
     async def get_ambulances_streaming_status() -> List[Dict[str, Any]]:
-        """Get streaming status for all ambulances with active sessions."""
+        """Get streaming status for all ambulances (with or without active sessions)."""
         try:
-            # Get all ambulances with their active streaming sessions
-            result = (
+            # Get ALL ambulances first
+            ambulances_result = (
                 supabase.table("ambulances")
-                .select(
-                    """
-                id, ambulance_number, status,
-                ambulance_streaming_sessions!inner(
-                    id, session_type, started_at, is_active,
-                    camera_streaming_rooms(*, cameras(*))
-                )
-                """
-                )
-                .eq("ambulance_streaming_sessions.is_active", True)
+                .select("id, ambulance_number, status")
                 .execute()
             )
 
             ambulances_status = []
-            for ambulance in result.data or []:
-                sessions = ambulance.get("ambulance_streaming_sessions", [])
-                print(ambulance)
-                for session in sessions:
-                    camera_rooms = session.get("camera_streaming_rooms", [])
-                    print(camera_rooms)
+
+            for ambulance in ambulances_result.data or []:
+                ambulance_id = ambulance["id"]
+
+                # Get active sessions for this ambulance
+                sessions_result = (
+                    supabase.table("ambulance_streaming_sessions")
+                    .select(
+                        """
+                        id, session_type, started_at, is_active,
+                        camera_streaming_rooms(*, cameras(*))
+                        """
+                    )
+                    .eq("ambulance_id", ambulance_id)
+                    .eq("is_active", True)
+                    .execute()
+                )
+
+                sessions = sessions_result.data or []
+
+                if sessions:
+                    # Ambulance has active sessions - add one entry per session
+                    for session in sessions:
+                        camera_rooms = session.get("camera_streaming_rooms", [])
+                        ambulances_status.append(
+                            {
+                                "ambulance_id": ambulance_id,
+                                "ambulance_number": ambulance.get(
+                                    "ambulance_number", "unknown"
+                                ),
+                                "status": ambulance.get("status", "unknown"),
+                                "session_id": session["id"],
+                                "session_type": session["session_type"],
+                                "session_started": session["started_at"],
+                                "is_active": session["is_active"],
+                                "total_camera_rooms": len(camera_rooms),
+                                "connected_camera_rooms": len(
+                                    [r for r in camera_rooms if r["connected"]]
+                                ),
+                                "camera_rooms": [
+                                    {
+                                        "room_id": r["room_id"],
+                                        "camera_id": r["camera_id"],
+                                        "camera_name": (
+                                            r["cameras"]["camera_name"]
+                                            if r["cameras"]
+                                            else "Unknown"
+                                        ),
+                                        "connected": r["connected"],
+                                        "connection_started_at": r.get(
+                                            "connection_started_at"
+                                        ),
+                                    }
+                                    for r in camera_rooms
+                                ],
+                            }
+                        )
+                else:
+                    # Ambulance has no active sessions - still add it with empty session data
                     ambulances_status.append(
                         {
-                            "ambulance_id": ambulance["id"],
+                            "ambulance_id": ambulance_id,
                             "ambulance_number": ambulance.get(
                                 "ambulance_number", "unknown"
                             ),
                             "status": ambulance.get("status", "unknown"),
-                            "session_id": session["id"],
-                            "session_type": session["session_type"],
-                            "session_started": session["started_at"],
-                            "is_active": session["is_active"],
-                            "total_camera_rooms": len(camera_rooms),
-                            "connected_camera_rooms": len(
-                                [r for r in camera_rooms if r["connected"]]
-                            ),
-                            "camera_rooms": [
-                                {
-                                    "room_id": r["room_id"],
-                                    "camera_id": r["camera_id"],
-                                    "camera_name": (
-                                        r["cameras"]["camera_name"]
-                                        if r["cameras"]
-                                        else "Unknown"
-                                    ),
-                                    "connected": r["connected"],
-                                    "connection_started_at": r.get(
-                                        "connection_started_at"
-                                    ),
-                                }
-                                for r in camera_rooms
-                            ],
+                            "session_id": None,
+                            "session_type": None,
+                            "session_started": None,
+                            "is_active": False,
+                            "total_camera_rooms": 0,
+                            "connected_camera_rooms": 0,
+                            "camera_rooms": [],
                         }
                     )
-            print(ambulances_status)
+
+            logger.info(
+                "Fetched status for %d ambulances (%d total entries)",
+                len(ambulances_result.data or []),
+                len(ambulances_status),
+            )
             return ambulances_status
 
         except Exception as e:

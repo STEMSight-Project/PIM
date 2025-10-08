@@ -58,12 +58,6 @@ class SupabaseRealtimeService:
             def event_handler(payload: Dict[str, Any]) -> None:
                 """Handle incoming realtime events"""
                 try:
-                    logger.info(
-                        "🔥 RAW REALTIME EVENT RECEIVED - Table: %s, Payload: %s",
-                        table,
-                        payload,
-                    )
-
                     # Process the event payload
                     data = payload.get("data")
                     if not data:
@@ -89,13 +83,6 @@ class SupabaseRealtimeService:
                         ),
                         "timestamp": data.get("commit_timestamp"),
                     }
-
-                    logger.info(
-                        "📤 PROCESSED EVENT DATA - Table: %s, Event: %s, Data: %s",
-                        table,
-                        event_data.get("event"),
-                        event_data,
-                    )
 
                     # Add to queue (non-blocking)
                     if not queue.full():

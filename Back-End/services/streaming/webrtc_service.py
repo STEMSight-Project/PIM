@@ -4,13 +4,17 @@ WebRTC service for handling peer connections and media relay.
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Set
+from typing import Optional, Dict, Set, TYPE_CHECKING
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaRelay
+from aiortc.mediastreams import MediaStreamError
 from core.common import logger
 from services.streaming.room_service import room_manager
 from services.streaming.models import SDPBody
 from services.streaming.database_service import StreamingDatabaseService
+
+if TYPE_CHECKING:
+    from services.streaming.room_service import Room
 
 
 class WebRTCService:
@@ -19,10 +23,11 @@ class WebRTCService:
     def __init__(self):
         self.relay = MediaRelay()
 
-        # Camera activity monitoring (for status updates only)
+        # Camera activity monitoring (DEPRECATED - now handled by room-based monitoring)
+        # Keeping for backward compatibility but will be phased out
         self.camera_monitors: Dict[str, Dict] = {}  # room_id -> monitoring data
         self.inactive_timeout = (
-            30  # seconds without activity before marking disconnected
+            300  # Increased to 5 minutes to avoid conflict with room-based 30s timeout
         )
 
         # Background monitoring task
@@ -158,6 +163,69 @@ class WebRTCService:
         if room_id in self.camera_monitors:
             self.camera_monitors[room_id]["last_activity"] = datetime.utcnow()
 
+    async def _monitor_track_activity(
+        self, track: MediaStreamTrack, room_id: str, room: "Room"
+    ):
+        """
+        Monitor a track for activity even when there are no viewers.
+
+        This is critical because MediaRelay.subscribe() only calls recv() when
+        there are other peer connections to relay to. If there's only a streamer
+        and no viewers, the ActivityTrackWrapper.recv() is never called.
+
+        This task continuously receives frames from the original track to ensure
+        activity monitoring works even without viewers.
+        """
+        try:
+            logger.info("[TRACK-MONITOR] Started monitoring track for room %s", room_id)
+            frame_count = 0
+
+            while True:
+                try:
+                    # Receive frame from the track
+                    await track.recv()
+                    frame_count += 1
+
+                    # Update activity in the room
+                    if room:
+                        room.update_stream_activity()
+
+                    # Also update legacy monitoring
+                    self._update_activity(room_id)
+
+                    # Log every 30 frames (~1 second at 30fps)
+                    if frame_count % 30 == 0:
+                        logger.debug(
+                            "[TRACK-MONITOR] Room %s: %d frames monitored",
+                            room_id,
+                            frame_count,
+                        )
+
+                except MediaStreamError:
+                    # Track ended
+                    logger.info(
+                        "[TRACK-MONITOR] Track ended for room %s after %d frames",
+                        room_id,
+                        frame_count,
+                    )
+                    break
+                except Exception as e:
+                    logger.error(
+                        "[TRACK-MONITOR] Error receiving frame in room %s: %s",
+                        room_id,
+                        e,
+                    )
+                    break
+
+        except asyncio.CancelledError:
+            logger.info("[TRACK-MONITOR] Monitoring cancelled for room %s", room_id)
+        except Exception as e:
+            logger.error(
+                "[TRACK-MONITOR] Unexpected error monitoring track for room %s: %s",
+                room_id,
+                e,
+            )
+
     async def create_streamer_connection(self, room_id: str, sdp_body: SDPBody) -> dict:
         """Create a WebRTC connection for a streamer (publisher)."""
         try:
@@ -167,7 +235,9 @@ class WebRTCService:
 
             # Create peer connection
             pc = RTCPeerConnection()
-            room.add_peer_connection(pc)
+            room.add_peer_connection(
+                pc, is_streamer=True
+            )  # Mark as streamer connection
 
             # Set up event handlers
             @pc.on("connectionstatechange")
@@ -187,18 +257,95 @@ class WebRTCService:
 
             @pc.on("track")
             def on_track(track: MediaStreamTrack):
-                logger.info("Received %s track in room %s", track.kind, room_id)
+                logger.info(
+                    "[TRACK] Received %s track in room %s (kind: %s)",
+                    track.kind,
+                    room_id,
+                    type(track).__name__,
+                )
 
-                # Update activity when track is received
+                # Update activity when track is received (legacy monitoring)
                 self._update_activity(room_id)
 
+                # Update stream activity in room for new 30-second timeout
+                room.update_stream_activity()
+
+                # Create a custom track wrapper to monitor frame activity
+                class ActivityTrackWrapper(MediaStreamTrack):
+                    """Wrapper track that monitors frame activity for stream timeout."""
+
+                    _frame_count = 0  # Class variable for counting frames
+
+                    def __init__(self, track, room_id, room_ref, webrtc_service):
+                        super().__init__()
+                        self.kind = (
+                            track.kind
+                        )  # CRITICAL: Inherit kind from original track
+                        self.track = track
+                        self.room_id = room_id
+                        self.room = room_ref
+                        self.webrtc_service = webrtc_service
+                        logger.info(
+                            "[WRAPPER] Created ActivityTrackWrapper for room %s (kind: %s)",
+                            room_id,
+                            self.kind,
+                        )
+
+                    async def recv(self):
+                        try:
+                            frame = await self.track.recv()
+
+                            # DEBUG: Log frame reception (every 30 frames = ~1 second at 30fps)
+                            ActivityTrackWrapper._frame_count += 1
+                            if ActivityTrackWrapper._frame_count % 30 == 0:
+                                logger.debug(
+                                    "[WRAPPER] Room %s received frame #%d",
+                                    self.room_id,
+                                    ActivityTrackWrapper._frame_count,
+                                )
+
+                            # Update activity on every frame received
+                            if self.room:
+                                self.room.update_stream_activity()
+                            # Also update old monitoring system to keep them in sync
+                            if self.webrtc_service:
+                                self.webrtc_service._update_activity(self.room_id)
+                            return frame
+                        except Exception as e:
+                            logger.debug(
+                                "Frame recv error in room %s: %s", self.room_id, e
+                            )
+                            raise
+
+                # Wrap the track to monitor frame activity
+                activity_wrapped_track = ActivityTrackWrapper(
+                    track, room_id, room, self
+                )
+                logger.info(
+                    "[RELAY] Wrapping track for room %s with ActivityTrackWrapper",
+                    room_id,
+                )
+
                 # Relay track to all other connections in the room
-                relayed_track = self.relay.subscribe(track)
+                relayed_track = self.relay.subscribe(activity_wrapped_track)
+                logger.info(
+                    "[RELAY] Subscribed wrapped track to relay for room %s",
+                    room_id,
+                )
+
+                # CRITICAL FIX: Start a background task to monitor the ORIGINAL track
+                # The relay only calls recv() when there are viewers, but we need to
+                # monitor activity even when there are no viewers
+                asyncio.create_task(self._monitor_track_activity(track, room_id, room))
 
                 # Add track to all other peer connections in the room
                 for other_pc in room.pcs:
                     if other_pc != pc:
                         other_pc.addTrack(relayed_track)
+                        logger.debug(
+                            "[RELAY] Added relayed track to peer connection in room %s",
+                            room_id,
+                        )
 
                 @track.on("ended")
                 async def on_ended():
@@ -231,7 +378,7 @@ class WebRTCService:
 
             # Create peer connection
             pc = RTCPeerConnection()
-            room.add_peer_connection(pc)
+            room.add_peer_connection(pc, is_streamer=False)  # Mark as viewer connection
 
             # Set up event handlers
             @pc.on("connectionstatechange")

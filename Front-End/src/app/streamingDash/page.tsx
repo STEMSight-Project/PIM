@@ -2,56 +2,38 @@
 
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
-import type { AmbulanceWithSession } from "@/hooks";
-import {
-  useAmbulanceStreaming,
-  useRealtimeAmbulanceSessions,
-  useRealtimeRooms,
-} from "@/hooks";
 import { useAuth } from "@/hooks/useAuth";
-import type { CameraRoom } from "@/types";
+import { useRealtimeAmbulanceSessions } from "@/hooks/useRealtime";
+import type { AmbulanceSession, CameraRoom } from "@/types";
 import {
-  ArrowPathIcon,
   CameraIcon,
-  ClockIcon,
   ExclamationTriangleIcon,
   EyeIcon,
   SignalIcon,
-  SignalSlashIcon,
-  StopIcon,
-  UserIcon,
+  TruckIcon,
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 
-// Badge component following UI design system rules
+// Simple Badge component
 const Badge = ({
   children,
   variant = "default",
   className = "",
 }: {
   children: React.ReactNode;
-  variant?:
-    | "default"
-    | "secondary"
-    | "outline"
-    | "success"
-    | "warning"
-    | "danger"
-    | "live";
+  variant?: "default" | "secondary" | "success" | "warning" | "live";
   className?: string;
 }) => {
   const baseClasses =
-    "inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200";
+    "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium";
   const variantClasses = {
-    default: "bg-blue-100 text-blue-800 border border-blue-200",
-    secondary: "bg-slate-100 text-slate-700 border border-slate-200",
-    outline: "border border-blue-200 text-blue-700 bg-white hover:bg-blue-50",
-    success: "bg-emerald-100 text-emerald-800 border border-emerald-200",
-    warning: "bg-amber-100 text-amber-800 border border-amber-200",
-    danger: "bg-red-100 text-red-800 border border-red-200",
-    live: "bg-red-500 text-white shadow-lg animate-pulse border-2 border-red-400",
+    default: "bg-blue-100 text-blue-800",
+    secondary: "bg-gray-100 text-gray-800",
+    success: "bg-green-100 text-green-800",
+    warning: "bg-yellow-100 text-yellow-800",
+    live: "bg-red-500 text-white animate-pulse",
   };
 
   return (
@@ -61,50 +43,80 @@ const Badge = ({
   );
 };
 
-export default function LiveStreamingDashboard() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const {
-    ambulances,
-    loading,
-    error,
-    endSession,
-    totalSessions,
-    activeSessions,
-    connectedRooms,
-  } = useAmbulanceStreaming();
+// Simple ambulance data structure
+interface SimpleAmbulanceData {
+  ambulanceId: string;
+  ambulanceNumber: string;
+  activeSessions: AmbulanceSession[];
+  connectedRooms: CameraRoom[];
+  totalRooms: CameraRoom[];
+}
 
-  // Realtime hooks for live data
-  const { sessions: realtimeSessions, isConnected: sessionsConnected } =
-    useRealtimeAmbulanceSessions({
-      enabled: true,
-    });
-
-  const { rooms: realtimeRooms, isConnected: roomsConnected } =
-    useRealtimeRooms({
-      enabled: true,
-    });
-
-  // Real-time updates are now handled directly in useAmbulanceStreaming hook
-  // No need for manual data merging
-
+export default function SimpleStreamingDashboard() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const [endingSession, setEndingSession] = useState<string | null>(null);
+
+  // Single source of truth - real-time sessions data
+  const {
+    sessions: realtimeSessions,
+    isConnected: realtimeConnected,
+    isLoading: realtimeLoading,
+    error: realtimeError,
+  } = useRealtimeAmbulanceSessions({
+    enabled: isAuthenticated,
+  });
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!authLoading && !isAuthenticated) {
       router.push("/");
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, authLoading, router]);
 
-  useEffect(() => {
-    console.log("Realtime Sessions:", realtimeSessions);
-    console.log("Realtime Rooms:", realtimeRooms);
-  }, [realtimeRooms, realtimeSessions]);
+  // Process sessions into simple ambulance data
+  const ambulancesData = useMemo(() => {
+    const ambulanceMap = new Map<string, SimpleAmbulanceData>();
+    realtimeSessions.forEach((session) => {
+      const ambulanceId = session.ambulance_id;
 
-  if (isLoading) {
+      if (!ambulanceMap.has(ambulanceId)) {
+        ambulanceMap.set(ambulanceId, {
+          ambulanceId,
+          ambulanceNumber: `AMB-${ambulanceId.substring(0, 3).toUpperCase()}`,
+          activeSessions: [],
+          connectedRooms: [],
+          totalRooms: [],
+        });
+      }
+
+      const ambulanceData = ambulanceMap.get(ambulanceId)!;
+
+      if (session.is_active) {
+        ambulanceData.activeSessions.push(session);
+      }
+
+      const sessionRooms = session.camera_rooms || [];
+      ambulanceData.totalRooms.push(...sessionRooms);
+      ambulanceData.connectedRooms.push(
+        ...sessionRooms.filter((room) => room.connected)
+      );
+      console.log(ambulanceData.connectedRooms);
+    });
+
+    return Array.from(ambulanceMap.values());
+  }, [realtimeSessions]);
+
+  const handleViewStream = (ambulanceId: string) => {
+    router.push(`/streamingDash/${ambulanceId}`);
+  };
+
+  const handleJoinRoom = (roomId: string, ambulanceId: string) => {
+    router.push(`/streamingDash/${ambulanceId}?room=${roomId}`);
+  };
+
+  if (authLoading || realtimeLoading) {
     return (
       <DashboardLayout>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center justify-center h-96">
           <div className="text-center">
             <div className="relative mx-auto w-16 h-16 mb-8">
               <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
@@ -113,156 +125,7 @@ export default function LiveStreamingDashboard() {
             <h3 className="text-xl font-semibold text-slate-800 mb-2">
               Loading Dashboard
             </h3>
-            <p className="text-slate-600">
-              Please wait while we set up your streaming dashboard...
-            </p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  const handleViewStream = (ambulanceId: string) => {
-    router.push(`/streamingDash/${ambulanceId}`);
-  };
-
-  const handleEndSession = async (sessionId: string) => {
-    try {
-      setEndingSession(sessionId);
-      await endSession(sessionId);
-    } catch (err) {
-      console.error("Error ending session:", err);
-    } finally {
-      setEndingSession(null);
-    }
-  };
-
-  const handleJoinRoom = (roomId: string, ambulanceId: string) => {
-    // Navigate to streaming room with room ID parameter
-    router.push(`/streamingDash/${ambulanceId}?room=${roomId}`);
-  };
-
-  const getSessionStatusBadge = (ambulance: AmbulanceWithSession) => {
-    if (!ambulance.session) {
-      return (
-        <Badge variant="secondary">
-          <StopIcon className="w-3 h-3" />
-          No Session
-        </Badge>
-      );
-    }
-
-    if (!ambulance.session.is_active) {
-      return (
-        <Badge variant="secondary">
-          <StopIcon className="w-3 h-3" />
-          Ended
-        </Badge>
-      );
-    }
-
-    const connectedRooms = ambulance.cameras.filter(
-      (room: CameraRoom) => room.connected
-    ).length;
-    const totalRooms = ambulance.cameras.length;
-
-    if (connectedRooms === 0) {
-      return (
-        <Badge variant="secondary">
-          <SignalSlashIcon className="w-3 h-3" />
-          Disconnected
-        </Badge>
-      );
-    }
-
-    if (connectedRooms === totalRooms && totalRooms > 0) {
-      return (
-        <Badge variant="live">
-          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-          LIVE
-        </Badge>
-      );
-    }
-
-    return (
-      <Badge variant="warning">
-        <SignalIcon className="w-3 h-3" />
-        {connectedRooms}/{totalRooms} Connected
-      </Badge>
-    );
-  };
-
-  const getRoomStatusBadge = (room: CameraRoom) => {
-    if (room.connected) {
-      return (
-        <Badge variant="success" className="text-xs">
-          <SignalIcon className="w-3 h-3" />
-          Connected
-        </Badge>
-      );
-    } else {
-      return (
-        <Badge variant="secondary" className="text-xs">
-          <SignalSlashIcon className="w-3 h-3" />
-          Disconnected
-        </Badge>
-      );
-    }
-  };
-
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <div className="relative mx-auto w-16 h-16 mb-8">
-              <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
-              <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
-            </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">
-              Loading Live Streams
-            </h3>
-            <p className="text-slate-600">
-              Connecting to camera feeds and ambulance sessions...
-            </p>
-            <div className="mt-4 flex justify-center">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                <div
-                  className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
-                  style={{ animationDelay: "0.1s" }}
-                ></div>
-                <div
-                  className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
-                  style={{ animationDelay: "0.2s" }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center max-w-md">
-            <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6">
-              <ExclamationTriangleIcon className="w-8 h-8 text-red-600" />
-            </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-3">
-              Connection Failed
-            </h3>
-            <p className="text-slate-600 mb-6">
-              Unable to connect to streaming service. Please check your internet
-              connection and try again.
-            </p>
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-              <p className="text-red-800 text-sm font-medium">Error Details:</p>
-              <p className="text-red-700 text-sm mt-1">{error}</p>
-            </div>
+            <p className="text-slate-600">Loading streaming data...</p>
           </div>
         </div>
       </DashboardLayout>
@@ -272,7 +135,7 @@ export default function LiveStreamingDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        {/* Standard page header following UI design system */}
+        {/* Simple Header */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
             <div className="flex items-center justify-between">
@@ -285,14 +148,14 @@ export default function LiveStreamingDashboard() {
                     Live Streaming Dashboard
                   </h1>
                   <p className="text-blue-100 mt-1">
-                    Real-time camera monitoring and ambulance session management
+                    Real-time ambulance camera monitoring
                   </p>
                 </div>
               </div>
               <div className="hidden lg:flex items-center space-x-6">
                 <div className="text-center bg-white/10 rounded-lg px-4 py-2 backdrop-blur-sm">
                   <div className="text-2xl font-bold text-white">
-                    {ambulances.length}
+                    {ambulancesData.length}
                   </div>
                   <div className="text-blue-200 text-sm font-medium">
                     Ambulances
@@ -300,74 +163,70 @@ export default function LiveStreamingDashboard() {
                 </div>
                 <div className="text-center bg-white/10 rounded-lg px-4 py-2 backdrop-blur-sm">
                   <div className="text-2xl font-bold text-white">
-                    {connectedRooms}
+                    {ambulancesData.reduce(
+                      (total, amb) => total + amb.connectedRooms.length,
+                      0
+                    )}
                   </div>
                   <div className="text-blue-200 text-sm font-medium">
-                    Connected Rooms
+                    Live Cameras
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Status bar */}
+          {/* Status Bar */}
           <div className="bg-slate-50 px-8 py-4 border-t border-slate-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-6">
                 <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      realtimeConnected
+                        ? "bg-green-500 animate-pulse"
+                        : "bg-red-500"
+                    }`}
+                  ></div>
                   <span className="text-sm font-medium text-slate-700">
-                    System Online
+                    Real-time:{" "}
+                    {realtimeConnected ? "Connected" : "Disconnected"}
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <CameraIcon className="h-4 w-4 text-blue-600" />
                   <span className="text-sm text-slate-600">
-                    {totalSessions} total sessions
-                  </span>
-                </div>
-                {/* Realtime connection status */}
-                <div className="flex items-center space-x-2">
-                  <div
-                    className={`w-3 h-3 rounded-full ${
-                      sessionsConnected && roomsConnected
-                        ? "bg-green-500 animate-pulse"
-                        : "bg-red-500"
-                    }`}
-                  ></div>
-                  <span className="text-sm text-slate-600">
-                    Realtime:{" "}
-                    {sessionsConnected && roomsConnected
-                      ? "Connected"
-                      : "Disconnected"}
+                    {realtimeSessions.length} active sessions
                   </span>
                 </div>
               </div>
-              <div className="flex items-center space-x-3">
-                <span className="text-sm text-slate-500">
-                  Live data: {realtimeSessions.length} sessions,{" "}
-                  {realtimeRooms.length} rooms
-                </span>
-              </div>
+              {realtimeError && (
+                <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                  Connection issues detected
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-xl shadow-sm">
+        {/* Error Message */}
+        {realtimeError && (
+          <div className="p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-xl shadow-sm">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-red-500 rounded-lg">
-                <StopIcon className="h-5 w-5 text-white" />
+                <ExclamationTriangleIcon className="h-5 w-5 text-white" />
               </div>
-              <div>
-                <p className="text-red-800 font-medium">Connection Error</p>
-                <p className="text-red-600 text-sm">{error}</p>
+              <div className="flex-1">
+                <p className="text-red-800 font-medium">
+                  Real-time Connection Issues
+                </p>
+                <p className="text-red-600 text-sm">{realtimeError}</p>
               </div>
             </div>
           </div>
         )}
 
-        {ambulances.length === 0 ? (
+        {ambulancesData.length === 0 ? (
           <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
             <CardContent className="text-center py-16">
               <div className="mb-8">
@@ -376,30 +235,30 @@ export default function LiveStreamingDashboard() {
                 </div>
               </div>
               <h3 className="text-xl font-semibold text-slate-800 mb-3">
-                No Active Streams
+                No Active Sessions
               </h3>
               <p className="text-slate-600 mb-8 max-w-md mx-auto">
-                No ambulances are currently streaming. Active camera feeds will
-                appear here automatically.
+                No ambulance sessions are currently active. Sessions will appear
+                here when cameras connect.
               </p>
             </CardContent>
           </Card>
         ) : (
           <>
             {/* Stats Bar */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex flex-wrap items-center justify-between gap-6">
                 <div className="flex items-center space-x-8">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <UserIcon className="h-5 w-5 text-blue-600" />
+                      <TruckIcon className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
                       <p className="text-sm text-slate-500">
                         Active Ambulances
                       </p>
                       <p className="text-xl font-semibold text-slate-800">
-                        {ambulances.length}
+                        {ambulancesData.length}
                       </p>
                     </div>
                   </div>
@@ -410,7 +269,26 @@ export default function LiveStreamingDashboard() {
                     <div>
                       <p className="text-sm text-slate-500">Live Sessions</p>
                       <p className="text-xl font-semibold text-slate-800">
-                        {activeSessions}
+                        {ambulancesData.reduce(
+                          (acc, amb) => acc + amb.activeSessions.length,
+                          0
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                      <SignalIcon className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">
+                        Connected Cameras
+                      </p>
+                      <p className="text-xl font-semibold text-slate-800">
+                        {ambulancesData.reduce(
+                          (acc, amb) => acc + amb.connectedRooms.length,
+                          0
+                        )}
                       </p>
                     </div>
                   </div>
@@ -418,140 +296,112 @@ export default function LiveStreamingDashboard() {
               </div>
             </div>
 
-            {/* Ambulance Cards Grid */}
+            {/* Ambulance Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {ambulances.map((ambulance: AmbulanceWithSession) => (
+              {ambulancesData.map((ambulance) => (
                 <Card
-                  key={ambulance.id}
-                  className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden"
+                  key={ambulance.ambulanceId}
+                  className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200"
                 >
                   <CardHeader className="border-b border-slate-100 bg-slate-50">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                          <CameraIcon className="h-5 w-5 text-blue-600" />
+                          <TruckIcon className="h-5 w-5 text-blue-600" />
                         </div>
-                        <h3 className="text-lg font-semibold text-slate-800 truncate">
-                          {ambulance.ambulance_number}
+                        <h3 className="text-lg font-semibold text-slate-800">
+                          {ambulance.ambulanceNumber}
                         </h3>
                       </div>
-                      {getSessionStatusBadge(ambulance)}
+                      {ambulance.activeSessions.length > 0 ? (
+                        ambulance.connectedRooms.length > 0 ? (
+                          <Badge variant="live">
+                            <div className="w-2 h-2 bg-white rounded-full" />
+                            LIVE
+                          </Badge>
+                        ) : (
+                          <Badge variant="warning">Session Active</Badge>
+                        )
+                      ) : (
+                        <Badge variant="secondary">Inactive</Badge>
+                      )}
                     </div>
                   </CardHeader>
 
                   <CardContent className="p-6 space-y-4">
-                    {ambulance.session ? (
+                    {ambulance.activeSessions.length > 0 ? (
                       <>
                         <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center space-x-2">
-                              <CameraIcon className="h-4 w-4 text-blue-600" />
+                          <div className="text-sm">
+                            <div className="flex items-center justify-between mb-2">
                               <span className="font-medium text-slate-700">
-                                Session:{" "}
-                                {ambulance.session.is_active
-                                  ? "Active"
-                                  : "Inactive"}
+                                Sessions: {ambulance.activeSessions.length}
                               </span>
-                            </div>
-                            <div className="flex items-center space-x-1 text-slate-500">
-                              <ClockIcon className="h-4 w-4" />
-                              <span className="text-xs">
-                                {new Date(
-                                  ambulance.session.started_at
-                                ).toLocaleTimeString()}
+                              <span className="text-xs text-slate-500">
+                                Rooms: {ambulance.connectedRooms.length}/
+                                {ambulance.totalRooms.length}
                               </span>
                             </div>
                           </div>
                         </div>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm font-medium text-slate-700">
-                            <span>Cameras ({ambulance.cameras.length})</span>
-                            <span className="text-xs text-slate-500">
-                              {
-                                ambulance.cameras.filter(
-                                  (r: CameraRoom) => r.connected
-                                ).length
-                              }{" "}
-                              connected
-                            </span>
-                          </div>
 
-                          {ambulance.cameras.map((room: CameraRoom) => (
-                            <div
-                              key={room.id}
-                              onClick={() =>
-                                handleJoinRoom(room.room_id, ambulance.id)
-                              }
-                              className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors duration-200 border border-slate-200"
-                              title={`Click to join room ${room.room_id}`}
-                            >
-                              <div className="flex items-center space-x-3">
-                                <div
-                                  className={`w-3 h-3 rounded-full ${
-                                    room.connected
-                                      ? "bg-green-500 animate-pulse"
-                                      : "bg-slate-400"
-                                  }`}
-                                ></div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-800">
-                                    {room.camera_id ||
-                                      room.room_id.split("-")[0]}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    Room: {room.camera_id ?? room.room_id}
-                                  </p>
+                        {ambulance.totalRooms.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="text-sm font-medium text-slate-700 mb-3">
+                              Camera Rooms ({ambulance.totalRooms.length})
+                            </div>
+                            {ambulance.totalRooms.slice(0, 3).map((room) => (
+                              <div
+                                key={room.id}
+                                onClick={() =>
+                                  handleJoinRoom(
+                                    room.room_id,
+                                    ambulance.ambulanceId
+                                  )
+                                }
+                                className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors border border-slate-200"
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <div
+                                    className={`w-3 h-3 rounded-full ${
+                                      room.connected
+                                        ? "bg-green-500 animate-pulse"
+                                        : "bg-slate-400"
+                                    }`}
+                                  />
+                                  <span className="text-sm font-medium text-slate-800">
+                                    {room.room_id}
+                                  </span>
                                 </div>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                {getRoomStatusBadge(room)}
                                 <EyeIcon className="h-4 w-4 text-slate-400" />
                               </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="pt-4 border-t border-slate-200">
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => handleViewStream(ambulance.id)}
-                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2 px-4 transition-colors duration-200"
-                            >
-                              <VideoCameraIcon className="h-4 w-4 mr-2" />
-                              View Stream
-                            </Button>
-                            {ambulance.session.is_active && (
-                              <Button
-                                onClick={() =>
-                                  handleEndSession(ambulance.session!.id)
-                                }
-                                disabled={
-                                  endingSession === ambulance.session!.id
-                                }
-                                className="bg-red-600 hover:bg-red-700 text-white rounded-xl py-2 px-4 transition-colors duration-200 disabled:opacity-50"
-                              >
-                                {endingSession === ambulance.session!.id ? (
-                                  <>
-                                    <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
-                                    Ending...
-                                  </>
-                                ) : (
-                                  <>
-                                    <StopIcon className="h-4 w-4 mr-2" />
-                                    End Session
-                                  </>
-                                )}
-                              </Button>
+                            ))}
+                            {ambulance.totalRooms.length > 3 && (
+                              <p className="text-xs text-slate-500 text-center">
+                                +{ambulance.totalRooms.length - 3} more rooms
+                              </p>
                             )}
                           </div>
+                        )}
+
+                        <div className="pt-4 border-t border-slate-200">
+                          <Button
+                            onClick={() =>
+                              handleViewStream(ambulance.ambulanceId)
+                            }
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2 px-4"
+                          >
+                            <VideoCameraIcon className="h-4 w-4 mr-2" />
+                            View Stream
+                          </Button>
                         </div>
                       </>
                     ) : (
                       <div className="text-center py-8 text-slate-500">
                         <CameraIcon className="h-12 w-12 mx-auto mb-3 text-slate-300" />
-                        <p className="font-medium">No active session</p>
+                        <p className="font-medium">No Active Session</p>
                         <p className="text-sm">
-                          This ambulance is not currently streaming
+                          Waiting for cameras to connect
                         </p>
                       </div>
                     )}
