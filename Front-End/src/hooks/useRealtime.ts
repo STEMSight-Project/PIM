@@ -49,15 +49,18 @@ export function useRealtimeAmbulanceSessions(
   const handleSessionMessage = useCallback((event: MessageEvent) => {
     try {
       const data = JSON.parse(event.data);
-      console.log("🎯 SESSIONS - Received SSE event:", data);
 
       setError(null);
 
-      if (data.event_type && data.session) {
+      // Extract actual event type from 'event' field
+      const actualEventType = data.event || data.event_type;
+      const sessionData = data.new || data.session || data.record;
+
+      if (actualEventType && sessionData) {
         const sessionEvent: AmbulanceSessionEvent = {
           name: data.type,
-          event_type: data.event,
-          session: data.session,
+          event_type: actualEventType,
+          session: sessionData,
           timestamp: data.timestamp || new Date().toISOString(),
         };
 
@@ -67,31 +70,27 @@ export function useRealtimeAmbulanceSessions(
         setSessions((prev) => {
           const newSessions = [...prev];
 
-          switch (sessionEvent.event_type) {
+          switch (actualEventType) {
             case "UPDATE":
             case "INSERT":
             case "DELETE":
               {
                 const index = newSessions.findIndex(
-                  (s) => s.id === data.session.id
+                  (s) => s.id === sessionData.id
                 );
                 if (index >= 0) {
-                  console.log(
-                    "🔄 Updating ambulance session:",
-                    data.session.id
-                  );
                   // Preserve existing rooms when updating session
                   newSessions[index] = {
-                    ...data.session,
+                    ...sessionData,
                     camera_rooms: newSessions[index].camera_rooms || [],
                   };
                 } else {
-                  newSessions.push({ ...data.session, camera_rooms: [] });
+                  newSessions.push({ ...sessionData, camera_rooms: [] });
                 }
               }
               break;
             default:
-              console.warn("Unknown session event type:", data.event_type);
+              break;
           }
 
           return newSessions;
@@ -112,10 +111,14 @@ export function useRealtimeAmbulanceSessions(
       const eventData = typeof data === "string" ? JSON.parse(data) : data;
       const roomData = eventData.new || eventData.room || eventData.record;
 
+      // Extract the actual event type - it's in 'event' field, not 'type'
+      const actualEventType =
+        eventData.event || eventData.event_type || eventData.type;
+
       if (roomData && roomData.session_id) {
         const roomEvent: CameraRoomEvent = {
           name: eventData.table || "camera_rooms",
-          event_type: eventData.type || eventData.event_type,
+          event_type: actualEventType,
           room: roomData,
           timestamp: eventData.timestamp || new Date().toISOString(),
         };
@@ -128,15 +131,9 @@ export function useRealtimeAmbulanceSessions(
             if (session.id === roomData.session_id) {
               const currentRooms = session.camera_rooms || [];
 
-              switch (eventData.type || eventData.event_type) {
+              switch (actualEventType) {
                 case "INSERT":
                 case "UPDATE":
-                  console.log(
-                    "🔄 ROOMS - Updating room in session:",
-                    session.id,
-                    "room:",
-                    roomData.id
-                  );
                   const existingIndex = currentRooms.findIndex(
                     (r: CameraRoom) => r.id === roomData.id
                   );
@@ -158,12 +155,6 @@ export function useRealtimeAmbulanceSessions(
                   }
 
                 case "DELETE":
-                  console.log(
-                    "🗑️ ROOMS - Removing room from session:",
-                    session.id,
-                    "room:",
-                    roomData.id
-                  );
                   return {
                     ...session,
                     camera_rooms: currentRooms.filter(
@@ -190,7 +181,6 @@ export function useRealtimeAmbulanceSessions(
 
     try {
       setIsLoading(true);
-      console.log("🔄 Fetching initial ambulance sessions with rooms...");
 
       // Fetch sessions first
       const filters = ambulanceId ? { ambulance_id: ambulanceId } : {};
@@ -211,9 +201,6 @@ export function useRealtimeAmbulanceSessions(
           }));
 
           setSessions(sessionsWithRooms);
-          console.log(
-            `✅ Loaded ${sessionsWithRooms.length} initial ambulance sessions with rooms`
-          );
         } else {
           // Sessions without rooms if rooms fetch fails
           const sessionsWithEmptyRooms = sessionsResponse.data.map(
@@ -223,20 +210,11 @@ export function useRealtimeAmbulanceSessions(
             })
           );
           setSessions(sessionsWithEmptyRooms);
-          console.warn(
-            "⚠️ Failed to fetch rooms, sessions loaded without rooms:",
-            roomsResponse.error
-          );
         }
       } else {
-        console.warn(
-          "⚠️ Failed to fetch initial sessions:",
-          sessionsResponse.error
-        );
         setError(sessionsResponse.error || "Failed to load initial sessions");
       }
     } catch (err) {
-      console.error("❌ Error fetching initial sessions:", err);
       setError(err instanceof Error ? err.message : "Failed to load sessions");
     } finally {
       setIsLoading(false);
@@ -250,18 +228,16 @@ export function useRealtimeAmbulanceSessions(
     await fetchInitialSessions();
 
     try {
-      console.log("🔗 Connecting to ambulance sessions and rooms SSE streams");
-
       // Connect to sessions stream
       const sessionEventSource =
         ambulanceStreamingService.getRealtimeAmbulanceSessions();
 
       sessionEventSource.onopen = () => {
-        console.log("📡 Connected to ambulance sessions stream");
+        setIsConnected(false);
       };
       sessionEventSource.onmessage = handleSessionMessage;
       sessionEventSource.onerror = (err) => {
-        console.error("❌ Ambulance sessions SSE error:", err);
+        console.error("Ambulance sessions SSE error:", err);
         setError("Connection to sessions real-time updates failed");
         setIsConnected(false);
       };
@@ -271,13 +247,12 @@ export function useRealtimeAmbulanceSessions(
         ambulanceStreamingService.getRealtimeCameraRooms();
 
       roomEventSource.onopen = () => {
-        console.log("📡 Connected to camera rooms stream");
         // Only set connected when both streams are ready
         setIsConnected(true);
       };
       roomEventSource.onmessage = handleRoomMessage;
       roomEventSource.onerror = (err) => {
-        console.error("❌ Camera rooms SSE error:", err);
+        console.error("Camera rooms SSE error:", err);
         setError("Connection to rooms real-time updates failed");
         setIsConnected(false);
       };

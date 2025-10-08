@@ -75,6 +75,7 @@ export default function SimpleStreamingDashboard() {
   // Process sessions into simple ambulance data
   const ambulancesData = useMemo(() => {
     const ambulanceMap = new Map<string, SimpleAmbulanceData>();
+
     realtimeSessions.forEach((session) => {
       const ambulanceId = session.ambulance_id;
 
@@ -95,11 +96,11 @@ export default function SimpleStreamingDashboard() {
       }
 
       const sessionRooms = session.camera_rooms || [];
+
       ambulanceData.totalRooms.push(...sessionRooms);
       ambulanceData.connectedRooms.push(
         ...sessionRooms.filter((room) => room.connected)
       );
-      console.log(ambulanceData.connectedRooms);
     });
 
     return Array.from(ambulanceMap.values());

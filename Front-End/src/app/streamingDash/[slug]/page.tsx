@@ -41,7 +41,7 @@ export default function SimpleAmbulanceStreamingPage() {
     const rooms = realtimeSessions
       .filter((session) => session.ambulance_id === ambulanceId)
       .flatMap((session) => session.camera_rooms || []);
-    
+
     return rooms;
   }, [realtimeSessions, ambulanceId]);
 

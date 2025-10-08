@@ -22,32 +22,71 @@ The **Raspberry Pi 4 edge device** is the cornerstone of the STEMSight PIM syste
 
 ```
 Raspberry-Pi/
-├── 📚 README.md                    # This file - RPi setup guide
-├── 🤖 pose_model_capture.py        # Main camera capture & AI processing
-├── 🔍 PostureMovementDetector.py   # MediaPipe pose detection engine
-├──
-├── 🧠 UNIK/                        # AI/ML Models (Edge deployment)
-│   ├── run_unik.py                # Main UNIK model runner
-│   ├── ensemble.py                # Model ensemble logic
-│   ├── evaluation-cs.py           # Cross-section evaluation
-│   ├── evaluation-cv.py           # Cross-validation evaluation
-│   ├── unik_executable.py         # Standalone executable
-│   ├── model/                     # PyTorch model definitions
-│   ├── feeders/                   # Data feeding utilities
-│   └── data_gen/                  # Data generation tools
+├── 📚 Documentation (START HERE! ⭐)
+│   ├── QUICK_REFERENCE.md              # Quick start guide
+│   ├── TESTING_GUIDE.md                # Comprehensive testing guide
+│   ├── MULTI_CAMERA_SETUP.md           # Multi-camera architecture
+│   ├── FILE_ORGANIZATION.md            # File purpose & organization
+│   └── README.md                       # This file - Overview
 │
-├── 📋 requirements-rpi.txt         # RPi-specific Python dependencies
-├── 🔧 setup_rpi.sh                # Automated setup script
-├── ⚙️ config/                     # Configuration files
-│   ├── camera_config.json         # Camera settings
-│   ├── ai_config.json             # AI model parameters
-│   └── network_config.json        # Backend connection settings
+├── 🎥 Core Broadcasting
+│   ├── rpi_broadcaster.py              # Single camera broadcaster
+│   ├── rpi_multi_broadcaster.py        # Multi-camera broadcaster
+│   └── config_manager.py               # Configuration management
 │
-└── 📊 logs/                       # Runtime logs and diagnostics
-    ├── pose_detection.log         # AI detection logs
-    ├── camera_feed.log            # Camera operation logs
-    └── network_connection.log     # Backend connectivity logs
+├── ⚙️ Setup & Configuration
+│   ├── one_time_setup.sh              # Automated setup (RECOMMENDED)
+│   ├── setup_rpi.sh                   # Alternative setup script
+│   ├── first_setup.py                 # Python setup wizard
+│   ├── setup_config.py                # Configuration utility
+│   └── test_config.py                 # Config testing tool
+│
+├── � System Services
+│   ├── stemsight-broadcaster.service        # Single camera auto-start
+│   ├── stemsight-multi-broadcaster.service  # Multi-camera auto-start
+│   └── auto_start.py                       # Auto-start utility
+│
+├── 📋 Configuration Templates (config/)
+│   ├── camera_config.json.example          # Camera settings
+│   ├── network_config.json.example         # Network settings
+│   └── multi_camera_config.example.json    # Multi-camera config
+│
+├── 🧪 Testing Tools
+│   └── test_broadcaster.ps1           # Windows pre-flight test
+│
+├── 📦 Dependencies
+│   └── requirements-rpi.txt           # Python packages
+│
+└── 🧠 AI Models (Edge AI)
+    └── UNIK/                          # Pose detection models
+        ├── run_unik.py                # UNIK model runner
+        ├── ensemble.py                # Model ensemble
+        ├── model/                     # PyTorch models
+        └── feeders/                   # Data utilities
 ```
+
+## 🚀 Quick Start
+
+### For New Raspberry Pi Setup
+```bash
+# Upload and run one-time setup
+scp one_time_setup.sh pi@raspberrypi.local:/home/pi/
+ssh pi@raspberrypi.local
+chmod +x one_time_setup.sh
+sudo ./one_time_setup.sh
+```
+
+### For Windows Development Testing
+```powershell
+cd Raspberry-Pi
+.\test_broadcaster.ps1  # Pre-flight check
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements-rpi.txt
+python rpi_broadcaster.py --ambulance_number 001 --room 001 --video_device "Camera Name"
+```
+
+**📖 See [`QUICK_REFERENCE.md`](QUICK_REFERENCE.md) for detailed instructions.**
 
 ## 🚀 Quick Setup Guide
 

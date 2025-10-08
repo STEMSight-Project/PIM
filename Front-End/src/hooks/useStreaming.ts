@@ -307,7 +307,7 @@ export function useStreaming(): UseStreamingReturn {
 
           // NEW: Set up video data timeout monitoring
           setIsWaitingForData(true);
-          
+
           // Clear any existing timeout
           if (videoDataTimeoutRef.current) {
             clearTimeout(videoDataTimeoutRef.current);
@@ -316,8 +316,10 @@ export function useStreaming(): UseStreamingReturn {
           // Set 2-second timeout for receiving video data
           videoDataTimeoutRef.current = setTimeout(() => {
             // Check if video is actually playing (has received data)
-            if (videoRef.current && 
-                (videoRef.current.readyState < 2 || videoRef.current.paused)) {
+            if (
+              videoRef.current &&
+              (videoRef.current.readyState < 2 || videoRef.current.paused)
+            ) {
               console.warn("No video data received within 2 seconds");
               setIsWaitingForData(true);
               setUserFriendlyStatus("Waiting for video data from camera...");
@@ -332,12 +334,15 @@ export function useStreaming(): UseStreamingReturn {
             }
             setIsWaitingForData(false);
             setUserFriendlyStatus("Receiving live video stream");
-            videoRef.current?.removeEventListener('loadeddata', handleVideoData);
-            videoRef.current?.removeEventListener('playing', handleVideoData);
+            videoRef.current?.removeEventListener(
+              "loadeddata",
+              handleVideoData
+            );
+            videoRef.current?.removeEventListener("playing", handleVideoData);
           };
 
-          videoRef.current.addEventListener('loadeddata', handleVideoData);
-          videoRef.current.addEventListener('playing', handleVideoData);
+          videoRef.current.addEventListener("loadeddata", handleVideoData);
+          videoRef.current.addEventListener("playing", handleVideoData);
         }
       };
 
