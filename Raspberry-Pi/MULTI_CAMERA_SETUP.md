@@ -11,16 +11,19 @@ This guide explains how to stream **multiple cameras simultaneously** from a sin
 Stream multiple cameras concurrently from one Raspberry Pi process.
 
 **Pros:**
+
 - ✅ Single process manages all cameras
 - ✅ Unified configuration and logging
 - ✅ Lower system overhead
 - ✅ Easier management and monitoring
 
 **Cons:**
+
 - ⚠️ All cameras go down if process crashes
 - ⚠️ Shared system resources
 
 **When to Use:**
+
 - Ambulance with 2-4 cameras (front, side, rear, equipment)
 - All cameras need to stream simultaneously
 - Centralized control preferred
@@ -30,16 +33,19 @@ Stream multiple cameras concurrently from one Raspberry Pi process.
 Run separate broadcaster processes for each camera.
 
 **Pros:**
+
 - ✅ Camera isolation - one crash doesn't affect others
 - ✅ Independent restart/control per camera
 - ✅ Can use existing single-camera broadcaster
 
 **Cons:**
+
 - ⚠️ Higher system overhead (multiple processes)
 - ⚠️ More complex systemd service management
 - ⚠️ Separate configurations needed
 
 **When to Use:**
+
 - Critical cameras that must stay independent
 - Different streaming schedules per camera
 - Testing/development scenarios
@@ -96,7 +102,7 @@ nano multi_camera_config.json
 
 ```json
 {
-  "ambulance_number": "001",  // Your ambulance number
+  "ambulance_number": "001", // Your ambulance number
   "server_url": "http://your-backend-server:8000",
   "cameras": [
     {
@@ -111,7 +117,7 @@ nano multi_camera_config.json
     },
     {
       "device": "/dev/video2",
-      "enabled": false,  // Disabled - won't stream
+      "enabled": false, // Disabled - won't stream
       "description": "Rear camera - Reserved"
     }
   ]
@@ -119,6 +125,7 @@ nano multi_camera_config.json
 ```
 
 **Configuration Fields:**
+
 - `ambulance_number`: The ambulance this RPi belongs to (e.g., "001" for AMB-001)
 - `server_url`: Your FastAPI backend URL
 - `cameras`: Array of camera configurations
@@ -132,16 +139,16 @@ Edit camera settings in `camera_config.json`:
 
 ```json
 {
-  "resolution": [640, 480],  // Lower resolution for multi-camera
-  "framerate": 25,           // Reduced framerate (25fps instead of 30fps)
-  "bitrate": "400000"        // Lower bitrate per camera (400kbps)
+  "resolution": [640, 480], // Lower resolution for multi-camera
+  "framerate": 25, // Reduced framerate (25fps instead of 30fps)
+  "bitrate": "400000" // Lower bitrate per camera (400kbps)
 }
 ```
 
 **Performance Guidelines:**
 
 | Cameras | Resolution | FPS | Bitrate/Camera | Total Bandwidth |
-|---------|------------|-----|----------------|-----------------|
+| ------- | ---------- | --- | -------------- | --------------- |
 | 1       | 1280x720   | 30  | 1000kbps       | 1 Mbps          |
 | 2       | 640x480    | 30  | 500kbps        | 1 Mbps          |
 | 3       | 640x480    | 25  | 400kbps        | 1.2 Mbps        |
@@ -340,30 +347,34 @@ ls -l /dev/video*
 ### High CPU Usage
 
 **Solution 1: Lower Resolution**
+
 ```json
 {
-  "resolution": [320, 240],  // Very low for testing
+  "resolution": [320, 240], // Very low for testing
   "framerate": 15
 }
 ```
 
 **Solution 2: Reduce Framerate**
+
 ```json
 {
-  "framerate": 15  // Lower framerate
+  "framerate": 15 // Lower framerate
 }
 ```
 
 **Solution 3: Lower Bitrate**
+
 ```json
 {
-  "bitrate": "200000"  // 200kbps per camera
+  "bitrate": "200000" // 200kbps per camera
 }
 ```
 
 ### Network Bandwidth Issues
 
 **Check Bandwidth:**
+
 ```bash
 # Install iftop
 sudo apt-get install iftop
@@ -373,6 +384,7 @@ sudo iftop -i wlan0  # or eth0 for ethernet
 ```
 
 **Solutions:**
+
 1. **Reduce Total Cameras**: Disable some cameras in config
 2. **Lower Quality**: Reduce resolution/framerate/bitrate
 3. **Upgrade Network**: Use Ethernet instead of WiFi
@@ -401,6 +413,7 @@ python rpi_multi_broadcaster.py --config config/multi_camera_config.json
 ### Raspberry Pi 4 Recommended Settings
 
 **For 2 Cameras:**
+
 ```json
 {
   "resolution": [640, 480],
@@ -410,6 +423,7 @@ python rpi_multi_broadcaster.py --config config/multi_camera_config.json
 ```
 
 **For 3-4 Cameras:**
+
 ```json
 {
   "resolution": [640, 480],
@@ -420,16 +434,17 @@ python rpi_multi_broadcaster.py --config config/multi_camera_config.json
 
 ### Hardware Requirements
 
-| Cameras | Min RPi Model | RAM    | Network      | Storage  |
-|---------|---------------|--------|--------------|----------|
-| 1       | RPi 3B+       | 1GB    | WiFi/Eth     | 8GB      |
-| 2       | RPi 4         | 2GB    | Eth Recommended | 16GB |
-| 3-4     | RPi 4         | 4GB    | Ethernet Required | 32GB |
-| 5+      | Not Recommended | -    | -            | -        |
+| Cameras | Min RPi Model   | RAM | Network           | Storage |
+| ------- | --------------- | --- | ----------------- | ------- |
+| 1       | RPi 3B+         | 1GB | WiFi/Eth          | 8GB     |
+| 2       | RPi 4           | 2GB | Eth Recommended   | 16GB    |
+| 3-4     | RPi 4           | 4GB | Ethernet Required | 32GB    |
+| 5+      | Not Recommended | -   | -                 | -       |
 
 ### USB Camera Power
 
 **Power Issues:**
+
 - USB cameras can draw significant power
 - Raspberry Pi USB ports limited to 1.2A total
 - Use powered USB hub for 3+ cameras
@@ -448,12 +463,13 @@ lsusb -t
 ### 1. Camera Naming Convention
 
 Use descriptive room names in config:
+
 ```json
 {
   "cameras": [
-    {"device": "/dev/video0", "description": "Front-Patient"},
-    {"device": "/dev/video1", "description": "Side-Equipment"},
-    {"device": "/dev/video2", "description": "Rear-Monitor"}
+    { "device": "/dev/video0", "description": "Front-Patient" },
+    { "device": "/dev/video1", "description": "Side-Equipment" },
+    { "device": "/dev/video2", "description": "Rear-Monitor" }
   ]
 }
 ```
@@ -497,23 +513,27 @@ git commit -m "Updated camera configuration"
 ### Step-by-Step Migration
 
 1. **Stop existing single-camera service**
+
    ```bash
    sudo systemctl stop stemsight-broadcaster.service
    sudo systemctl disable stemsight-broadcaster.service
    ```
 
 2. **Create multi-camera config**
+
    ```bash
    cp config/multi_camera_config.example.json config/multi_camera_config.json
    nano config/multi_camera_config.json
    ```
 
 3. **Test multi-camera broadcaster manually**
+
    ```bash
    python rpi_multi_broadcaster.py --config config/multi_camera_config.json
    ```
 
 4. **Setup new service**
+
    ```bash
    sudo systemctl enable stemsight-multi-broadcaster.service
    sudo systemctl start stemsight-multi-broadcaster.service
@@ -526,12 +546,14 @@ git commit -m "Updated camera configuration"
 ### Quick Decision Guide
 
 **Choose Multi-Camera Broadcaster (`rpi_multi_broadcaster.py`) when:**
+
 - ✅ You have 2-4 cameras on the same ambulance
 - ✅ All cameras should stream simultaneously
 - ✅ Unified management preferred
 - ✅ Lower system overhead desired
 
 **Choose Multiple Single-Camera Instances when:**
+
 - ✅ You need camera isolation
 - ✅ Different streaming schedules per camera
 - ✅ Independent restart control required
@@ -540,6 +562,7 @@ git commit -m "Updated camera configuration"
 ### Resource Limits
 
 **Raspberry Pi 4 (4GB RAM):**
+
 - **Maximum Recommended:** 4 cameras at 640x480, 20fps
 - **Optimal:** 2 cameras at 640x480, 30fps
 - **Network:** Ethernet strongly recommended for 3+ cameras

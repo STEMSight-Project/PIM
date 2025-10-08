@@ -3,6 +3,7 @@
 ## Files Created & Cleaned Up
 
 ### ✅ Production Files
+
 - **`rpi_broadcaster.py`** - Single camera broadcaster (matches main broadcaster logic)
 - **`rpi_multi_broadcaster.py`** - Multi-camera broadcaster for concurrent streaming
 - **`one_time_setup.sh`** - Automated Raspberry Pi setup script
@@ -11,6 +12,7 @@
 - **`MULTI_CAMERA_SETUP.md`** - Multi-camera setup and architecture guide
 
 ### 🗑️ Removed Files
+
 - **`rpi_broadcaster_old.py`** - Old backup (no longer needed)
 
 ## Quick Testing Guide
@@ -23,6 +25,7 @@ cd D:\DevProj\STEMSight\PIM\Raspberry-Pi
 ```
 
 **What it checks:**
+
 - ✅ Backend running (http://localhost:8000)
 - ✅ Frontend running (http://localhost:3000)
 - ✅ Python virtual environment exists
@@ -44,12 +47,14 @@ pip install -r requirements-rpi.txt
 ### 3. Test Single Camera Broadcaster
 
 **Option A: Command line arguments**
+
 ```powershell
 .\venv\Scripts\Activate.ps1
 python rpi_broadcaster.py --ambulance_number 001 --room 001 --video_device "Logitech BRIO"
 ```
 
 **Option B: Using config file**
+
 ```powershell
 # Create config
 Copy-Item config\multi_camera_config.example.json config\camera_config.json
@@ -92,6 +97,7 @@ python rpi_multi_broadcaster.py --config config\multi_camera_config.json
 ## Expected Output
 
 ### Single Camera Success ✅
+
 ```
 🚀 Starting broadcaster...
 📋 Ambulance: AMB-001
@@ -106,6 +112,7 @@ python rpi_multi_broadcaster.py --config config\multi_camera_config.json
 ```
 
 ### Multi-Camera Success ✅
+
 ```
 ============================================================
 🎥 STEMSight Multi-Camera Broadcaster
@@ -126,40 +133,53 @@ python rpi_multi_broadcaster.py --config config\multi_camera_config.json
 ## Common Issues & Fixes
 
 ### Issue: "No ambulance found"
+
 ```
 ❌ Ambulance AMB-001 not found
 ```
+
 **Fix:** Create ambulance in backend:
+
 1. Go to http://localhost:8000/docs
 2. Use `/ambulances/` POST endpoint
 3. Create ambulance with `ambulance_number: "001"`
 
 ### Issue: "No video track found"
+
 ```
 ❌ No video track found
 ```
+
 **Fix:** Check camera name:
+
 ```powershell
 # List available cameras
 ffmpeg -list_devices true -f dshow -i dummy
 ```
+
 Use exact camera name from the list.
 
 ### Issue: "Module not found"
+
 ```
 ModuleNotFoundError: No module named 'aiortc'
 ```
+
 **Fix:** Install dependencies:
+
 ```powershell
 .\venv\Scripts\Activate.ps1
 pip install -r requirements-rpi.txt
 ```
 
 ### Issue: "Backend connection refused"
+
 ```
 ❌ Error fetching ambulances: Cannot connect to host
 ```
+
 **Fix:** Start backend:
+
 ```powershell
 cd D:\DevProj\STEMSight\PIM\Back-End
 uvicorn main:app --reload
@@ -216,17 +236,20 @@ sudo systemctl status stemsight-broadcaster.service
 ## Architecture Decision
 
 ### Use Single-Camera Broadcaster (`rpi_broadcaster.py`) when:
+
 - ✅ One camera per Raspberry Pi
 - ✅ Simple deployment
 - ✅ Command-line control needed
 
 ### Use Multi-Camera Broadcaster (`rpi_multi_broadcaster.py`) when:
+
 - ✅ 2-4 cameras on same Raspberry Pi
 - ✅ All cameras streaming simultaneously
 - ✅ Unified configuration preferred
 - ✅ Lower system overhead desired
 
 **Performance Limits (Raspberry Pi 4):**
+
 - **1 camera:** 1280x720 @ 30fps ✅ Perfect
 - **2 cameras:** 640x480 @ 30fps ✅ Good
 - **3-4 cameras:** 640x480 @ 20fps ⚠️ Use Ethernet

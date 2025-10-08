@@ -68,6 +68,7 @@ Raspberry-Pi/
 ## 🚀 Quick Start
 
 ### For New Raspberry Pi Setup
+
 ```bash
 # Upload and run one-time setup
 scp one_time_setup.sh pi@raspberrypi.local:/home/pi/
@@ -77,6 +78,7 @@ sudo ./one_time_setup.sh
 ```
 
 ### For Windows Development Testing
+
 ```powershell
 cd Raspberry-Pi
 .\test_broadcaster.ps1  # Pre-flight check

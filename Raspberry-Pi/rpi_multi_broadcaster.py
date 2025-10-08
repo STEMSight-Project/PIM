@@ -62,7 +62,9 @@ class CameraBroadcaster:
 
         resolution = camera_config.get("resolution", [640, 480])
         framerate = camera_config.get("framerate", 30)
-        bitrate = camera_config.get("bitrate", "500000")  # Lower bitrate for multi-camera
+        bitrate = camera_config.get(
+            "bitrate", "500000"
+        )  # Lower bitrate for multi-camera
 
         width, height = resolution
 
@@ -223,9 +225,7 @@ class CameraBroadcaster:
                             self.logger.warning(f"Room creation warning: {error_text}")
 
                 # Connect to streaming endpoint
-                streaming_url = (
-                    f"{self.base_url}/ambulance-streaming/camera/{self.room_name}/streamer"
-                )
+                streaming_url = f"{self.base_url}/ambulance-streaming/camera/{self.room_name}/streamer"
 
                 async with session.post(streaming_url, json=offer_payload) as resp:
                     if resp.status == 200:
