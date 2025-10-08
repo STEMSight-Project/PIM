@@ -8,7 +8,7 @@ export { useNotes } from "./useNotes";
 export { usePasswordReset } from "./usePasswordReset";
 export { usePatientEvents } from "./usePatientEvents";
 export { usePatients } from "./usePatients";
-export { useRealtimeAmbulanceSessions, useRealtimeRooms } from "./useRealtime";
+export { useRealtimeAmbulanceSessions } from "./useRealtime";
 export type { UseRealtimeAmbulanceOptions } from "./useRealtime";
 export { useSessions } from "./useSessions";
 export { useStreaming } from "./useStreaming";

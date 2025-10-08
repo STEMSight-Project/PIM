@@ -1,5 +1,5 @@
 {
-  "resolution": [1920, 1080],
+  "resolution": [640, 480],
   "framerate": 30,
   "exposure_mode": "auto",
   "white_balance": "auto",
@@ -10,5 +10,9 @@
   "video_stabilization": true,
   "sensor_mode": 0,
   "awb_mode": "auto",
-  "meter_mode": "average"
+  "meter_mode": "average",
+  "video_format": "h264",
+  "streaming_quality": "medium",
+  "buffer_size": "2M",
+  "bitrate": "1000000"
 }

@@ -148,6 +148,28 @@ export const ambulanceStreamingService = {
   },
 
   /**
+   * Get all camera rooms with optional filters
+   */
+  async getCameraRooms(filters?: {
+    session_id?: string;
+    connected?: boolean;
+    limit?: number;
+  }): Promise<ApiResponse<CameraRoom[]>> {
+    const params = new URLSearchParams();
+    if (filters?.session_id) params.append("session_id", filters.session_id);
+    if (filters?.connected !== undefined)
+      params.append("connected", filters.connected.toString());
+    if (filters?.limit) params.append("limit", filters.limit.toString());
+
+    const queryString = params.toString();
+    const endpoint = queryString
+      ? `/ambulance-streaming/camera-rooms?${queryString}`
+      : "/ambulance-streaming/camera-rooms";
+
+    return api.get<CameraRoom[]>(endpoint);
+  },
+
+  /**
    * Get camera room details by room ID
    */
   async getCameraRoom(roomId: string): Promise<ApiResponse<CameraRoom>> {

@@ -158,6 +158,38 @@ async def create_camera_room(room_data: CameraRoomCreate, session_id: str):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.get("/camera-rooms", dependencies=[Depends(current_user)])
+async def get_camera_rooms(
+    session_id: Optional[str] = None,
+    ambulance_id: Optional[str] = None,
+    connected: Optional[bool] = None,
+    limit: int = 50,
+):
+    """Get camera rooms with optional filters."""
+    try:
+        if ambulance_id:
+            # Get camera rooms by ambulance ID
+            rooms = await StreamingDatabaseService.get_camera_rooms_by_ambulance_id(
+                ambulance_id, connected, limit
+            )
+        elif session_id:
+            # Get camera rooms by session ID
+            rooms = await StreamingDatabaseService.get_camera_rooms_by_session_id(
+                session_id, connected, limit
+            )
+        else:
+            # Get all camera rooms with optional connected filter
+            rooms = await StreamingDatabaseService.get_all_camera_rooms(
+                connected, limit
+            )
+
+        return rooms
+
+    except Exception as e:
+        logger.error("Error fetching camera rooms: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @router.get("/camera-rooms/{room_id}", dependencies=[Depends(current_user)])
 async def get_camera_room(room_id: str):
     """Get camera room details."""

@@ -20,6 +20,7 @@ interface UseStreamingReturn {
   userFriendlyStatus: string | null;
   canManualRetry: boolean;
   isUserCancelledReconnection: boolean;
+  isWaitingForData: boolean; // NEW: Waiting for video data
 
   currentSession: AmbulanceSession | null;
 
@@ -45,6 +46,7 @@ export function useStreaming(): UseStreamingReturn {
     "poor" | "fair" | "good" | "excellent" | null
   >(null);
   const [reconnectionAttempts, setReconnectionAttempts] = useState(0);
+  const [isWaitingForData, setIsWaitingForData] = useState(false); // NEW: Track waiting for video data
 
   // Enhanced UX state for reconnection
   const [reconnectionCountdown, setReconnectionCountdown] = useState<
@@ -70,6 +72,7 @@ export function useStreaming(): UseStreamingReturn {
   const currentCameraIdRef = useRef<string | null>(null);
   const reconnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUserStoppedRef = useRef(false);
+  const videoDataTimeoutRef = useRef<NodeJS.Timeout | null>(null); // NEW: Timeout for video data
 
   const clearError = useCallback(() => {
     setError(null);
@@ -301,6 +304,45 @@ export function useStreaming(): UseStreamingReturn {
           videoRef.current.play().catch((err) => {
             console.error("Video autoplay failed:", err);
           });
+
+          // NEW: Set up video data timeout monitoring
+          setIsWaitingForData(true);
+
+          // Clear any existing timeout
+          if (videoDataTimeoutRef.current) {
+            clearTimeout(videoDataTimeoutRef.current);
+          }
+
+          // Set 2-second timeout for receiving video data
+          videoDataTimeoutRef.current = setTimeout(() => {
+            // Check if video is actually playing (has received data)
+            if (
+              videoRef.current &&
+              (videoRef.current.readyState < 2 || videoRef.current.paused)
+            ) {
+              console.warn("No video data received within 2 seconds");
+              setIsWaitingForData(true);
+              setUserFriendlyStatus("Waiting for video data from camera...");
+            }
+          }, 2000);
+
+          // Monitor video metadata to detect when data is actually flowing
+          const handleVideoData = () => {
+            if (videoDataTimeoutRef.current) {
+              clearTimeout(videoDataTimeoutRef.current);
+              videoDataTimeoutRef.current = null;
+            }
+            setIsWaitingForData(false);
+            setUserFriendlyStatus("Receiving live video stream");
+            videoRef.current?.removeEventListener(
+              "loadeddata",
+              handleVideoData
+            );
+            videoRef.current?.removeEventListener("playing", handleVideoData);
+          };
+
+          videoRef.current.addEventListener("loadeddata", handleVideoData);
+          videoRef.current.addEventListener("playing", handleVideoData);
         }
       };
 
@@ -580,6 +622,13 @@ export function useStreaming(): UseStreamingReturn {
     currentCameraIdRef.current = null;
     resetReconnectionState();
 
+    // NEW: Clear video data timeout
+    if (videoDataTimeoutRef.current) {
+      clearTimeout(videoDataTimeoutRef.current);
+      videoDataTimeoutRef.current = null;
+    }
+    setIsWaitingForData(false);
+
     // Don't end the session - it's managed by RPi device
     // Just disconnect the viewer and clear local state
     setCurrentSession(null);
@@ -656,6 +705,7 @@ export function useStreaming(): UseStreamingReturn {
     userFriendlyStatus,
     canManualRetry,
     isUserCancelledReconnection,
+    isWaitingForData, // NEW: Add the waiting for data state
 
     currentSession,
     videoRef,
