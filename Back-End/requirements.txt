@@ -17,4 +17,4 @@ python-multipart
 fastapi[standard]
 fastapi-mail==1.4.1
 jinja2==3.1.2
-
+fastapi_mail
