@@ -136,6 +136,14 @@ class StreamingDatabaseService:
             raise
 
     @staticmethod
+    async def get_camera_room_by_room_id(room_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get existing camera room from database by room_id string (e.g., 'AMB-002-ROOM-002').
+        Alias for get_camera_room_by_id for clarity.
+        """
+        return await StreamingDatabaseService.get_camera_room_by_id(room_id)
+
+    @staticmethod
     async def update_camera_room_status(
         room_db_id: str, connected: bool, ended_at: Optional[str] = None
     ) -> None:

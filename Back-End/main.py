@@ -3,8 +3,11 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
 from api_router.router import api_router
 from core.common import logger, supabase
+import os
+from pathlib import Path
 
 app = FastAPI(
     title="STEMSight API",
@@ -40,15 +43,14 @@ app.add_middleware(
     allow_credentials=True,  # Enable credentials for Bearer token auth
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"]
+    expose_headers=["*"],
 )
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
-        status_code=422,
-        content={"error": "Invalid request", "details": exc.errors()}
+        status_code=422, content={"error": "Invalid request", "details": exc.errors()}
     )
 
 
@@ -95,5 +97,10 @@ def read_root():
     """Redirect to API documentation"""
     return RedirectResponse(url="/docs")
 
+
+# Mount static files for HLS recordings
+RECORDINGS_PATH = Path("recordings")
+RECORDINGS_PATH.mkdir(parents=True, exist_ok=True)
+app.mount("/recordings", StaticFiles(directory=str(RECORDINGS_PATH)), name="recordings")
 
 app.include_router(api_router)

@@ -8,6 +8,7 @@ from typing import Set, Optional
 from aiortc import RTCPeerConnection
 from core.common import logger
 from services.streaming.database_service import StreamingDatabaseService
+from services.streaming.recording_service import recording_manager
 
 
 class Room:
@@ -37,6 +38,9 @@ class Room:
         self.last_data_timestamp = time.time()  # Track last data activity
         self.activity_monitor_task: Optional[asyncio.Task] = None
         self.STREAM_TIMEOUT_SECONDS = 30  # End stream if no data for 30 seconds
+
+        # Video track for recording
+        self.video_track = None
 
     async def close(self):
         """Close all peer connections and clean up resources."""
@@ -337,6 +341,10 @@ class Room:
                 )
                 asyncio.create_task(self._update_room_connected())
 
+                # Schedule recording to start after video track is received
+                if self.session_id:
+                    asyncio.create_task(self._start_recording_when_track_ready())
+
                 # Start activity monitoring when first streamer connects
                 self.last_data_timestamp = time.time()
                 self._start_activity_monitoring()
@@ -375,6 +383,22 @@ class Room:
                     # Stop activity monitoring when no streamers remain
                     self._stop_activity_monitoring()
                     asyncio.create_task(self._update_room_disconnected())
+
+                    # Stop HLS recording when last streamer disconnects
+                    if self.session_id:
+                        try:
+                            logger.info(
+                                f"Stopping HLS recording for session {self.session_id}"
+                            )
+                            asyncio.create_task(
+                                recording_manager.stop_session_recording(
+                                    self.session_id
+                                )
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to stop recording for session {self.session_id}: {e}"
+                            )
 
             # Check if this was a viewer connection
             elif pc in self.viewer_pcs:
@@ -486,6 +510,37 @@ class Room:
             int(time_since_data),
             monitoring_status,
         )
+
+    async def _start_recording_when_track_ready(self):
+        """Wait for video track to be available, then start recording"""
+        try:
+            # Wait up to 10 seconds for video track
+            for _ in range(20):  # 20 * 0.5 = 10 seconds
+                if self.video_track:
+                    # Video track is available, start recording
+                    ambulance_number = (
+                        self.room_id.split("-")[1] if "-" in self.room_id else "unknown"
+                    )
+                    logger.info(
+                        f"Video track ready, starting HLS recording for session {self.session_id}"
+                    )
+
+                    await recording_manager.start_session_recording(
+                        self.session_id, ambulance_number, self.video_track
+                    )
+                    return
+
+                await asyncio.sleep(0.5)
+
+            # Timeout - video track never received
+            logger.error(
+                f"Timeout waiting for video track for session {self.session_id}"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to start recording for session {self.session_id}: {e}"
+            )
 
 
 class RoomManager:

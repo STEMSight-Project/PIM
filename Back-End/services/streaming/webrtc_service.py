@@ -270,6 +270,11 @@ class WebRTCService:
                 # Update stream activity in room for new 30-second timeout
                 room.update_stream_activity()
 
+                # Store video track in room for recording
+                if track.kind == "video":
+                    logger.info(f"[RECORDING] Storing video track for room {room_id}")
+                    room.video_track = track
+
                 # Create a custom track wrapper to monitor frame activity
                 class ActivityTrackWrapper(MediaStreamTrack):
                     """Wrapper track that monitors frame activity for stream timeout."""

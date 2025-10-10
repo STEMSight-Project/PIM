@@ -17,6 +17,13 @@ SUPABASE: Client = create_client(
     options=ClientOptions(auto_refresh_token=False, persist_session=False),
 )
 
+# Admin client with service_role key - bypasses RLS for storage uploads
+SUPABASE_ADMIN: Client = create_client(
+    supabase_url=ENVIRONMENT.SUPABASE_URL,
+    supabase_key=ENVIRONMENT.SUPABASE_ADMIN_KEY,  # Service role key
+    options=ClientOptions(auto_refresh_token=False, persist_session=False),
+)
+
 
 async def create_supabase_async_client() -> AsyncClient:
     return await acreate_client(
