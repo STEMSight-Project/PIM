@@ -101,7 +101,6 @@ export function usePasswordReset() {
 
     try {
       const { error } = await authService.requestPasswordReset(email);
-
       if (error) {
         throw new Error(error);
       }
@@ -109,6 +108,7 @@ export function usePasswordReset() {
       setSuccess("Password reset link has been sent to your email address.");
       return true;
     } catch (err) {
+      console.log("Error:", err);
       const errorMessage =
         err instanceof Error
           ? err.message

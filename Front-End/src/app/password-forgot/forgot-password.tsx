@@ -1,7 +1,7 @@
 "use client";
-import React, { useState } from "react";
 import TextField from "@/components/TextField";
 import { usePasswordReset } from "@/hooks";
+import React, { useState } from "react";
 
 export default function PatientDashboard() {
   const [email, setEmail] = useState("");
@@ -17,11 +17,11 @@ export default function PatientDashboard() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(email)) {
+    /*if (!emailPattern.test(email)) {
       setError("Please enter a valid email address.");
       setSuccess("");
       return;
-    }
+    }*/
 
     try {
       const success = await requestPasswordReset(email);
