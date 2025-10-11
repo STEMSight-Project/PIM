@@ -7,14 +7,16 @@ from security.jwt_verify import current_user
 from services.password_reset_service import (
     send_password_reset_email,
     verify_reset_token,
-    mark_token_used
+    mark_token_used,
 )
 
 router = APIRouter()
 
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
 
 @router.post(
     "/login",
@@ -32,7 +34,9 @@ def login(body: LoginRequest) -> dict:
             raise HTTPException(401, detail="Invalid email or password.")
         # Require email confirmation
         if not auth.user.email_confirmed_at:
-            raise HTTPException(403, detail="Please confirm your email address before logging in.")
+            raise HTTPException(
+                403, detail="Please confirm your email address before logging in."
+            )
     except ValidationError:
         raise HTTPException(422, detail="Invalid email format.")
     except HTTPException as he:
@@ -45,26 +49,35 @@ def login(body: LoginRequest) -> dict:
         "user": auth.user,
     }
 
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
 
-@router.post("/register", summary="Register a new user (Supabase handles confirmation email)")
+
+@router.post(
+    "/register", summary="Register a new user (Supabase handles confirmation email)"
+)
 def register(body: RegisterRequest):
     """Register a new user. Supabase will send a confirmation email automatically."""
     try:
-        result = admin_supabase.auth.sign_up({
-            "email": body.email,
-            "password": body.password,
-            "data": {"full_name": body.full_name or ""}
-        })
+        result = admin_supabase.auth.sign_up(
+            {
+                "email": body.email,
+                "password": body.password,
+                "data": {"full_name": body.full_name or ""},
+            }
+        )
         user = result.user
         if not user:
             raise HTTPException(400, detail="Failed to create user.")
-        return {"message": "User created. Please check your email to confirm your account."}
+        return {
+            "message": "User created. Please check your email to confirm your account."
+        }
     except Exception as e:
         raise HTTPException(500, detail=f"Registration failed: {str(e)}")
+
 
 @router.get("/me")
 def me(request: Request):
@@ -72,13 +85,16 @@ def me(request: Request):
     user = current_user(request)
     return user
 
+
 @router.post("/logout")
 def logout():
     """Logout endpoint (client should remove tokens)."""
     return {"logged_out": True}
 
+
 class TokenRefreshRequest(BaseModel):
     refresh_token: str
+
 
 @router.post("/refresh")
 def refresh(body: TokenRefreshRequest) -> dict:
@@ -93,8 +109,10 @@ def refresh(body: TokenRefreshRequest) -> dict:
     except Exception:
         raise HTTPException(status_code=401, detail="Session expired")
 
+
 class ResetRequest(BaseModel):
     email: EmailStr
+
 
 @router.post("/request-password-reset")
 async def request_password_reset(data: ResetRequest):
@@ -111,27 +129,34 @@ async def request_password_reset(data: ResetRequest):
         except Exception as e:
             logger.warning(f"Could not fetch user name: {str(e)}")
             user_name = "User"
-        
+
         # Send password reset email
         email_sent = await send_password_reset_email(data.email, user_name)
-        
+
         if not email_sent:
             logger.error(f"Failed to send password reset email to {data.email}")
             # Don't reveal whether email exists (prevent enumeration attacks)
-            return {"message": "If an account exists with this email, a password reset link has been sent."}
-        
-        logger.info(f"Password reset email sent successfully to {data.email}")
-        return {"message": "If an account exists with this email, a password reset link has been sent."}
-        
+            return {
+                "message": "If an account exists with this email, a password reset link has been sent."
+            }
+
+        return {
+            "message": "If an account exists with this email, a password reset link has been sent."
+        }
+
     except ValidationError:
         raise HTTPException(status_code=422, detail="Invalid email format.")
     except Exception as e:
         logger.error(f"Password reset request error: {str(e)}")
-        raise HTTPException(status_code=500, detail="An error occurred processing your request.")
+        raise HTTPException(
+            status_code=500, detail="An error occurred processing your request."
+        )
+
 
 class ConfirmResetRequest(BaseModel):
     token: str
     new_password: str
+
 
 @router.post("/confirm-password-reset")
 async def confirm_password_reset(data: ConfirmResetRequest):
@@ -143,26 +168,30 @@ async def confirm_password_reset(data: ConfirmResetRequest):
         # Verify token
         reset_record = await verify_reset_token(data.token)
         if not reset_record:
-            raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
-        
+            raise HTTPException(
+                status_code=400, detail="Invalid or expired reset token."
+            )
+
         # Update password in Supabase Auth
         try:
             admin_supabase.auth.admin.update_user_by_id(
-                reset_record['user_id'],
-                {"password": data.new_password}
+                reset_record["user_id"], {"password": data.new_password}
             )
         except Exception as e:
             logger.error(f"Failed to update password: {str(e)}")
             raise HTTPException(status_code=500, detail="Failed to update password.")
-        
+
         # Mark token as used
         await mark_token_used(data.token)
-        
-        logger.info(f"Password reset successfully for user {reset_record['user_id']}")
-        return {"message": "Password reset successfully. You can now log in with your new password."}
-        
+
+        return {
+            "message": "Password reset successfully. You can now log in with your new password."
+        }
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Password reset confirmation error: {str(e)}")
-        raise HTTPException(status_code=500, detail="An error occurred processing your request.")
+        raise HTTPException(
+            status_code=500, detail="An error occurred processing your request."
+        )

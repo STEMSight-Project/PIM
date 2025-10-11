@@ -56,7 +56,6 @@ class SessionRecorder:
             self.video_track = video_track
 
             # Step 1: Use aiortc MediaRecorder to save WebRTC stream to MP4
-            LOGGER.info(f"Starting MediaRecorder for session {self.session_id}")
             self.recorder = MediaRecorder(str(self.temp_video_path))
             self.recorder.addTrack(video_track)
             await self.recorder.start()
@@ -68,8 +67,6 @@ class SessionRecorder:
 
             # Create recording entry in database
             await self._create_recording_entry()
-
-            LOGGER.info(f"✅ Recording started for session {self.session_id}")
 
         except Exception as e:
             LOGGER.error(f"Failed to start recording: {e}")
@@ -104,8 +101,6 @@ class SessionRecorder:
                 str(self.playlist_path),
             ]
 
-            LOGGER.info(f"Starting HLS conversion for session {self.session_id}")
-
             self.hls_process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdout=subprocess.PIPE,
@@ -127,8 +122,6 @@ class SessionRecorder:
             return
 
         try:
-            LOGGER.info(f"Stopping recording for session {self.session_id}")
-
             # Stop MediaRecorder
             if self.recorder:
                 await self.recorder.stop()
@@ -151,8 +144,6 @@ class SessionRecorder:
 
             # Update recording entry in database
             await self._finalize_recording_entry()
-
-            LOGGER.info(f"✅ Recording stopped for session {self.session_id}")
 
         except Exception as e:
             LOGGER.error(f"Error stopping recording: {e}")
@@ -181,15 +172,11 @@ class SessionRecorder:
                 str(self.playlist_path),
             ]
 
-            LOGGER.info(f"Finalizing HLS playlist for session {self.session_id}")
-
             process = subprocess.run(
                 ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30
             )
 
-            if process.returncode == 0:
-                LOGGER.info(f"HLS playlist finalized successfully")
-            else:
+            if process.returncode != 0:
                 LOGGER.error(f"HLS finalization failed: {process.stderr.decode()}")
 
         except Exception as e:
@@ -272,10 +259,6 @@ class SessionRecorder:
                 .execute()
             )
 
-            LOGGER.info(
-                f"Recording entry updated: {duration}s, {total_size} bytes, storage_url: {storage_url}"
-            )
-
         except Exception as e:
             LOGGER.error(f"Failed to finalize recording entry: {e}")
 
@@ -289,19 +272,10 @@ class SessionRecorder:
         - HLS segments can be deleted locally after upload (save disk space)
         """
         try:
-            LOGGER.info(
-                f"Starting Supabase Storage upload for session {self.session_id}"
-            )
-
             # Upload the MP4 recording file (single file, easier to manage)
             if not self.temp_video_path.exists():
                 LOGGER.error(f"MP4 file not found: {self.temp_video_path}")
                 return None
-
-            file_size = self.temp_video_path.stat().st_size
-            LOGGER.info(
-                f"Uploading MP4 file ({file_size / 1024 / 1024:.2f} MB) to Supabase Storage..."
-            )
 
             with open(self.temp_video_path, "rb") as f:
                 storage_path = f"recordings/session-{self.session_id}/recording.mp4"
@@ -313,9 +287,6 @@ class SessionRecorder:
             public_url = SUPABASE_ADMIN.storage.from_(
                 "ambulance-recordings"
             ).get_public_url(f"recordings/session-{self.session_id}/recording.mp4")
-
-            LOGGER.info(f"✅ Upload complete. Public URL: {public_url}")
-            LOGGER.info(f"💡 All local files will be deleted to save disk space")
 
             return public_url
 
@@ -345,7 +316,6 @@ class SessionRecorder:
             if self.temp_video_path.exists():
                 self.temp_video_path.unlink()
                 deleted_count += 1
-                LOGGER.info(f"🗑️ Deleted MP4 file: {self.temp_video_path}")
 
             # Delete any other files in the session directory
             for file in self.recording_path.iterdir():
@@ -356,11 +326,6 @@ class SessionRecorder:
             # Remove the session directory
             if self.recording_path.exists():
                 self.recording_path.rmdir()
-                LOGGER.info(f"🗑️ Removed session directory: {self.recording_path}")
-
-            LOGGER.info(
-                f"🗑️ Cleaned up {deleted_count} local files and directory for session {self.session_id}"
-            )
 
         except Exception as e:
             LOGGER.error(f"Error cleaning up local files: {e}")
@@ -381,7 +346,6 @@ class RecordingManager:
 
     def __init__(self):
         self.active_recorders: dict[str, SessionRecorder] = {}
-        LOGGER.info("RecordingManager initialized")
 
         # Ensure recordings directory exists
         RECORDINGS_BASE_PATH.mkdir(parents=True, exist_ok=True)
@@ -408,7 +372,6 @@ class RecordingManager:
         await recorder.start_recording(video_track)
 
         self.active_recorders[session_id] = recorder
-        LOGGER.info(f"Started recording for session {session_id}")
 
         return recorder
 
@@ -421,7 +384,6 @@ class RecordingManager:
 
         await recorder.stop_recording()
         del self.active_recorders[session_id]
-        LOGGER.info(f"Stopped recording for session {session_id}")
 
     def get_recorder(self, session_id: str) -> Optional[SessionRecorder]:
         """Get active recorder for a session"""
@@ -429,7 +391,6 @@ class RecordingManager:
 
     async def stop_all_recordings(self):
         """Stop all active recordings (cleanup on shutdown)"""
-        LOGGER.info(f"Stopping all {len(self.active_recorders)} active recordings")
         for session_id in list(self.active_recorders.keys()):
             await self.stop_session_recording(session_id)
 

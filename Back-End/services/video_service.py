@@ -336,7 +336,6 @@ class VideoService:
                 .execute()
             )
 
-            logger.info("Deleted recording %s from database", recording_id)
             return True
 
         except Exception as e:

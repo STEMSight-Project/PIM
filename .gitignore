@@ -6,6 +6,17 @@ __pycache__/
 *.pyd
 .Python
 
+# Video files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# Recording directories
+recordings/
+Back-End/recordings/
+
 # Secure File with Sensitive Data
 # .env
 

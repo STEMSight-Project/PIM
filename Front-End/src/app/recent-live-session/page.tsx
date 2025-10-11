@@ -5,6 +5,9 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
+import { useRealtimeAmbulanceSessions } from "@/hooks/useRealtime";
+import { ambulanceStreamingService } from "@/services/streamingService";
+import type { AmbulanceSession } from "@/types";
 import { formatDate } from "@/utils/cn";
 import {
   CalendarIcon,
@@ -12,147 +15,131 @@ import {
   ClockIcon,
   EyeIcon,
   PlayIcon,
-  StopIcon,
-  UserIcon,
+  SignalIcon,
+  TruckIcon,
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-
-interface LiveSession {
-  id: string;
-  patient_id: string;
-  patient_name: string;
-  start_time: string;
-  end_time?: string;
-  duration: string;
-  status: "active" | "completed" | "interrupted";
-  detections_count: number;
-  alerts_count: number;
-  confidence_avg: number;
-  camera_device: string;
-}
+import { useEffect, useMemo, useState } from "react";
 
 export default function RecentLiveSessionPage() {
   const router = useRouter();
-  const [sessions, setSessions] = useState<LiveSession[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [ambulances, setAmbulances] = useState<any[]>([]);
+  const [isLoadingAmbulances, setIsLoadingAmbulances] = useState(true);
 
+  // Real-time sessions data
+  const {
+    sessions: realtimeSessions,
+    isConnected: realtimeConnected,
+    error: realtimeError,
+    isLoading: isLoadingSessions,
+  } = useRealtimeAmbulanceSessions({
+    enabled: true,
+  });
+
+  // Load ambulances data
   useEffect(() => {
-    // Simulate loading recent live sessions
-    const loadSessions = async () => {
+    const loadAmbulances = async () => {
       try {
-        setIsLoading(true);
-
-        // Mock data - replace with actual API call
-        const mockSessions: LiveSession[] = [
-          {
-            id: "session_001",
-            patient_id: "patient_123",
-            patient_name: "John Doe",
-            start_time: "2025-09-14T14:30:00Z",
-            end_time: "2025-09-14T15:15:00Z",
-            duration: "45m",
-            status: "completed",
-            detections_count: 23,
-            alerts_count: 3,
-            confidence_avg: 94.2,
-            camera_device: "RPi Camera Module 1",
-          },
-          {
-            id: "session_002",
-            patient_id: "patient_124",
-            patient_name: "Jane Smith",
-            start_time: "2025-09-14T13:00:00Z",
-            end_time: "2025-09-14T13:30:00Z",
-            duration: "30m",
-            status: "completed",
-            detections_count: 15,
-            alerts_count: 1,
-            confidence_avg: 96.8,
-            camera_device: "RPi Camera Module 2",
-          },
-          {
-            id: "session_003",
-            patient_id: "patient_125",
-            patient_name: "Bob Johnson",
-            start_time: "2025-09-14T15:45:00Z",
-            duration: "12m",
-            status: "active",
-            detections_count: 8,
-            alerts_count: 0,
-            confidence_avg: 92.1,
-            camera_device: "RPi Camera Module 3",
-          },
-          {
-            id: "session_004",
-            patient_id: "patient_126",
-            patient_name: "Alice Brown",
-            start_time: "2025-09-14T11:20:00Z",
-            end_time: "2025-09-14T12:05:00Z",
-            duration: "45m",
-            status: "interrupted",
-            detections_count: 18,
-            alerts_count: 2,
-            confidence_avg: 89.3,
-            camera_device: "RPi Camera Module 4",
-          },
-        ];
-
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate loading
-        setSessions(mockSessions);
-      } catch {
-        setError("Failed to load recent live sessions");
+        setIsLoadingAmbulances(true);
+        const response =
+          await ambulanceStreamingService.getAmbulancesStreamingStatus();
+        if (response.error) {
+          throw new Error(response.error);
+        }
+        setAmbulances(response.data || []);
+      } catch (error) {
+        console.error("Failed to load ambulances:", error);
       } finally {
-        setIsLoading(false);
+        setIsLoadingAmbulances(false);
       }
     };
 
-    loadSessions();
+    loadAmbulances();
   }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-100 text-green-800";
-      case "completed":
-        return "bg-blue-100 text-blue-800";
-      case "interrupted":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
+  // Calculate statistics
+  const statistics = useMemo(() => {
+    const activeSessions = realtimeSessions.filter((s) => s.is_active);
+    const totalRooms = realtimeSessions.reduce(
+      (acc, s) => acc + (s.camera_rooms?.length || 0),
+      0
+    );
+    const connectedRooms = realtimeSessions.reduce(
+      (acc, s) =>
+        acc + (s.camera_rooms?.filter((r) => r.connected).length || 0),
+      0
+    );
+    const totalDetections = realtimeSessions.reduce(
+      (acc, s) =>
+        acc +
+        (s.camera_rooms?.reduce(
+          (sum, r) => sum + (r.detections_count || 0),
+          0
+        ) || 0),
+      0
+    );
+
+    return {
+      totalSessions: realtimeSessions.length,
+      activeSessions: activeSessions.length,
+      totalRooms,
+      connectedRooms,
+      totalDetections,
+    };
+  }, [realtimeSessions]);
+
+  // Get ambulance info by ID
+  const getAmbulanceInfo = (ambulanceId: string) => {
+    const status = ambulances.find((a) => a.ambulance_id === ambulanceId);
+    return status ? { ambulance_number: status.ambulance_number } : null;
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "active":
-        return <PlayIcon className="h-4 w-4" />;
-      case "completed":
-        return <StopIcon className="h-4 w-4" />;
-      case "interrupted":
-        return <StopIcon className="h-4 w-4" />;
-      default:
-        return <ClockIcon className="h-4 w-4" />;
+  // Calculate session duration
+  const getSessionDuration = (session: AmbulanceSession) => {
+    const start = new Date(session.started_at);
+    const end = session.ended_at ? new Date(session.ended_at) : new Date();
+    const durationMs = end.getTime() - start.getTime();
+    const minutes = Math.floor(durationMs / 60000);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
     }
+    return `${minutes}m`;
   };
+
+  // Get session status display
+  const getSessionStatusInfo = (session: AmbulanceSession) => {
+    if (session.is_active) {
+      return {
+        label: "Active",
+        color: "bg-green-100 text-green-800",
+        icon: PlayIcon,
+      };
+    }
+    return {
+      label: "Completed",
+      color: "bg-gray-100 text-gray-800",
+      icon: ClockIcon,
+    };
+  };
+
+  // Get priority level display
+  const getPriorityDisplay = (level: number) => {
+    if (level === 1) return { label: "Critical", color: "text-red-600" };
+    if (level === 2) return { label: "High", color: "text-orange-600" };
+    if (level === 3) return { label: "Medium", color: "text-yellow-600" };
+    return { label: "Low", color: "text-blue-600" };
+  };
+
+  const isLoading = isLoadingAmbulances || isLoadingSessions;
 
   if (isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center py-12">
-          <Loading size="lg" text="Loading recent live sessions..." />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <DashboardLayout>
-        <div className="max-w-md mx-auto mt-12">
-          <Alert variant="error">{error}</Alert>
+          <Loading size="lg" text="Loading ambulance sessions..." />
         </div>
       </DashboardLayout>
     );
@@ -165,13 +152,27 @@ export default function RecentLiveSessionPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Recent Live Sessions
+              Recent Ambulance Sessions
             </h1>
             <p className="text-gray-600">
-              Camera AI monitoring sessions from all subjects
+              Real-time monitoring of all ambulance camera sessions
             </p>
           </div>
-          <div className="flex space-x-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <SignalIcon
+                className={`h-5 w-5 ${
+                  realtimeConnected ? "text-green-600" : "text-red-600"
+                }`}
+              />
+              <span
+                className={`text-sm font-medium ${
+                  realtimeConnected ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {realtimeConnected ? "Live" : "Disconnected"}
+              </span>
+            </div>
             <Button variant="outline">
               <ChartBarIcon className="h-4 w-4 mr-2" />
               Export Report
@@ -179,19 +180,28 @@ export default function RecentLiveSessionPage() {
           </div>
         </div>
 
+        {/* Real-time connection warning */}
+        {!realtimeConnected && (
+          <Alert variant="error">
+            Real-time connection lost. Reconnecting to live data stream...
+          </Alert>
+        )}
+
+        {realtimeError && <Alert variant="error">{realtimeError}</Alert>}
+
         {/* Session Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           <Card className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-blue-100 rounded-lg">
-                <VideoCameraIcon className="h-6 w-6 text-blue-600" />
+                <TruckIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">
-                  Total Sessions Today
+                  Total Sessions
                 </p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {sessions.length}
+                  {statistics.totalSessions}
                 </p>
               </div>
             </div>
@@ -207,7 +217,7 @@ export default function RecentLiveSessionPage() {
                   Active Sessions
                 </p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {sessions.filter((s) => s.status === "active").length}
+                  {statistics.activeSessions}
                 </p>
               </div>
             </div>
@@ -216,14 +226,28 @@ export default function RecentLiveSessionPage() {
           <Card className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-purple-100 rounded-lg">
-                <EyeIcon className="h-6 w-6 text-purple-600" />
+                <VideoCameraIcon className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">
-                  Total Detections
+                  Camera Rooms
                 </p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {sessions.reduce((acc, s) => acc + s.detections_count, 0)}
+                  {statistics.totalRooms}
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <SignalIcon className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Connected</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {statistics.connectedRooms}
                 </p>
               </div>
             </div>
@@ -232,18 +256,12 @@ export default function RecentLiveSessionPage() {
           <Card className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-orange-100 rounded-lg">
-                <ChartBarIcon className="h-6 w-6 text-orange-600" />
+                <EyeIcon className="h-6 w-6 text-orange-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">
-                  Avg Confidence
-                </p>
+                <p className="text-sm font-medium text-gray-600">Detections</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {(
-                    sessions.reduce((acc, s) => acc + s.confidence_avg, 0) /
-                    sessions.length
-                  ).toFixed(1)}
-                  %
+                  {statistics.totalDetections}
                 </p>
               </div>
             </div>
@@ -254,101 +272,155 @@ export default function RecentLiveSessionPage() {
         <Card className="overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900">
-              Recent Live Sessions
+              Ambulance Sessions
             </h3>
           </div>
 
-          {sessions.length === 0 ? (
+          {realtimeSessions.length === 0 ? (
             <div className="text-center py-12">
-              <VideoCameraIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <TruckIcon className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">
-                No live sessions
+                No ambulance sessions
               </h3>
               <p className="mt-1 text-sm text-gray-500">
-                No recent camera monitoring sessions found.
+                No recent ambulance camera sessions found.
               </p>
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {sessions.map((session) => (
-                <div key={session.id} className="p-6 hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <VideoCameraIcon className="h-6 w-6 text-blue-600" />
-                        </div>
-                      </div>
+              {realtimeSessions.map((session) => {
+                const ambulance = getAmbulanceInfo(session.ambulance_id);
+                const statusInfo = getSessionStatusInfo(session);
+                const StatusIcon = statusInfo.icon;
+                const priority = getPriorityDisplay(session.priority_level);
+                const connectedRooms =
+                  session.camera_rooms?.filter((r) => r.connected).length || 0;
+                const totalRooms = session.camera_rooms?.length || 0;
+                const sessionDetections =
+                  session.camera_rooms?.reduce(
+                    (sum, r) => sum + (r.detections_count || 0),
+                    0
+                  ) || 0;
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {session.patient_name}
-                          </p>
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                              session.status
-                            )}`}
-                          >
-                            {getStatusIcon(session.status)}
-                            <span className="ml-1 capitalize">
-                              {session.status}
+                return (
+                  <div key={session.id} className="p-6 hover:bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex-shrink-0">
+                          <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <TruckIcon className="h-6 w-6 text-blue-600" />
+                          </div>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {ambulance?.ambulance_number ||
+                                "Unknown Ambulance"}
+                            </p>
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}
+                            >
+                              <StatusIcon className="h-3 w-3 mr-1" />
+                              {statusInfo.label}
                             </span>
-                          </span>
-                        </div>
+                            <span
+                              className={`text-xs font-medium ${priority.color}`}
+                            >
+                              {priority.label} Priority
+                            </span>
+                          </div>
 
-                        <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500">
-                          <div className="flex items-center">
-                            <CalendarIcon className="h-4 w-4 mr-1" />
-                            {formatDate(session.start_time)}
+                          <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500">
+                            <div className="flex items-center">
+                              <CalendarIcon className="h-4 w-4 mr-1" />
+                              {formatDate(session.started_at)}
+                            </div>
+                            <div className="flex items-center">
+                              <ClockIcon className="h-4 w-4 mr-1" />
+                              {getSessionDuration(session)}
+                            </div>
+                            <div className="flex items-center">
+                              <VideoCameraIcon className="h-4 w-4 mr-1" />
+                              {session.session_type}
+                            </div>
+                            {session.session_name && (
+                              <div className="flex items-center">
+                                <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                  {session.session_name}
+                                </span>
+                              </div>
+                            )}
                           </div>
-                          <div className="flex items-center">
-                            <ClockIcon className="h-4 w-4 mr-1" />
-                            {session.duration}
-                          </div>
-                          <div className="flex items-center">
-                            <EyeIcon className="h-4 w-4 mr-1" />
-                            {session.camera_device}
-                          </div>
+
+                          {/* Camera Rooms Status */}
+                          {totalRooms > 0 && (
+                            <div className="mt-2 flex items-center space-x-3">
+                              <span className="text-xs text-gray-500">
+                                Cameras: {connectedRooms}/{totalRooms} online
+                              </span>
+                              <div className="flex space-x-1">
+                                {session.camera_rooms?.map((room) => (
+                                  <div
+                                    key={room.id}
+                                    className={`h-2 w-2 rounded-full ${
+                                      room.connected
+                                        ? "bg-green-500"
+                                        : "bg-gray-300"
+                                    }`}
+                                    title={`${room.room_id}: ${
+                                      room.connected ? "Connected" : "Offline"
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center space-x-6">
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900">
-                          {session.detections_count} detections
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {session.alerts_count} alerts •{" "}
-                          {session.confidence_avg}% confidence
-                        </p>
-                      </div>
+                      <div className="flex items-center space-x-6">
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-gray-900">
+                            {sessionDetections} detections
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {totalRooms} camera{totalRooms !== 1 ? "s" : ""} •{" "}
+                            {connectedRooms} active
+                          </p>
+                        </div>
 
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            router.push(`/patients/${session.patient_id}`)
-                          }
-                        >
-                          <UserIcon className="h-4 w-4 mr-1" />
-                          View Subject
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => router.push(`/sessions/${session.id}`)}
-                        >
-                          <EyeIcon className="h-4 w-4 mr-1" />
-                          View Details
-                        </Button>
+                        <div className="flex space-x-2">
+                          {session.is_active && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                router.push(
+                                  `/streamingDash/${session.ambulance_id}`
+                                )
+                              }
+                            >
+                              <EyeIcon className="h-4 w-4 mr-1" />
+                              Watch Live
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              router.push(`/sessions/${session.id}`)
+                            }
+                          >
+                            <ChartBarIcon className="h-4 w-4 mr-1" />
+                            View Details
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>

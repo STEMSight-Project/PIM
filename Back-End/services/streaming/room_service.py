@@ -65,7 +65,6 @@ class Room:
                 self.viewer_pcs.clear()
 
                 self.is_active = False
-                logger.info("Room %s closed successfully", self.room_id)
 
         except (OSError, ConnectionError, RuntimeError) as e:
             logger.error("Error closing room %s: %s", self.room_id, str(e))
