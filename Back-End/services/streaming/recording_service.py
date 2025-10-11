@@ -249,9 +249,9 @@ class SessionRecorder:
             # Upload to Supabase Storage
             storage_url = await self._upload_to_supabase_storage()
 
-            # Clean up local HLS files to save disk space (keep MP4)
+            # Clean up all local files after successful upload
             if storage_url:
-                await self._cleanup_local_hls_files()
+                await self._cleanup_local_files()
 
             # Update database
             update_data = {
@@ -315,9 +315,7 @@ class SessionRecorder:
             ).get_public_url(f"recordings/session-{self.session_id}/recording.mp4")
 
             LOGGER.info(f"✅ Upload complete. Public URL: {public_url}")
-            LOGGER.info(
-                f"💡 HLS segments can now be deleted locally to save disk space"
-            )
+            LOGGER.info(f"💡 All local files will be deleted to save disk space")
 
             return public_url
 
@@ -325,10 +323,10 @@ class SessionRecorder:
             LOGGER.error(f"Failed to upload to Supabase Storage: {e}")
             return None
 
-    async def _cleanup_local_hls_files(self):
+    async def _cleanup_local_files(self):
         """
-        Delete local HLS segments and playlist after successful upload.
-        Keep the MP4 file for backup/future use.
+        Delete all local recording files after successful upload to Supabase.
+        Removes HLS segments, playlist, MP4 file, and the entire session directory.
         """
         try:
             deleted_count = 0
@@ -343,10 +341,29 @@ class SessionRecorder:
                 self.playlist_path.unlink()
                 deleted_count += 1
 
-            LOGGER.info(f"🗑️ Cleaned up {deleted_count} local HLS files (MP4 retained)")
+            # Delete MP4 file
+            if self.temp_video_path.exists():
+                self.temp_video_path.unlink()
+                deleted_count += 1
+                LOGGER.info(f"🗑️ Deleted MP4 file: {self.temp_video_path}")
+
+            # Delete any other files in the session directory
+            for file in self.recording_path.iterdir():
+                if file.is_file():
+                    file.unlink()
+                    deleted_count += 1
+
+            # Remove the session directory
+            if self.recording_path.exists():
+                self.recording_path.rmdir()
+                LOGGER.info(f"🗑️ Removed session directory: {self.recording_path}")
+
+            LOGGER.info(
+                f"🗑️ Cleaned up {deleted_count} local files and directory for session {self.session_id}"
+            )
 
         except Exception as e:
-            LOGGER.error(f"Error cleaning up local HLS files: {e}")
+            LOGGER.error(f"Error cleaning up local files: {e}")
 
     def get_playlist_url(self) -> str:
         """Get the HLS playlist URL"""

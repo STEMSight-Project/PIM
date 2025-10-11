@@ -191,6 +191,9 @@ export const ambulanceStreamingService = {
 
   /**
    * Connect as a camera streamer (for Raspberry Pi devices)
+   *
+   * @param cameraId - Actually the room_id (e.g., "AMB-001-ROOM-001")
+   *                   In our system, room_id IS the camera identifier
    */
   async connectCameraStreamer(
     cameraId: string,
@@ -204,6 +207,9 @@ export const ambulanceStreamingService = {
 
   /**
    * Connect as a camera viewer (for dashboard monitoring)
+   *
+   * @param cameraId - Actually the room_id (e.g., "AMB-001-ROOM-001")
+   *                   In our system, room_id IS the camera identifier
    */
   async connectCameraViewer(
     cameraId: string,
