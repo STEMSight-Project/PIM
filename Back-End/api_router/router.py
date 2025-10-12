@@ -9,6 +9,7 @@ from api_router.ambulance import router as ambulance_router
 from api_router.note import router as note_router
 from api_router.patient_event import router as patient_event_router
 from api_router.realtime import router as realtime_router
+from api_router.recent_sessions import router as recent_sessions_router
 
 # from api_router.reset_password import router as reset_password_router
 
