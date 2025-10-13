@@ -27,7 +27,7 @@ export interface PatientCreateRequest {
   emergency_contact?: string;
 }
 
-export interface PatientUpdateRequest extends Partial<PatientCreateRequest> { }
+export type PatientUpdateRequest = Partial<PatientCreateRequest>;
 
 // Patient Service Functions
 export const patientService = {

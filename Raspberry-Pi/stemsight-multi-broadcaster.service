@@ -1,0 +1,20 @@
+[Unit]
+Description=STEMSight Multi-Camera Broadcaster
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/stemsight
+ExecStart=/home/pi/stemsight/venv/bin/python rpi_multi_broadcaster.py --config /home/pi/stemsight/config/multi_camera_config.json
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Performance settings for multi-camera streaming
+LimitNOFILE=65536
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

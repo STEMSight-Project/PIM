@@ -77,6 +77,7 @@ export interface AmbulanceSession {
   ended_at?: string;
   created_at: string;
   updated_at: string;
+  camera_rooms?: CameraRoom[];
 }
 
 export interface AmbulanceSessionCreate {
@@ -104,7 +105,7 @@ export interface CameraRoom {
   session_id: string;
   camera_id: string;
   room_id: string;
-  device_name: string;
+  camera_name: string;
   connected: boolean;
   connection_started_at: string;
   connection_ended_at?: string;
@@ -167,17 +168,15 @@ export interface AmbulanceStreamingStatus {
 // ============================================================================
 
 export interface AmbulanceSessionEvent {
-  event_type: "session_created" | "session_updated" | "session_ended";
+  name: string;
+  event_type: "UPDATE" | "DELETE" | "INSERT";
   session: AmbulanceSession;
   timestamp: string;
 }
 
 export interface CameraRoomEvent {
-  event_type:
-    | "room_created"
-    | "room_connected"
-    | "room_disconnected"
-    | "room_updated";
+  name: string;
+  event_type: "UPDATE" | "DELETE" | "INSERT";
   room: CameraRoom;
   timestamp: string;
 }

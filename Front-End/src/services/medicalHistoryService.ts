@@ -19,8 +19,7 @@ export interface MedicalHistoryCreateRequest {
   note?: string;
 }
 
-export interface MedicalHistoryUpdateRequest
-  extends Partial<MedicalHistoryCreateRequest> {}
+export type MedicalHistoryUpdateRequest = Partial<MedicalHistoryCreateRequest>;
 
 // Medical History Service Functions - Updated to match backend endpoints
 export const medicalHistoryService = {

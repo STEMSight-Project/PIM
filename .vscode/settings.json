@@ -1,9 +1,13 @@
 {
   "typescript.preferences.importModuleSpecifier": "relative",
   "typescript.suggest.autoImports": true,
-  "eslint.workingDirectories": ["Front-End"],
+  "eslint.workingDirectories": [
+    "Front-End"
+  ],
   "python.defaultInterpreterPath": "./Back-End/venv/Scripts/python.exe",
-  "python.analysis.extraPaths": ["./Back-End"],
+  "python.analysis.extraPaths": [
+    "./Back-End"
+  ],
   "python.terminal.activateEnvironment": true,
   "files.associations": {
     "*.tsx": "typescriptreact",

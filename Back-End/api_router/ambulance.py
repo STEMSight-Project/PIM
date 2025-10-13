@@ -10,7 +10,7 @@ from core.common import logger
 from security.jwt_verify import current_user
 from services.ambulance_service import AmbulanceService
 
-router = APIRouter(dependencies=[Depends(current_user)])
+router = APIRouter()
 
 
 # Pydantic models
@@ -29,22 +29,32 @@ class AmbulanceUpdate(BaseModel):
 
 
 class CameraCreate(BaseModel):
-    name: str
-    camera_type: str
-    location_in_ambulance: str
-    static_id: str
+    camera_id: str  # e.g., "AMB-001-CAM-01"
+    camera_name: str  # e.g., "Patient Area Camera"
+    camera_type: str  # e.g., "medical", "surveillance", "dashboard"
+    position_in_ambulance: str  # e.g., "patient-area", "front-cabin"
+    device_model: Optional[str] = "Raspberry Pi Camera v3"
     resolution: Optional[str] = "1920x1080"
-    frame_rate: Optional[int] = 30
-    is_active: bool = True
+    max_fps: Optional[int] = 30
+    has_night_vision: Optional[bool] = False
+    has_audio: Optional[bool] = True
+    mac_address: Optional[str] = None
+    ip_address: Optional[str] = None
+    streaming_port: Optional[int] = 8000
+    rtc_config: Optional[str] = None
+    status: Optional[str] = "active"
+    ai_enabled: Optional[bool] = True
+    detection_types: Optional[str] = '["pose","movement","activity"]'
+    processing_mode: Optional[str] = "edge"
+    notes: Optional[str] = None
 
 
 class CameraUpdate(BaseModel):
-    name: Optional[str] = None
+    camera_name: Optional[str] = None
     camera_type: Optional[str] = None
-    location_in_ambulance: Optional[str] = None
+    position_in_ambulance: Optional[str] = None
     resolution: Optional[str] = None
     frame_rate: Optional[int] = None
-    is_active: Optional[bool] = None
 
 
 # ==============================================================================

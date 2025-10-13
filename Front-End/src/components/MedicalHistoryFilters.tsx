@@ -15,7 +15,7 @@ export function MedicalHistoryFilters({
   onDoctorFilter,
   onDateFilter,
   onClearFilters,
-  doctorOptions
+  doctorOptions,
 }: MedicalHistoryFiltersProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDoctor, setSelectedDoctor] = useState("");
@@ -30,12 +30,6 @@ export function MedicalHistoryFilters({
   const handleDoctorChange = (value: string) => {
     setSelectedDoctor(value);
     onDoctorFilter(value);
-  };
-
-  const handleDateRangeChange = () => {
-    if (startDate && endDate) {
-      onDateFilter({ start: startDate, end: endDate });
-    }
   };
 
   const handleClearAll = () => {
@@ -68,7 +62,10 @@ export function MedicalHistoryFilters({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Search */}
         <div>
-          <label htmlFor="search" className="block text-sm font-medium text-purple-800 mb-1">
+          <label
+            htmlFor="search"
+            className="block text-sm font-medium text-purple-800 mb-1"
+          >
             Search
           </label>
           <div className="relative">
@@ -86,7 +83,10 @@ export function MedicalHistoryFilters({
 
         {/* Doctor Filter */}
         <div>
-          <label htmlFor="doctor" className="block text-sm font-medium text-purple-800 mb-1">
+          <label
+            htmlFor="doctor"
+            className="block text-sm font-medium text-purple-800 mb-1"
+          >
             Doctor
           </label>
           <select
@@ -106,7 +106,10 @@ export function MedicalHistoryFilters({
 
         {/* Date Range */}
         <div>
-          <label htmlFor="startDate" className="block text-sm font-medium text-purple-800 mb-1">
+          <label
+            htmlFor="startDate"
+            className="block text-sm font-medium text-purple-800 mb-1"
+          >
             From Date
           </label>
           <input
@@ -124,7 +127,10 @@ export function MedicalHistoryFilters({
         </div>
 
         <div>
-          <label htmlFor="endDate" className="block text-sm font-medium text-purple-800 mb-1">
+          <label
+            htmlFor="endDate"
+            className="block text-sm font-medium text-purple-800 mb-1"
+          >
             To Date
           </label>
           <input

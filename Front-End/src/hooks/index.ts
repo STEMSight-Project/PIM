@@ -8,8 +8,9 @@ export { useNotes } from "./useNotes";
 export { usePasswordReset } from "./usePasswordReset";
 export { usePatientEvents } from "./usePatientEvents";
 export { usePatients } from "./usePatients";
-export { useRealtimeAmbulanceSessions, useRealtimeRooms } from "./useRealtime";
+export { useRealtimeAmbulanceSessions } from "./useRealtime";
 export type { UseRealtimeAmbulanceOptions } from "./useRealtime";
+export { useRecordings } from "./useRecordings";
 export { useSessions } from "./useSessions";
 export { useStreaming } from "./useStreaming";
 export { useVideos } from "./useVideos";
@@ -19,6 +20,10 @@ export type {
   Detection,
   SessionWithPatient,
 } from "@/components/session-review/types";
+export type {
+  RecordingResponse,
+  SessionWithRecordings,
+} from "@/services/videoService";
 export type { AmbulanceWithSession } from "./useAmbulanceStreaming";
 export type { Note } from "./useNotes";
 export type { PatientEvent } from "./usePatientEvents";
