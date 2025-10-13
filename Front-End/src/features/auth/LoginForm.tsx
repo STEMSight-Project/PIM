@@ -89,6 +89,15 @@ export function LoginForm() {
           Forgot your password?
         </Link>
       </div>
+
+
+      <div className="text-center text-sm text-gray-600">
+        {/* Gives an option to create an account if user does not have one */}
+        Don't have an account?{" "}
+        <Link href="/create-account" className="text-blue-600 hover:underline">
+          Create an account
+        </Link>
+      </div>
     </form>
   );
 }

@@ -7,6 +7,8 @@ from datetime import datetime
 from security.jwt_verify import current_user
 
 router = APIRouter(dependencies=[Depends(current_user)])
+# Public router with no auth dependency for non-sensitive endpoints
+public_router = APIRouter()
 
 class Specialization(str, Enum):
     GENERAL_PRACTICE = "General Practice/Family Medicine"
@@ -48,6 +50,15 @@ class Doctor(DoctorBase):
     id: str
     created_at: datetime
     updated_at: datetime
+
+
+@public_router.get("/specializations", summary="List available doctor specializations")
+def list_specializations() -> list[str]:
+    """
+    Return the list of doctor specializations defined by the backend enum.
+    It is a Public endpoint, and will not expose any sensitive data.
+    """
+    return [s.value for s in Specialization]
 
 @router.get("/", response_model=List[Doctor], summary="Get all doctors")
 async def get_all_doctors():
