@@ -143,6 +143,36 @@ npm run dev
 - Two client patterns: `SUPABASE_AUTH` for user sessions, `SUPABASE` for data queries
 - Import from `core.common`: `supabase`, `supabase_auth`, `logger`
 
+### Testing Credentials
+
+**For API endpoint testing and authentication:**
+
+- **Email**: `nguyenphuctran@csus.edu`
+- **Password**: `Patrick2911@1`
+
+Use these credentials for:
+
+- Testing protected API endpoints that require Bearer token authentication
+- Validating authentication flows in development
+- Backend integration testing with real user sessions
+- JWT token generation for API testing tools (Postman, curl, etc.)
+
+**Authentication Flow for Testing:**
+
+```bash
+# Login to get JWT token
+curl -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "nguyenphuctran@csus.edu",
+    "password": "Patrick2911@1"
+  }'
+
+# Use returned access_token in Authorization header
+curl -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  "http://localhost:8000/protected-endpoint"
+```
+
 ### Router Authentication Patterns
 
 **Two types of routers based on authentication requirements:**
@@ -405,6 +435,462 @@ const navigation = [
 - ML detection confidence tunable via `landmark_visibility_threshold`
 - Error handling: Use project's `ApiResponse` pattern, not generic try/catch
 - Camera device strings are platform-specific - see `broadcaster.py` defaults
+
+## 🎥 Recent Updates: Ambulance Streaming Architecture (October 2025)
+
+### Database Migration: Patient → Ambulance Model
+
+**CRITICAL CHANGE**: The system has migrated from **patient-based** to **ambulance-based** streaming architecture.
+
+#### New Database Schema
+
+```sql
+-- Ambulances table (replaces patient streaming sessions)
+CREATE TABLE ambulances (
+  id UUID PRIMARY KEY,
+  ambulance_number TEXT UNIQUE NOT NULL,  -- e.g., "001" for AMB-001
+  license_plate TEXT,
+  status TEXT DEFAULT 'available',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Ambulance cameras (multiple cameras per ambulance)
+CREATE TABLE cameras (
+  id UUID PRIMARY KEY,
+  ambulance_id UUID REFERENCES ambulances(id),
+  camera_name TEXT NOT NULL,
+  camera_position TEXT,  -- e.g., "front", "side", "rear"
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Ambulance streaming sessions (tracks active camera sessions)
+CREATE TABLE ambulance_streaming_sessions (
+  id UUID PRIMARY KEY,
+  ambulance_id UUID REFERENCES ambulances(id),
+  session_name TEXT,
+  session_type TEXT DEFAULT 'emergency',
+  priority_level INTEGER DEFAULT 3,
+  is_active BOOLEAN DEFAULT true,
+  started_at TIMESTAMP DEFAULT NOW(),
+  ended_at TIMESTAMP
+);
+
+-- Camera rooms (WebRTC rooms for camera streams)
+CREATE TABLE ambulance_camera_rooms (
+  id UUID PRIMARY KEY,
+  session_id UUID REFERENCES ambulance_streaming_sessions(id),
+  camera_id UUID REFERENCES ambulance_cameras(id),
+  room_id TEXT UNIQUE NOT NULL,  -- e.g., "AMB-001-ROOM-001"
+  device_name TEXT,  -- e.g., "RPi-Camera-1"
+  connected BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW(),
+  last_connected_at TIMESTAMP
+);
+```
+
+#### Backend API Structure
+
+**New Ambulance Streaming Endpoints:**
+
+```python
+# api_router/ambulance_streaming.py - New router for ambulance streaming
+
+# Ambulance session management
+POST   /ambulance-streaming/ambulance-sessions     # Create ambulance session
+GET    /ambulance-streaming/ambulance-sessions     # Get ambulance sessions
+PUT    /ambulance-streaming/ambulance-sessions/{id}/status  # Update session status
+
+# Camera room management
+POST   /ambulance-streaming/camera-rooms           # Create camera room
+GET    /ambulance-streaming/camera-rooms           # Get camera rooms
+PUT    /ambulance-streaming/camera-rooms/{room_id}/status  # Update room status
+
+# WebRTC streaming endpoints
+POST   /ambulance-streaming/camera/{room_id}/streamer  # RPi connects as streamer
+POST   /ambulance-streaming/camera/{room_id}/viewer    # Frontend connects as viewer
+
+# Real-time updates
+GET    /ambulance-streaming/realtime/sessions      # SSE for session updates
+GET    /ambulance-streaming/realtime/rooms         # SSE for room updates
+```
+
+**Service Layer Architecture:**
+
+```python
+# services/streaming/room_service.py
+class Room:
+    """Manages WebRTC connections for a camera room"""
+    - Tracks peer connections (RPi streamer + viewers)
+    - Auto-updates room.connected status in database
+    - Handles 1-minute timeout for disconnected rooms
+
+# services/streaming/session_service.py
+class SessionService:
+    """Manages ambulance streaming sessions"""
+    - Creates/ends ambulance sessions
+    - Links sessions to cameras and rooms
+    - Tracks session lifecycle
+```
+
+### Frontend Real-time Updates Implementation
+
+#### Server-Sent Events (SSE) Integration
+
+**Updated Real-time Hook Pattern:**
+
+```typescript
+// hooks/useRealtime.ts - Fixed event type parsing
+export const useRealtimeAmbulanceSessions = () => {
+  useEffect(() => {
+    const eventSource = new EventSource(
+      `${API_BASE_URL}/ambulance-streaming/realtime/sessions`
+    );
+
+    eventSource.addEventListener("database_change", (event) => {
+      const eventData = JSON.parse(event.data);
+
+      // CRITICAL FIX: Event type is in eventData.event, not eventData.type
+      const actualEventType =
+        eventData.event || eventData.event_type || eventData.type;
+
+      switch (actualEventType) {
+        case "INSERT":
+          // Add new session
+          break;
+        case "UPDATE":
+          // Update existing session
+          break;
+        case "DELETE":
+          // Remove session
+          break;
+      }
+    });
+
+    return () => eventSource.close();
+  }, []);
+};
+```
+
+**Event Structure:**
+
+```typescript
+// SSE event from backend
+{
+  type: "database_change",  // Message type
+  event: "UPDATE",          // Actual database event (INSERT/UPDATE/DELETE)
+  new: { /* updated record */ },
+  old: { /* previous record */ }
+}
+```
+
+#### Video Data Timeout Detection
+
+**Frontend monitors for video data reception:**
+
+```typescript
+// hooks/useStreaming.ts - Added 2-second timeout
+const [isWaitingForData, setIsWaitingForData] = useState(false);
+const videoDataTimeoutRef = useRef<NodeJS.Timeout>();
+
+// On WebRTC track received
+pc.ontrack = (event) => {
+  // Start 2-second timeout
+  setIsWaitingForData(true);
+  videoDataTimeoutRef.current = setTimeout(() => {
+    setIsWaitingForData(true); // Still no data
+  }, 2000);
+
+  // On video data received
+  videoRef.current.addEventListener("loadeddata", () => {
+    clearTimeout(videoDataTimeoutRef.current);
+    setIsWaitingForData(false);
+  });
+};
+```
+
+**UI Feedback:**
+
+```typescript
+// Streaming page displays status
+{
+  isWaitingForData && (
+    <div className="waiting-overlay">Waiting for camera data...</div>
+  );
+}
+
+{
+  !room.connected && (
+    <div className="disconnected-overlay">Camera is currently offline</div>
+  );
+}
+```
+
+### Raspberry Pi Broadcaster Implementation
+
+#### Single Camera Broadcaster
+
+**File:** `Raspberry-Pi/rpi_broadcaster.py`
+
+**Key Features:**
+
+- Matches main `broadcaster.py` logic exactly
+- Ambulance-based session creation
+- Camera selection from ambulance cameras
+- Room creation with unique room IDs (AMB-XXX-ROOM-XXX)
+- 3-retry connection strategy
+- V4L2 optimization for Raspberry Pi cameras
+
+**Usage:**
+
+```bash
+# Command line
+python rpi_broadcaster.py --ambulance_number 001 --room 001 --video_device /dev/video0
+
+# With config file
+python rpi_broadcaster.py --config config/camera_config.json
+```
+
+**Workflow:**
+
+```python
+1. Lookup ambulance by number (e.g., "001" → AMB-001)
+2. Create ambulance streaming session (or reuse active session)
+3. Get ambulance cameras from database
+4. Select camera by index (--room parameter)
+5. Create/join camera room (room_id = AMB-{ambulance_number}-ROOM-{room_number})
+6. Connect to /ambulance-streaming/camera/{room_id}/streamer endpoint
+7. Stream video continuously
+8. Auto-reconnect on disconnect (3 retries)
+```
+
+#### Configuration Management
+
+**File:** `Raspberry-Pi/config_manager.py`
+
+**Config Files:**
+
+```json
+// config/camera_config.json
+{
+  "resolution": [640, 480],
+  "framerate": 30,
+  "bitrate": "1000000"
+}
+
+// config/network_config.json
+{
+  "server_url": "http://backend:8000",
+  "ambulance_number": "001",
+  "room_number": "001"
+}
+```
+
+#### One-Time Setup Script
+
+**File:** `Raspberry-Pi/one_time_setup.sh`
+
+**Automated Setup Process:**
+
+1. System package installation (Python, FFMPEG, V4L2)
+2. Camera interface enablement (`raspi-config`)
+3. Python virtual environment creation
+4. Dependency installation from `requirements-rpi.txt`
+5. Configuration file generation (network, camera)
+6. Systemd service creation and enablement
+7. Configuration wizard (ambulance number, server URL)
+8. Helper script creation (start.sh, stop.sh, status.sh)
+
+**Systemd Service:**
+
+```ini
+# stemsight-broadcaster.service
+[Unit]
+Description=STEMSight Ambulance Camera Broadcaster
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/stemsight
+ExecStart=/home/pi/stemsight/venv/bin/python rpi_broadcaster.py --config config/camera_config.json
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Room Status Auto-Update
+
+**Backend automatically updates room.connected status:**
+
+```python
+# services/streaming/room_service.py
+class Room:
+    async def add_peer_connection(self, pc: RTCPeerConnection):
+        """Add peer and update DB status if first connection"""
+        was_empty = len(self.pcs) == 0
+        self.pcs.add(pc)
+
+        if was_empty:
+            # First connection - mark room as connected
+            await self._update_room_status(connected=True)
+
+    async def remove_peer_connection(self, pc: RTCPeerConnection):
+        """Remove peer and update DB status if last connection"""
+        self.pcs.discard(pc)
+
+        if len(self.pcs) == 0:
+            # No more connections - mark as disconnected
+            await self._update_room_status(connected=False)
+```
+
+**Frontend receives real-time room status updates via SSE:**
+
+```typescript
+// Real-time room status updates
+useEffect(() => {
+  const eventSource = new EventSource(
+    `${API_BASE_URL}/ambulance-streaming/realtime/rooms`
+  );
+
+  eventSource.addEventListener("database_change", (event) => {
+    const data = JSON.parse(event.data);
+    if (data.event === "UPDATE" && data.new.room_id === currentRoom) {
+      // Update local room state with connected status
+      setRoom((prevRoom) => ({
+        ...prevRoom,
+        connected: data.new.connected,
+      }));
+    }
+  });
+}, [currentRoom]);
+```
+
+### Comprehensive Testing & Documentation
+
+**Created Documentation Files:**
+
+1. **`Raspberry-Pi/QUICK_REFERENCE.md`** - Quick start guide with common commands
+2. **`Raspberry-Pi/TESTING_GUIDE.md`** - Comprehensive testing procedures (Windows + RPi)
+3. **`Raspberry-Pi/FILE_ORGANIZATION.md`** - File purpose and organizational structure
+4. **`Raspberry-Pi/INDEX.md`** - Main navigation and entry point
+5. **`Raspberry-Pi/test_broadcaster.ps1`** - Automated Windows pre-flight test script
+
+**Testing Script Features:**
+
+```powershell
+# Automated environment checks
+.\test_broadcaster.ps1
+
+# Validates:
+- Backend running (http://localhost:8000)
+- Frontend running (http://localhost:3000)
+- Python virtual environment exists
+- FFMPEG installed
+- Camera devices detected
+```
+
+### Key Implementation Lessons
+
+#### Event Type Parsing Bug Fix
+
+**Problem:** Real-time updates not working despite SSE connection active.
+
+**Root Cause:** Event type field name mismatch
+
+```typescript
+// ❌ WRONG - Looking for wrong field
+const eventType = eventData.type; // Returns "database_change"
+
+// ✅ CORRECT - Event type in .event field
+const eventType = eventData.event; // Returns "INSERT", "UPDATE", "DELETE"
+```
+
+**Solution:** Check multiple field names with fallback
+
+```typescript
+const actualEventType =
+  eventData.event || eventData.event_type || eventData.type;
+```
+
+#### Video Data Timeout Pattern
+
+**Problem:** No feedback when video stream connected but no data flowing.
+
+**Solution:** 2-second timeout with video element event listeners
+
+```typescript
+// Set timeout when track received
+ontrack → Start 2-second timer → setIsWaitingForData(true)
+
+// Clear timeout when data flows
+loadeddata/playing event → Clear timer → setIsWaitingForData(false)
+```
+
+#### Room vs Session Lifecycle
+
+**Critical Understanding:**
+
+- **Sessions** are created/ended by RPi devices
+- **Rooms** have `connected` status based on peer connections
+- **Frontend** only watches, never creates/ends sessions
+- **Viewers** disconnecting doesn't affect room.connected (only RPi disconnect matters)
+
+### Migration Checklist for Future Features
+
+When working with ambulance streaming:
+
+- ✅ Use `ambulance_id` not `patient_id`
+- ✅ Use `/ambulance-streaming/*` endpoints, not `/streaming/*`
+- ✅ Use `ambulance_streaming_sessions` table, not `streaming_sessions`
+- ✅ Use `ambulance_camera_rooms` table, not `streaming_rooms`
+- ✅ Check `eventData.event` field for SSE event types
+- ✅ Room IDs format: `AMB-{number}-ROOM-{number}`
+- ✅ Frontend uses "Watch" terminology, not "Stream"
+- ✅ RPi broadcaster creates sessions, frontend only views
+
+### Raspberry Pi Deployment Workflow
+
+**Production Deployment:**
+
+```bash
+# 1. Prepare Raspberry Pi
+# - Flash Raspberry Pi OS
+# - Enable SSH
+# - Connect camera module
+
+# 2. Upload setup script
+scp Raspberry-Pi/one_time_setup.sh pi@raspberrypi.local:/home/pi/
+
+# 3. Run automated setup
+ssh pi@raspberrypi.local
+chmod +x one_time_setup.sh
+sudo ./one_time_setup.sh
+
+# 4. Service starts automatically on boot
+sudo systemctl status stemsight-broadcaster.service
+```
+
+**Development Testing (Windows):**
+
+```powershell
+# 1. Pre-flight check
+cd Raspberry-Pi
+.\test_broadcaster.ps1
+
+# 2. Setup environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements-rpi.txt
+
+# 3. Test broadcaster
+python rpi_broadcaster.py --ambulance_number 001 --room 001 --video_device "Logitech BRIO"
+
+# 4. Verify on frontend
+# http://localhost:3000/streamingDash
+```
 
 ## 🤖 AI Collaboration Guidelines
 

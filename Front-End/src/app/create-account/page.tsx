@@ -1,9 +1,7 @@
 "use client";
 
-import NewUserForm from "@/components/new-user-form/NewUserForm";
+import CreateAccount from "./create-account";
 
 export default function CreateAccountPage() {
-    return(
-        <NewUserForm />
-    );
+    return <CreateAccount />;
 }

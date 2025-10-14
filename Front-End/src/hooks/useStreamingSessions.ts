@@ -1,24 +1,28 @@
 "use client";
 
-import type { SessionWithRooms, StreamingRoom } from "@/services";
-import { patientService, streamingService } from "@/services";
-import { useCallback, useEffect, useState } from "react";
+/**
+ * Compatibility wrapper: streaming sessions were removed from the database.
+ *
+ * This file keeps the old hook name available for callers but treats
+ * session-changing operations as safe no-ops. Read-only data (ambulance
+ * list, streaming status, statistics) is forwarded from
+ * `useAmbulanceStreaming` so the UI can continue to show current
+ * ambulance/camera status.
+ */
 
-// Types for streaming sessions with rooms
-interface PatientWithSession {
-  id: string;
-  first_name: string;
-  last_name: string;
-  session: SessionWithRooms | null;
-}
+import type { AmbulanceStreamingStatus } from "@/types";
+import { useAmbulanceStreaming } from "./useAmbulanceStreaming";
 
-interface UseStreamingSessionsReturn {
-  // State
-  patients: PatientWithSession[];
+// Reuse the exported AmbulanceWithSession shape from useAmbulanceStreaming
+import type { AmbulanceWithSession } from "./useAmbulanceStreaming";
+
+interface UseAmbulanceStreamingSessionsReturn {
+  ambulances: AmbulanceWithSession[];
+  streamingStatus: AmbulanceStreamingStatus[];
   loading: boolean;
   error: string | null;
 
-  // Actions
+  // Actions (mutations are now no-ops / soft-fail because sessions are gone)
   fetchSessions: () => Promise<void>;
   endSession: (sessionId: string) => Promise<void>;
   clearError: () => void;
@@ -33,150 +37,63 @@ interface UseStreamingSessionsReturn {
   lastRefreshTime: Date | null;
 }
 
-export function useStreamingSessions(): UseStreamingSessionsReturn {
-  const [patients, setPatients] = useState<PatientWithSession[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
+/**
+ * Backward-compatible wrapper around `useAmbulanceStreaming`.
+ *
+ * Note: the database no longer stores "streaming sessions". To avoid
+ * breaking callers we forward read-only data and make session mutations
+ * (create/end) into safe no-ops that log a warning. Prefer `useAmbulanceStreaming`
+ * directly for new code.
+ */
+export function useAmbulanceStreamingSessions(): UseAmbulanceStreamingSessionsReturn {
+  const {
+    ambulances,
+    streamingStatus,
+    loading,
+    error,
+    // fetchSessions and endSession would normally call session endpoints.
+    // We still forward refreshData for read-only updates.
+    fetchData,
+    refreshData,
+    lastRefreshTime,
+  } = useAmbulanceStreaming();
 
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
+  // No-op fetchSessions: just refresh read-only data
+  const fetchSessions = async () => {
+    console.warn(
+      "useAmbulanceStreamingSessions.fetchSessions: streaming sessions endpoint removed; performing read-only refresh instead"
+    );
+    await fetchData();
+  };
 
-  const fetchSessions = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Use the new streamingService method to get all sessions with their rooms
-      const response = await streamingService.getSessionsWithRooms();
-
-      if (response.error) {
-        setError(response.error);
-        return;
-      }
-
-      if (!response.data || !Array.isArray(response.data)) {
-        console.log("No valid session data received:", response.data);
-        setPatients([]);
-        return;
-      }
-
-      if (response.data.length === 0) {
-        setPatients([]);
-        return;
-      }
-
-      // Get unique patient IDs from sessions
-      const patientIds = [
-        ...new Set(
-          response.data.map((session: SessionWithRooms) => session.patient_id)
-        ),
-      ];
-
-      // Fetch patient data for each ID and match with their session
-      const patientPromises = patientIds.map(async (patientId: string) => {
-        try {
-          const patientResponse = await patientService.getById(patientId);
-          if (patientResponse.error || !patientResponse.data) {
-            return null;
-          }
-
-          // Find the session for this patient (1:1 relationship)
-          const patientSession = response.data?.find(
-            (session: SessionWithRooms) => session.patient_id === patientId
-          );
-
-          return {
-            id: patientResponse.data.id,
-            first_name: patientResponse.data.first_name,
-            last_name: patientResponse.data.last_name,
-            session: patientSession || null,
-          };
-        } catch (err) {
-          console.error(`Error fetching patient ${patientId}:`, err);
-          return null;
-        }
-      });
-
-      const fetchedPatients = await Promise.all(patientPromises);
-      setPatients(fetchedPatients.filter(Boolean) as PatientWithSession[]);
-      setLastRefreshTime(new Date());
-    } catch (err) {
-      console.error("Error in fetchSessions:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to fetch streaming sessions"
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const endSession = useCallback(
-    async (sessionId: string) => {
-      try {
-        const response = await streamingService.endSession(sessionId);
-        if (response.error) {
-          setError(`Failed to end session: ${response.error}`);
-          return;
-        }
-
-        // Refresh the data after ending session
-        await fetchSessions();
-      } catch (err) {
-        console.error("Error ending session:", err);
-        setError("Failed to end session");
-      }
-    },
-    [fetchSessions]
-  );
-
-  const refreshData = useCallback(async () => {
-    await fetchSessions();
-  }, [fetchSessions]);
-
-  // Initial data fetch
-  useEffect(() => {
-    fetchSessions(); // Initial fetch
-  }, [fetchSessions]);
-
-  // Calculate statistics
-  const totalSessions = patients.filter((p) => p.session).length;
-  const activeSessions = patients.reduce((acc, p) => {
-    if (!p.session) return acc;
-    const connectedRooms = p.session.streaming_rooms.filter(
-      (room) => room.connected
-    ).length;
-    return acc + (connectedRooms > 0 ? 1 : 0);
-  }, 0);
-  const connectedRooms = patients.reduce((acc, p) => {
-    if (!p.session) return acc;
-    const connected = p.session.streaming_rooms.filter(
-      (room) => room.connected
-    ).length;
-    return acc + connected;
-  }, 0);
+  // No-op endSession: previously mutated session state in DB; now we warn and return
+  const endSession = async (sessionId: string) => {
+    console.warn(
+      `useAmbulanceStreamingSessions.endSession: cannot end session ${sessionId} because streaming sessions are removed from the database`
+    );
+    // Resolve so callers that await this don't throw; they should handle the no-op.
+    return Promise.resolve();
+  };
 
   return {
-    patients,
+    ambulances,
+    streamingStatus,
     loading,
     error,
     fetchSessions,
     endSession,
-    clearError,
-    refreshData,
-    totalSessions,
-    activeSessions,
-    connectedRooms,
+    clearError: () => {},
+    refreshData: async () => {
+      await refreshData();
+    },
+    totalSessions: ambulances.filter((a) => !!a.session).length,
+    activeSessions: ambulances.filter((a) => a.session?.is_active).length,
+    connectedRooms: streamingStatus.reduce(
+      (total, s) => total + (s.connected_camera_rooms || 0),
+      0
+    ),
     lastRefreshTime,
   };
 }
 
-export type {
-  PatientWithSession,
-  SessionWithRooms,
-  StreamingRoom,
-  UseStreamingSessionsReturn,
-};
+export type { AmbulanceWithSession, UseAmbulanceStreamingSessionsReturn };

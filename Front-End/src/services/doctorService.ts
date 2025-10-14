@@ -23,7 +23,7 @@ export interface DoctorCreateRequest {
   license_number?: string;
 }
 
-export interface DoctorUpdateRequest extends Partial<DoctorCreateRequest> {}
+export type DoctorUpdateRequest = Partial<DoctorCreateRequest>;
 
 // Doctor Service Functions
 export const doctorService = {

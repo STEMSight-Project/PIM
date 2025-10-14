@@ -1,5 +1,6 @@
 """
-Streaming services package.
+Ambulance-based streaming services package.
+Updated to use ambulance_streaming_sessions and camera_streaming_rooms schema.
 """
 
 from .database_service import StreamingDatabaseService
@@ -7,13 +8,13 @@ from .room_service import Room, RoomManager, room_manager
 from .webrtc_service import WebRTCService, webrtc_service
 from .models import (
     SDPBody,
-    StreamingRoomCreate,
-    StreamingRoomUpdate,
-    StreamingRoomResponse,
-    StreamingSessionResponse,
-    PatientStreamingStatus,
-    StreamingSessionData,
-    StreamingSessionStatusUpdate,
+    AmbulanceSessionCreate,
+    AmbulanceSessionUpdate,
+    AmbulanceSessionResponse,
+    CameraRoomCreate,
+    CameraRoomUpdate,
+    CameraRoomResponse,
+    AmbulanceStreamingStatus,
 )
 
 __all__ = [
@@ -24,11 +25,11 @@ __all__ = [
     "WebRTCService",
     "webrtc_service",
     "SDPBody",
-    "StreamingRoomCreate",
-    "StreamingRoomUpdate",
-    "StreamingRoomResponse",
-    "StreamingSessionResponse",
-    "PatientStreamingStatus",
-    "StreamingSessionData",
-    "StreamingSessionStatusUpdate",
+    "AmbulanceSessionCreate",
+    "AmbulanceSessionUpdate",
+    "AmbulanceSessionResponse",
+    "CameraRoomCreate",
+    "CameraRoomUpdate",
+    "CameraRoomResponse",
+    "AmbulanceStreamingStatus",
 ]

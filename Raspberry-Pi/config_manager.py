@@ -119,7 +119,12 @@ class ConfigManager:
                 return False
 
         # Validate network config
-        required_network_keys = ["device_id", "server_url"]
+        required_network_keys = [
+            "device_id",
+            "server_url",
+            "ambulance_number",
+            "room_number",
+        ]
         for key in required_network_keys:
             if key not in self.network_config:
                 self.logger.error("Missing required network config: %s", key)
@@ -151,11 +156,18 @@ class ConfigManager:
         network_config_path = os.path.join(self.config_dir, "network_config.json")
         if not os.path.exists(network_config_path):
             default_network = {
-                "device_id": "pi-001",
+                "device_id": "rpi-ambulance-001",
+                "device_name": "Raspberry Pi Camera - Ambulance 001",
                 "server_url": "http://localhost:8000",
+                "ambulance_number": "001",
+                "room_number": "001",
+                "auto_start": True,
+                "reconnect_interval": 5,
                 "upload_interval": 30,
                 "retry_attempts": 3,
                 "timeout": 10,
+                "heartbeat_interval": 30,
+                "status_report_interval": 60,
             }
             with open(network_config_path, "w", encoding="utf-8") as f:
                 json.dump(default_network, f, indent=2)

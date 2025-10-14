@@ -1,0 +1,83 @@
+"use client";
+import { useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+
+export default function ConfirmEmailPage() {
+    const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+    const [message, setMessage] = useState('');
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const token = searchParams.get('token');
+
+    useEffect(() => {
+        if (token) {
+            confirmEmail(token);
+        } else {
+            setStatus('error');
+            setMessage('No confirmation token provided.');
+        }
+    }, [token]);
+
+    const confirmEmail = async (token: string) => {
+        try {
+            const response = await fetch('/api/auth/confirm-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ token }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setStatus('success');
+                setMessage('Email confirmed successfully! Redirecting to login...');
+                setTimeout(() => {
+                    router.push('/login');
+                }, 3000);
+            } else {
+                setStatus('error');
+            setMessage('Network error. Please try again.');
+        }
+    };
+
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="max-w-md w-full space-y-8 p-8">
+                <div className="text-center">
+                    <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+                        Email Confirmation
+                    </h2>
+                    
+                    {status === 'loading' && (
+                        <div className="mt-4">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="mt-2 text-gray-600">Confirming your email...</p>
+                        </div>
+                    )}
+                    
+                    {status === 'success' && (
+                        <div className="mt-4">
+                            <div className="text-green-600 text-5xl">✓</div>
+                            <p className="mt-2 text-green-600 font-semibold">{message}</p>
+                        </div>
+                    )}
+                    
+                    {status === 'error' && (
+                        <div className="mt-4">
+                            <div className="text-red-600 text-5xl">✗</div>
+                            <p className="mt-2 text-red-600 font-semibold">{message}</p>
+                            <button 
+                                onClick={() => router.push('/create-account')}
+                                className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                            >
+                                Back to Registration
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}

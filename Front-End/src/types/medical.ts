@@ -24,7 +24,7 @@ export interface PatientCreateRequest {
   emergency_contact?: string;
 }
 
-export interface PatientUpdateRequest extends Partial<PatientCreateRequest> {}
+export type PatientUpdateRequest = Partial<PatientCreateRequest>;
 
 // Medical History Types
 export interface MedicalHistory {
@@ -48,8 +48,9 @@ export interface MedicalHistoryCreateRequest {
   doctor_id?: string;
 }
 
-export interface MedicalHistoryUpdateRequest
-  extends Partial<Omit<MedicalHistoryCreateRequest, "patient_id">> {}
+export type MedicalHistoryUpdateRequest = Partial<
+  Omit<MedicalHistoryCreateRequest, "patient_id">
+>;
 
 // Doctor Types
 export interface Doctor {
@@ -73,4 +74,4 @@ export interface DoctorCreateRequest {
   license_number?: string;
 }
 
-export interface DoctorUpdateRequest extends Partial<DoctorCreateRequest> {}
+export type DoctorUpdateRequest = Partial<DoctorCreateRequest>;

@@ -1,5 +1,6 @@
 """
-Pydantic models for streaming service.
+Pydantic models for ambulance-based streaming service.
+Updated to use ambulance_streaming_sessions and camera_streaming_rooms schema.
 """
 
 from typing import Optional, List
@@ -11,57 +12,67 @@ class SDPBody(BaseModel):
     type: str
 
 
-class StreamingRoomCreate(BaseModel):
-    patient_id: str
-    room_id: str
-    device_name: str
+class AmbulanceSessionCreate(BaseModel):
+    ambulance_id: str
+    session_name: Optional[str] = None
+    session_type: str = "emergency"
+    incident_id: Optional[str] = None
+    priority_level: int = 3
 
 
-class StreamingRoomUpdate(BaseModel):
+class AmbulanceSessionUpdate(BaseModel):
+    session_name: Optional[str] = None
+    session_type: Optional[str] = None
+    incident_id: Optional[str] = None
+    priority_level: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class CameraRoomCreate(BaseModel):
+    camera_id: str
+    room_id: Optional[str] = None
+    device_name: Optional[str] = "Camera Device"
+
+
+class CameraRoomUpdate(BaseModel):
     connected: Optional[bool] = None
-    device_name: Optional[str] = None
+    ended_at: Optional[str] = None
 
 
-class StreamingRoomResponse(BaseModel):
+class CameraRoomResponse(BaseModel):
     id: str
     session_id: str
-    patient_id: str
+    camera_id: str
     room_id: str
-    device_name: str
     connected: bool
-    started_at: str
-    ended_at: Optional[str] = None
-    last_seen: str
+    connection_started_at: str
+    connection_ended_at: Optional[str] = None
     created_at: str
     updated_at: str
 
 
-class StreamingSessionResponse(BaseModel):
+class AmbulanceSessionResponse(BaseModel):
     id: str
-    patient_id: str
-    status: str
+    ambulance_id: str
+    session_type: str
+    incident_id: Optional[str] = None
+    priority_level: int
+    is_active: bool
     started_at: str
     ended_at: Optional[str] = None
     created_at: str
     updated_at: str
-    rooms: List[StreamingRoomResponse] = []
+    camera_rooms: List[CameraRoomResponse] = []
 
 
-class PatientStreamingStatus(BaseModel):
-    patient_id: str
-    first_name: str
-    last_name: str
+class AmbulanceStreamingStatus(BaseModel):
+    ambulance_id: str
+    vehicle_number: str
+    station_id: str
+    status: str
     session_id: Optional[str] = None
-    session_status: Optional[str] = None
+    session_type: Optional[str] = None
     session_started: Optional[str] = None
-    total_rooms: int = 0
-    connected_rooms: int = 0
-    active_rooms: List[dict] = []
-
-
-class StreamingSessionData(BaseModel):
-    patient_id: str
-
-
-class StreamingSessionStatusUpdate(BaseModel):
-    status: Optional[str] = None
+    total_cameras: int = 0
+    connected_cameras: int = 0
+    active_camera_rooms: List[dict] = []

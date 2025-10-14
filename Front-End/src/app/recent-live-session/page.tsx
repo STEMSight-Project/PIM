@@ -130,14 +130,15 @@ export default function RecentLiveSessionPage() {
         {error && <Alert variant="error">{error}</Alert>}
 
         {/* Session Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           <Card className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-blue-100 rounded-lg">
-                <VideoCameraIcon className="h-6 w-6 text-blue-600" />
+                <TruckIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">
+                  Total Sessions
                   Total Sessions
                 </p>
                 <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
@@ -196,9 +197,9 @@ export default function RecentLiveSessionPage() {
             </h3>
           </div>
 
-          {sessions.length === 0 ? (
+          {realtimeSessions.length === 0 ? (
             <div className="text-center py-12">
-              <VideoCameraIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <TruckIcon className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">
                 No sessions found
               </h3>
