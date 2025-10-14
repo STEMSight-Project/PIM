@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 from unittest.mock import patch, MagicMock
 
-from api_router.user_actions import log_patient_action, is_admin
+from user_actions import log_patient_action, is_admin
 
 
 class DummyResult:
@@ -49,7 +49,7 @@ def test_audit_logs_endpoint_access_control(monkeypatch):
     from fastapi.testclient import TestClient
     from unittest.mock import patch, MagicMock
 
-    import api_router.user_actions as user_actions
+    import user_actions
 
     app = FastAPI()
 
