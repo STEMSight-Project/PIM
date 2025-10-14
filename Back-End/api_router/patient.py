@@ -2,11 +2,13 @@ from datetime import datetime, date
 from typing import Optional, List
 from fastapi import Depends, HTTPException, APIRouter, status
 from pydantic import BaseModel, Field
-from api_router import router
 from core.common import logger
 from core.common import supabase
 from security.jwt_verify import router_auth_dependency, CurrentUser
-from ..user_actions import log_patient_action
+from .user_actions import log_patient_action
+
+
+router = APIRouter()
 
 # Use universal authentication for both OAuth2 docs AND frontend requests
 
