@@ -18,6 +18,7 @@ import {
   ArrowPathIcon,
   ArrowDownTrayIcon,
   ServerIcon,
+  TruckIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -197,7 +198,7 @@ export default function RecentLiveSessionPage() {
             </h3>
           </div>
 
-          {realtimeSessions.length === 0 ? (
+          {sessions.length === 0 ? (
             <div className="text-center py-12">
               <TruckIcon className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">
