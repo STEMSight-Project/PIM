@@ -180,13 +180,6 @@ export default function RecentLiveSessionPage() {
           </div>
         </div>
 
-        {/* Real-time connection warning */}
-        {!realtimeConnected && (
-          <Alert variant="error">
-            Real-time connection lost. Reconnecting to live data stream...
-          </Alert>
-        )}
-
         {realtimeError && <Alert variant="error">{realtimeError}</Alert>}
 
         {/* Session Statistics */}

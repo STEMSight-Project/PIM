@@ -302,6 +302,26 @@ class StreamingDatabaseService:
             raise
 
     @staticmethod
+    async def has_active_cameras(session_id: str) -> bool:
+        """Check if a session has any active (connected) camera rooms."""
+        try:
+            result = (
+                supabase.table("camera_streaming_rooms")
+                .select("id")
+                .eq("session_id", session_id)
+                .eq("connected", True)
+                .execute()
+            )
+
+            return len(result.data or []) > 0
+
+        except Exception as e:
+            logger.error(
+                "Error checking active cameras for session %s: %s", session_id, e
+            )
+            raise
+
+    @staticmethod
     async def get_all_camera_rooms(
         connected: Optional[bool] = None, limit: int = 50
     ) -> List[Dict[str, Any]]:
