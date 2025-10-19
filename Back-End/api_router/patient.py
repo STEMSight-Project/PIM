@@ -4,10 +4,12 @@ from fastapi import Depends, HTTPException, APIRouter, status
 from pydantic import BaseModel, Field
 from core.common import logger
 from core.common import supabase
-from security.jwt_verify import router_auth_dependency
+from security.jwt_verify import router_auth_dependency, CurrentUser
+from user_actions import log_patient_action
+
+router = APIRouter(dependencies=[Depends(router_auth_dependency)])
 
 # Use universal authentication for both OAuth2 docs AND frontend requests
-router = APIRouter(dependencies=[Depends(router_auth_dependency())])
 
 
 class PatientBase(BaseModel):
@@ -81,7 +83,7 @@ async def get_all_patients():
 
 
 @router.get("/{patient_id}", response_model=Patient, summary="Get patient by id")
-async def get_patient(patient_id: str):
+async def get_patient(patient_id: str, user: CurrentUser):
     logger.info("get_patient called for patient_id: %s", patient_id)
     try:
         result = (
@@ -103,6 +105,9 @@ async def get_patient(patient_id: str):
             if isinstance(v, (date, datetime)):
                 result.data[k] = v.isoformat()
 
+        # Log the view action
+        await log_patient_action(user["id"], patient_id, "view")
+
         return result.data
     except HTTPException:
         raise
@@ -120,7 +125,7 @@ async def get_patient(patient_id: str):
     summary="Create a new patient",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_patient(patient: PatientCreate):
+async def create_patient(patient: PatientCreate, user: CurrentUser):
     try:
         # Convert patient data to dict for database insertion
         patient_data = patient.model_dump()
@@ -142,6 +147,8 @@ async def create_patient(patient: PatientCreate):
             if isinstance(v, (date, datetime)):
                 created[k] = v.isoformat()
 
+        await log_patient_action(user["id"], created["id"], "create", metadata=patient_data)
+
         return created
     except HTTPException:
         raise
@@ -154,7 +161,7 @@ async def create_patient(patient: PatientCreate):
 
 
 @router.patch("/{patient_id}", response_model=Patient, summary="Update patient by id")
-async def update_patient(patient_id: str, patient: PatientUpdate):
+async def update_patient(patient_id: str, patient: PatientUpdate, user: CurrentUser):
     try:
         # Get only the fields that were actually provided
         updated_values = patient.model_dump(exclude_unset=True)
@@ -190,6 +197,9 @@ async def update_patient(patient_id: str, patient: PatientUpdate):
             if isinstance(v, (date, datetime)):
                 updated[k] = v.isoformat()
 
+        # Log the update action
+        await log_patient_action(user["id"], patient_id, "update", metadata=updated_values)
+
         return updated
     except HTTPException:
         raise
@@ -206,7 +216,7 @@ async def update_patient(patient_id: str, patient: PatientUpdate):
     summary="Delete patient by id",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_patient(patient_id: str):
+async def delete_patient(patient_id: str, user: CurrentUser):
     try:
         # First check if patient exists
         check_result = (
@@ -221,6 +231,12 @@ async def delete_patient(patient_id: str):
 
         # Delete the patient
         _ = supabase.table("patients").delete().eq("id", patient_id).execute()
+
+        # Log the delete action; don't block the response if logging fails
+        try:
+            await log_patient_action(user["id"], patient_id, "delete")
+        except Exception as e:
+            logger.exception("Failed to write delete audit log for patient %s: %s", patient_id, e)
 
         return {"message": "Patient deleted successfully"}
     except HTTPException:
