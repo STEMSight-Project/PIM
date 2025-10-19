@@ -1,5 +1,17 @@
 # STEMSight PIM Copilot Instructions
 
+## 🎯 Project Overview in 30 Seconds
+
+**STEMSight PIM** (Parkinson's Involuntary Movements) is a **real-time AI movement detection system** combining:
+- **Raspberry Pi 4 edge devices** with cameras for real-time pose detection
+- **UNIK deep learning model** (10-class movement classifier, 82.88% accuracy)
+- **FastAPI backend** for data processing and storage
+- **Next.js dashboard** for monitoring and analysis
+
+**Data Flow**: RPi 4 cameras → MediaPipe skeleton extraction → UNIK classification → Backend storage → Frontend visualization
+
+---
+
 ## ⚠️ CRITICAL PROJECT STANDARDS
 
 ### Testing Framework Requirements
@@ -1902,7 +1914,387 @@ await asyncio.sleep(120)  # Changed from 60 seconds
 
 ---
 
-## 🧹 Project Cleanliness Standards
+## � AI Training Phase: UNIK Model (10-Class Movement Classifier)
+
+### Overview: Production Ready Model
+
+**Status**: ✅ **TRAINED AND PRODUCTION-READY**
+
+- **Model**: UNIK (Unified Network for Skeleton-based Action Recognition)
+- **Classes**: 10 Parkinson's movement types
+- **Test Accuracy**: **82.88%** (431/520 correct predictions)
+- **Best Checkpoint**: `pim_unik_model_10class_new-69-18200.pt` (13.4 MB, epoch 69)
+- **Location**: `Back-End/services/ai/pim_unik_model_10class_new-69-18200.pt`
+- **Training Data**: 2,600 skeleton sequences (80/20 train/test split)
+- **Per-Class Performance**: Tremor 92.98% ⭐, Versive Head 91.38%, Decorticate 89.66%
+
+### Data Format & Pipeline
+
+#### Input Format (UNIK Standard)
+
+```python
+# Shape: (N, 3, 300, 33, 1)
+shape = (
+    N,      # Number of samples (2,600 total)
+    3,      # Channels: [x, y, confidence]
+    300,    # Frames (5 seconds @ 60 FPS)
+    33,     # MediaPipe full-body joints
+    1,      # Single person per frame
+)
+
+# Correct extraction:
+skeleton = np.array(landmarks)  # (300, 33, 3)
+skeleton = np.transpose(skeleton, (2, 0, 1))  # (3, 300, 33)
+skeleton = skeleton[np.newaxis, ..., np.newaxis]  # (1, 3, 300, 33, 1)
+```
+
+#### Label Format (CRITICAL)
+
+```python
+# ✅ CORRECT format
+filenames = ["video1.mp4", "video2.mp4", ...]  # 2,600 filenames
+labels = [0, 1, 2, 3, ...]                      # 2,600 labels (0-9)
+pickle.dump((filenames, labels), f)
+
+# In code:
+sample_names, label_array = pickle.load(f)
+assert len(sample_names) == len(label_array) == 2600
+
+# ❌ WRONG - Will cause errors
+labels = (class_labels, 2600)  # NO! This is (array, count) tuple
+```
+
+### Movement Classes (10 Total)
+
+```python
+CLASS_INDEX = {
+    0: "ballistic",      # Sudden forceful movements
+    1: "chorea",         # Irregular jerky movements
+    2: "decerebrate",    # Rigid extension posture
+    3: "decorticate",    # Flexed arm/extended leg ⭐ 89.66% accuracy
+    4: "dystonia",       # Sustained muscle contractions
+    5: "fencer_posture", # Specific dystonic posture
+    6: "myoclonus",      # Brief shock-like jerks
+    7: "normal",         # Normal movement baseline
+    8: "tremor",         # Rhythmic shaking ⭐ 92.98% accuracy
+    9: "versive_head",   # Involuntary head turning ⭐ 91.38% accuracy
+}
+
+# ❌ WRONG - "normal" at index 0 causes 100% wrong predictions!
+CLASS_INDEX = {0: "normal", 1: "ballistic", ...}
+```
+
+### Data Pipeline: Skeleton Extraction
+
+#### Step 1: Video to Skeleton Extraction
+
+```python
+# File: AI_Training/extract_skeletons.py
+# Purpose: Extract pose landmarks from raw video files
+
+def extract_skeleton(video_path: str) -> np.ndarray:
+    """
+    Args:
+        video_path: Path to video file
+    
+    Returns:
+        np.ndarray of shape (3, 300, 33, 1) - UNIK format
+    """
+    cap = cv2.VideoCapture(video_path)
+    landmarks_list = []
+    
+    # Extract exactly 300 frames
+    for frame_idx in range(300):
+        ret, frame = cap.read()
+        if not ret:
+            logger.warning(f"Frame {frame_idx}: Missing frame")
+            # Pad with zeros if video too short
+            frame_landmarks = np.zeros((33, 3))
+        else:
+            # Run MediaPipe with correct configuration
+            results = pose_landmarker.detect(frame)
+            
+            if results.pose_landmarks:
+                # Extract (x, y, visibility) for all 33 joints
+                frame_landmarks = np.array([
+                    [lm.x, lm.y, lm.visibility]
+                    for lm in results.pose_landmarks
+                ])
+            else:
+                logger.debug(f"Frame {frame_idx}: No pose detected")
+                frame_landmarks = np.zeros((33, 3))
+        
+        landmarks_list.append(frame_landmarks)
+    
+    # Convert to UNIK format
+    skeleton = np.array(landmarks_list)  # (300, 33, 3)
+    skeleton = np.transpose(skeleton, (2, 0, 1))  # (3, 300, 33)
+    return skeleton[..., np.newaxis]  # (3, 300, 33, 1)
+```
+
+#### Step 2: Train/Test Split
+
+```python
+# File: AI_Training/split_train_test.py
+# Purpose: Create stratified 80/20 split
+
+# Ensures:
+- All 10 classes represented in both train and test
+- Maintains class distribution
+- Consistent random seed for reproducibility
+
+# Output:
+AI_Training/skeleton_data_split/
+├── train_data_train.npy        (2080, 3, 300, 33, 1)
+├── train_data_test.npy         (520, 3, 300, 33, 1)
+├── train_label_train.pkl       (filenames, labels) for 2080
+├── train_label_test.pkl        (filenames, labels) for 520
+└── label_mapping.pkl           {0: 'ballistic', 1: 'chorea', ...}
+```
+
+### Model Architecture & Training
+
+#### UNIK Model Configuration
+
+```python
+# File: AI_Training/UNIK/config_pim.yaml
+# Architecture: Spatial-Temporal Graph Convolutional Network
+
+model:
+    num_class: 10          # 10 movement classes
+    num_joints: 33         # MediaPipe joints
+    num_person: 2          # Always 2 (person + padding)
+    tau: 1                 # Threshold parameter
+    num_heads: 3           # Multi-head attention
+    in_channels: 3         # x, y, confidence
+    drop_out: 0            # No dropout
+
+training:
+    num_epoch: 80
+    batch_size: 16
+    learning_rate: 0.2     # With warm-up scheduler
+    optimizer: SGD (Nesterov momentum)
+    weight_decay: 0.0005
+    
+
+device: cuda:0  # RTX 4070
+training_time: ~2.5 hours
+```
+
+#### Training Run File
+
+```python
+# File: AI_Training/UNIK/run_unik.py
+# Usage: python run_unik.py
+
+# Key features:
+- 80 epoch training loop
+- Checkpoints saved every epoch
+- Validation accuracy monitoring
+- Best checkpoint tracking (epoch 69)
+```
+
+### Model Usage: Production Inference
+
+#### Service Pattern (CORRECT)
+
+```python
+# File: Back-End/services/ai/pim_classifier_service.py
+# Production-grade inference service
+
+from pathlib import Path
+import torch
+from typing import Dict
+
+class PIMClassifier:
+    """Production classifier for movement detection"""
+    
+    def __init__(self):
+        # Load from services/ai folder (Git LFS tracked)
+        model_path = Path(__file__).parent / "pim_unik_model_10class_new-69-18200.pt"
+        
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"Model not found: {model_path}\n"
+                "Run: git lfs pull"
+            )
+        
+        # Load model
+        self.model = torch.load(model_path)
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.model = self.model.to(self.device)
+        self.model.eval()
+    
+    def predict(self, skeleton_data: np.ndarray) -> Dict:
+        """
+        Predict movement class from skeleton data
+        
+        Args:
+            skeleton_data: np.ndarray of shape (3, 300, 33, 1)
+        
+        Returns:
+            {
+                "predicted_class": "tremor",
+                "class_index": 8,
+                "confidence": 0.9298,
+                "probabilities": {class_name: score, ...}
+            }
+        """
+        with torch.no_grad():
+            # Ensure correct shape
+            if skeleton_data.ndim == 3:
+                skeleton_data = skeleton_data[np.newaxis, ..., np.newaxis]
+            
+            # Convert to tensor
+            tensor = torch.FloatTensor(skeleton_data).to(self.device)
+            
+            # Get predictions
+            output = self.model(tensor)
+            probs = torch.softmax(output, dim=1).cpu().numpy()[0]
+            
+            class_idx = np.argmax(probs)
+            
+            return {
+                "predicted_class": CLASS_INDEX[class_idx],
+                "class_index": int(class_idx),
+                "confidence": float(probs[class_idx]),
+                "probabilities": {
+                    CLASS_INDEX[i]: float(p) for i, p in enumerate(probs)
+                }
+            }
+
+# Usage:
+classifier = PIMClassifier()
+result = classifier.predict(skeleton_array)
+```
+
+#### API Endpoint
+
+```python
+# File: Back-End/api_router/pim_classifier_api.py
+
+@router.post("/classify")
+async def classify_movement(
+    skeleton_data: np.ndarray,  # Shape: (3, 300, 33, 1)
+    confidence_threshold: float = 0.80
+):
+    """Classify single movement sequence"""
+    classifier = get_classifier_service()
+    result = classifier.predict(skeleton_data)
+    
+    if result["confidence"] < confidence_threshold:
+        return {
+            "class": result["predicted_class"],
+            "confidence": result["confidence"],
+            "requires_review": True
+        }
+    
+    return {
+        "class": result["predicted_class"],
+        "confidence": result["confidence"],
+        "requires_review": False
+    }
+```
+
+### Git LFS Configuration
+
+#### Tracked Files (Handled by Git LFS)
+
+```
+# .gitattributes
+*.pt filter=lfs             # Model checkpoints (~13 MB each)
+*.npy filter=lfs            # Training data (~600 MB)
+*.pkl filter=lfs            # Labels and metadata
+*.task filter=lfs           # MediaPipe model (30 MB)
+```
+
+#### Correct Workflow
+
+```bash
+# Clone repository
+git clone <repo>
+cd PIM
+
+# Initialize Git LFS
+git lfs install
+
+# Download large files
+git lfs pull
+
+# Verify model exists
+ls Back-End/services/ai/pim_unik_model_10class_new-69-18200.pt
+# Should show: pim_unik_model_10class_new-69-18200.pt (13.4 MB)
+```
+
+### Testing & Validation
+
+#### Test Accuracy Metrics
+
+```python
+# File: Back-End/tests/services/ai/test_pim_classifier_service.py
+
+# Overall: 82.88% (431/520 correct)
+# Best classes:
+#   - Tremor: 92.98% (53/57)
+#   - Versive Head: 91.38% (53/58)
+#   - Decorticate: 89.66% (26/29) ⭐ Major improvement!
+
+# Run tests:
+pytest Back-End/tests/services/ai/ -v
+```
+
+#### Manual Validation
+
+```python
+# Quick test of trained model
+from services.ai import get_classifier_service
+
+classifier = get_classifier_service()
+
+# Test on a real skeleton
+result = classifier.predict(skeleton_array)
+print(f"Prediction: {result['predicted_class']}")
+print(f"Confidence: {result['confidence']:.2%}")
+print(f"All probabilities: {result['probabilities']}")
+```
+
+### Common Mistakes to Avoid
+
+1. **Wrong Class Order** ❌
+   ```python
+   CLASS_INDEX = {0: "normal", 1: "ballistic", ...}  # WRONG!
+   # Results in 100% incorrect predictions
+   ```
+
+2. **Shape Mismatch** ❌
+   ```python
+   skeleton = np.array(landmarks)  # (300, 33, 3)
+   model.predict(skeleton)  # WRONG SHAPE!
+   ```
+
+3. **Forgetting Git LFS** ❌
+   ```bash
+   git add *.pt  # DON'T DO THIS!
+   # Use git lfs pull instead
+   ```
+
+4. **Hardcoded Paths** ❌
+   ```python
+   model = torch.load("C:\\Users\\...\\model.pt")  # WRONG!
+   # Use: Path(__file__).parent / "model.pt"
+   ```
+
+### Key References
+
+- **Model Architecture**: `AI_Training/UNIK/model/classifier.py`
+- **Training Script**: `AI_Training/UNIK/run_unik.py`
+- **Classifier Service**: `Back-End/services/ai/pim_classifier_service.py`
+- **Data Pipeline**: `AI_Training/extract_skeletons.py`
+- **Test Suite**: `Back-End/tests/services/ai/`
+
+---
+
+## �🧹 Project Cleanliness Standards
 
 ### ⚠️ IMPORTANT: File Organization Rules
 
