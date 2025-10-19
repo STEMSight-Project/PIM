@@ -32,7 +32,7 @@ class TestUNIKModelArchitecture:
         """Test model accepts correct input shape"""
         # Input: (N, 3, 300, 33, 1) → (N, 3, 300, 33, 2) after padding
         batch_size, C, T, V, M = sample_skeleton_batch.shape
-        
+
         assert C == 3  # x, y, confidence
         assert T == 300  # frames
         assert V == 33  # joints
@@ -42,7 +42,7 @@ class TestUNIKModelArchitecture:
     def test_model_output_shape(self, sample_model_output):
         """Test model output has correct shape (N, num_classes)"""
         batch_size, num_classes = sample_model_output.shape
-        
+
         assert num_classes == 10  # 10 movement classes
         assert batch_size == 16  # From fixture
 
@@ -51,10 +51,10 @@ class TestUNIKModelArchitecture:
         """Test padding from M=1 to M=2 for model compatibility"""
         # Input: (N, 3, 300, 33, 1)
         data = np.random.rand(16, 3, 300, 33, 1).astype(np.float32)
-        
+
         # Pad to M=2
-        padded = np.pad(data, ((0, 0), (0, 0), (0, 0), (0, 0), (0, 1)), mode='constant')
-        
+        padded = np.pad(data, ((0, 0), (0, 0), (0, 0), (0, 0), (0, 1)), mode="constant")
+
         assert padded.shape == (16, 3, 300, 33, 2)
         # Second person should be all zeros
         assert np.all(padded[:, :, :, :, 1] == 0)
@@ -89,11 +89,11 @@ class TestTrainingConfiguration:
     def test_learning_rate(self, training_config):
         """Test learning rate with warmup"""
         assert training_config["learning_rate"] == 0.2
-        
+
         # Warmup: 5 epochs with gradual increase
         warmup_epochs = 5
         initial_lr = training_config["learning_rate"] / warmup_epochs
-        
+
         assert initial_lr == 0.04  # 0.2 / 5
 
     @pytest.mark.unit
@@ -112,10 +112,10 @@ class TestTrainingConfiguration:
         total_samples = 2080
         batch_size = training_config["batch_size"]
         num_epochs = training_config["num_epoch"]
-        
+
         iterations_per_epoch = total_samples // batch_size
         total_iterations = iterations_per_epoch * num_epochs
-        
+
         assert iterations_per_epoch == 130  # 2080 / 16
         assert total_iterations == 10400  # 130 * 80
 
@@ -134,10 +134,10 @@ class TestLossFunctions:
         # Simulate model output
         logits = torch.randn(16, 10)  # (batch_size, num_classes)
         targets = torch.randint(0, 10, (16,))  # (batch_size,)
-        
+
         criterion = nn.CrossEntropyLoss()
         loss = criterion(logits, targets)
-        
+
         assert loss.item() > 0
         assert not torch.isnan(loss)
 
@@ -146,10 +146,10 @@ class TestLossFunctions:
         """Test loss reduction (mean vs sum)"""
         logits = torch.randn(16, 10)
         targets = torch.randint(0, 10, (16,))
-        
-        loss_mean = nn.CrossEntropyLoss(reduction='mean')(logits, targets)
-        loss_sum = nn.CrossEntropyLoss(reduction='sum')(logits, targets)
-        
+
+        loss_mean = nn.CrossEntropyLoss(reduction="mean")(logits, targets)
+        loss_sum = nn.CrossEntropyLoss(reduction="sum")(logits, targets)
+
         # Sum should be approximately batch_size * mean
         assert abs(loss_sum.item() - loss_mean.item() * 16) < 0.01
 
@@ -168,10 +168,10 @@ class TestAccuracyMetrics:
         # Perfect predictions
         predictions = torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         targets = torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        
+
         correct = (predictions == targets).sum().item()
         accuracy = correct / len(targets) * 100
-        
+
         assert accuracy == 100.0
 
     @pytest.mark.unit
@@ -185,12 +185,12 @@ class TestAccuracyMetrics:
         # Class 0: 8/10 correct
         predictions = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 1, 1])
         targets = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-        
-        class_mask = (targets == 0)
+
+        class_mask = targets == 0
         class_correct = ((predictions == targets) & class_mask).sum().item()
         class_total = class_mask.sum().item()
         class_accuracy = class_correct / class_total * 100
-        
+
         assert class_accuracy == 80.0
 
     @pytest.mark.unit
@@ -199,10 +199,11 @@ class TestAccuracyMetrics:
         num_classes = 10
         predictions = np.random.randint(0, num_classes, 520)
         targets = np.random.randint(0, num_classes, 520)
-        
+
         from sklearn.metrics import confusion_matrix
+
         cm = confusion_matrix(targets, predictions, labels=range(num_classes))
-        
+
         assert cm.shape == (num_classes, num_classes)
 
     @pytest.mark.unit
@@ -210,13 +211,11 @@ class TestAccuracyMetrics:
         """Test identification of top-performing classes"""
         # Top 3: tremor (92.98%), versive_head (91.38%), decorticate (89.66%)
         sorted_classes = sorted(
-            per_class_accuracy.items(),
-            key=lambda x: x[1],
-            reverse=True
+            per_class_accuracy.items(), key=lambda x: x[1], reverse=True
         )
-        
+
         top_3 = [cls for cls, acc in sorted_classes[:3]]
-        
+
         assert "tremor" in top_3
         assert "versive_head" in top_3
         assert "decorticate" in top_3
@@ -236,9 +235,9 @@ class TestCheckpointSaving:
         # Format: pim_unik_model_10class_new-{epoch}-{iteration}.pt
         epoch = 69
         iteration = 18200
-        
+
         checkpoint_name = f"pim_unik_model_10class_new-{epoch}-{iteration}.pt"
-        
+
         assert checkpoint_name == "pim_unik_model_10class_new-69-18200.pt"
 
     @pytest.mark.unit
@@ -246,18 +245,18 @@ class TestCheckpointSaving:
         """Test checkpoint contains model state"""
         # Mock model state dict
         state_dict = {
-            'layer1.weight': torch.randn(10, 3),
-            'layer1.bias': torch.randn(10),
+            "layer1.weight": torch.randn(10, 3),
+            "layer1.bias": torch.randn(10),
         }
-        
+
         checkpoint_path = temp_directory / "test_checkpoint.pt"
         torch.save(state_dict, checkpoint_path)
-        
+
         # Load and verify
         loaded = torch.load(checkpoint_path)
-        
-        assert 'layer1.weight' in loaded
-        assert 'layer1.bias' in loaded
+
+        assert "layer1.weight" in loaded
+        assert "layer1.bias" in loaded
 
     @pytest.mark.unit
     def test_best_checkpoint_selection(self):
@@ -268,9 +267,9 @@ class TestCheckpointSaving:
             {"epoch": 71, "val_acc": 82.15},
             {"epoch": 79, "val_acc": 81.89},
         ]
-        
+
         best = max(checkpoints, key=lambda x: x["val_acc"])
-        
+
         assert best["epoch"] == 69
         assert best["val_acc"] == 83.27
 
@@ -286,10 +285,10 @@ class TestDeviceHandling:
     @pytest.mark.unit
     def test_device_selection(self, device):
         """Test device selection (cuda or cpu)"""
-        assert device.type in ['cuda', 'cpu']
-        
+        assert device.type in ["cuda", "cpu"]
+
         if torch.cuda.is_available():
-            assert device.type == 'cuda'
+            assert device.type == "cuda"
             assert device.index == 0  # cuda:0
 
     @pytest.mark.unit
@@ -305,7 +304,7 @@ class TestDeviceHandling:
     def test_tensor_device_placement(self, device):
         """Test tensor placement on correct device"""
         tensor = torch.randn(10, 10).to(device)
-        
+
         assert tensor.device.type == device.type
 
     @pytest.mark.unit
@@ -313,7 +312,7 @@ class TestDeviceHandling:
         """Test model placement on device"""
         model = nn.Linear(10, 10)
         model = model.to(device)
-        
+
         # Check first parameter device
         first_param = next(model.parameters())
         assert first_param.device.type == device.type
@@ -331,18 +330,19 @@ class TestDataLoading:
     def test_dataloader_batch_size(self, training_config):
         """Test DataLoader creates correct batch size"""
         batch_size = training_config["batch_size"]
-        
+
         # Mock dataset
         data = torch.randn(2080, 3, 300, 33, 2)
         labels = torch.randint(0, 10, (2080,))
-        
+
         from torch.utils.data import TensorDataset, DataLoader
+
         dataset = TensorDataset(data, labels)
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-        
+
         # Get first batch
         batch_data, batch_labels = next(iter(loader))
-        
+
         assert batch_data.shape[0] == batch_size
         assert batch_labels.shape[0] == batch_size
 
@@ -351,18 +351,19 @@ class TestDataLoading:
         """Test DataLoader shuffling"""
         data = torch.arange(100).view(100, 1)
         labels = torch.arange(100)
-        
+
         from torch.utils.data import TensorDataset, DataLoader
+
         dataset = TensorDataset(data, labels)
-        
+
         # Without shuffle
         loader_no_shuffle = DataLoader(dataset, batch_size=10, shuffle=False)
         first_batch_no_shuffle = next(iter(loader_no_shuffle))[0]
-        
+
         # With shuffle (different seed)
         loader_shuffle = DataLoader(dataset, batch_size=10, shuffle=True)
         first_batch_shuffle = next(iter(loader_shuffle))[0]
-        
+
         # Different results (with high probability)
         # Note: This test might occasionally fail due to random chance
         # In practice, we'd use fixed seeds for determinism
@@ -387,7 +388,7 @@ class TestMetricsTracking:
             "val_acc": 83.27,
             "lr": 0.002,
         }
-        
+
         assert "train_loss" in metrics
         assert "val_acc" in metrics
         assert metrics["epoch"] == 69
@@ -397,7 +398,7 @@ class TestMetricsTracking:
         """Test training progress percentage"""
         current_epoch = 50
         total_epochs = 80
-        
+
         progress = (current_epoch / total_epochs) * 100
-        
+
         assert progress == 62.5

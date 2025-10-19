@@ -3,6 +3,7 @@
 ## 🎯 Project Overview in 30 Seconds
 
 **STEMSight PIM** (Parkinson's Involuntary Movements) is a **real-time AI movement detection system** combining:
+
 - **Raspberry Pi 4 edge devices** with cameras for real-time pose detection
 - **UNIK deep learning model** (10-class movement classifier, 82.88% accuracy)
 - **FastAPI backend** for data processing and storage
@@ -1996,13 +1997,13 @@ def extract_skeleton(video_path: str) -> np.ndarray:
     """
     Args:
         video_path: Path to video file
-    
+
     Returns:
         np.ndarray of shape (3, 300, 33, 1) - UNIK format
     """
     cap = cv2.VideoCapture(video_path)
     landmarks_list = []
-    
+
     # Extract exactly 300 frames
     for frame_idx in range(300):
         ret, frame = cap.read()
@@ -2013,7 +2014,7 @@ def extract_skeleton(video_path: str) -> np.ndarray:
         else:
             # Run MediaPipe with correct configuration
             results = pose_landmarker.detect(frame)
-            
+
             if results.pose_landmarks:
                 # Extract (x, y, visibility) for all 33 joints
                 frame_landmarks = np.array([
@@ -2023,9 +2024,9 @@ def extract_skeleton(video_path: str) -> np.ndarray:
             else:
                 logger.debug(f"Frame {frame_idx}: No pose detected")
                 frame_landmarks = np.zeros((33, 3))
-        
+
         landmarks_list.append(frame_landmarks)
-    
+
     # Convert to UNIK format
     skeleton = np.array(landmarks_list)  # (300, 33, 3)
     skeleton = np.transpose(skeleton, (2, 0, 1))  # (3, 300, 33)
@@ -2075,7 +2076,7 @@ training:
     learning_rate: 0.2     # With warm-up scheduler
     optimizer: SGD (Nesterov momentum)
     weight_decay: 0.0005
-    
+
 
 device: cuda:0  # RTX 4070
 training_time: ~2.5 hours
@@ -2108,30 +2109,30 @@ from typing import Dict
 
 class PIMClassifier:
     """Production classifier for movement detection"""
-    
+
     def __init__(self):
         # Load from services/ai folder (Git LFS tracked)
         model_path = Path(__file__).parent / "pim_unik_model_10class_new-69-18200.pt"
-        
+
         if not model_path.exists():
             raise FileNotFoundError(
                 f"Model not found: {model_path}\n"
                 "Run: git lfs pull"
             )
-        
+
         # Load model
         self.model = torch.load(model_path)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
         self.model.eval()
-    
+
     def predict(self, skeleton_data: np.ndarray) -> Dict:
         """
         Predict movement class from skeleton data
-        
+
         Args:
             skeleton_data: np.ndarray of shape (3, 300, 33, 1)
-        
+
         Returns:
             {
                 "predicted_class": "tremor",
@@ -2144,16 +2145,16 @@ class PIMClassifier:
             # Ensure correct shape
             if skeleton_data.ndim == 3:
                 skeleton_data = skeleton_data[np.newaxis, ..., np.newaxis]
-            
+
             # Convert to tensor
             tensor = torch.FloatTensor(skeleton_data).to(self.device)
-            
+
             # Get predictions
             output = self.model(tensor)
             probs = torch.softmax(output, dim=1).cpu().numpy()[0]
-            
+
             class_idx = np.argmax(probs)
-            
+
             return {
                 "predicted_class": CLASS_INDEX[class_idx],
                 "class_index": int(class_idx),
@@ -2181,14 +2182,14 @@ async def classify_movement(
     """Classify single movement sequence"""
     classifier = get_classifier_service()
     result = classifier.predict(skeleton_data)
-    
+
     if result["confidence"] < confidence_threshold:
         return {
             "class": result["predicted_class"],
             "confidence": result["confidence"],
             "requires_review": True
         }
-    
+
     return {
         "class": result["predicted_class"],
         "confidence": result["confidence"],
@@ -2261,18 +2262,21 @@ print(f"All probabilities: {result['probabilities']}")
 ### Common Mistakes to Avoid
 
 1. **Wrong Class Order** ❌
+
    ```python
    CLASS_INDEX = {0: "normal", 1: "ballistic", ...}  # WRONG!
    # Results in 100% incorrect predictions
    ```
 
 2. **Shape Mismatch** ❌
+
    ```python
    skeleton = np.array(landmarks)  # (300, 33, 3)
    model.predict(skeleton)  # WRONG SHAPE!
    ```
 
 3. **Forgetting Git LFS** ❌
+
    ```bash
    git add *.pt  # DON'T DO THIS!
    # Use git lfs pull instead

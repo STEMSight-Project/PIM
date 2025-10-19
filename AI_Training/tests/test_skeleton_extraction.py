@@ -34,7 +34,7 @@ class TestPoseLandmarkerExtractor:
         assert np.all(sample_landmarks[:, :, 0] <= 1)
         assert np.all(sample_landmarks[:, :, 1] >= 0)  # y
         assert np.all(sample_landmarks[:, :, 1] <= 1)
-        
+
         # Confidence should be in [0, 1]
         assert np.all(sample_landmarks[:, :, 2] >= 0)
         assert np.all(sample_landmarks[:, :, 2] <= 1)
@@ -45,7 +45,7 @@ class TestPoseLandmarkerExtractor:
         # Simulate conversion: (300, 33, 3) → (3, 300, 33, 1)
         skeleton = np.transpose(sample_landmarks, (2, 0, 1))  # (3, 300, 33)
         skeleton = skeleton[..., np.newaxis]  # (3, 300, 33, 1)
-        
+
         assert skeleton.shape == (3, 300, 33, 1)
         assert skeleton.dtype == np.float32
 
@@ -66,11 +66,11 @@ class TestPoseLandmarkerExtractor:
         """Test handling of missing frames (padding with zeros)"""
         # Simulate video with only 250 frames (need 300)
         partial_landmarks = np.random.rand(250, 33, 3).astype(np.float32)
-        
+
         # Pad to 300 frames
         padded = np.zeros((300, 33, 3), dtype=np.float32)
         padded[:250, :, :] = partial_landmarks
-        
+
         assert padded.shape == (300, 33, 3)
         # Check that padding is zeros
         assert np.all(padded[250:, :, :] == 0)
@@ -80,7 +80,7 @@ class TestPoseLandmarkerExtractor:
         """Test handling when no pose is detected in frame"""
         # Simulate frame with no detection (all zeros)
         no_pose_frame = np.zeros((33, 3), dtype=np.float32)
-        
+
         assert no_pose_frame.shape == (33, 3)
         assert np.all(no_pose_frame == 0)
 
@@ -88,15 +88,15 @@ class TestPoseLandmarkerExtractor:
     def test_confidence_threshold_filtering(self, sample_landmarks):
         """Test filtering landmarks by confidence threshold"""
         confidence_threshold = 0.7
-        
+
         # Get confidence values
         confidences = sample_landmarks[:, :, 2]
-        
+
         # Filter low confidence landmarks
         mask = confidences >= confidence_threshold
         filtered = sample_landmarks.copy()
         filtered[~mask] = 0  # Zero out low confidence landmarks
-        
+
         # Check that low confidence landmarks are zeroed
         assert np.all(filtered[confidences < confidence_threshold] == 0)
 
@@ -136,13 +136,13 @@ class TestSkeletonExtraction:
         # Simulate processing same video multiple times
         num_runs = 3
         results = []
-        
+
         for _ in range(num_runs):
             # Simulate extraction (deterministic for testing)
             np.random.seed(42)
             skeleton = np.random.rand(3, 300, 33, 1).astype(np.float32)
             results.append(skeleton)
-        
+
         # All results should be identical (same seed)
         for i in range(1, num_runs):
             assert np.allclose(results[0], results[i])
@@ -156,10 +156,10 @@ class TestSkeletonExtraction:
             (False, None, "video2.mp4", "No pose detected"),
             (True, np.random.rand(3, 300, 33, 1), "video3.mp4", None),
         ]
-        
+
         successful = [r for r in results if r[0]]
         failed = [r for r in results if not r[0]]
-        
+
         assert len(successful) == 2
         assert len(failed) == 1
         assert failed[0][3] == "No pose detected"
@@ -177,7 +177,7 @@ class TestDataFormatValidation:
     def test_unik_format_shape(self, sample_skeleton_data):
         """Test UNIK format: (C, T, V, M) = (3, 300, 33, 1)"""
         C, T, V, M = sample_skeleton_data.shape
-        
+
         assert C == 3  # Channels: x, y, confidence
         assert T == 300  # Frames: 5 seconds @ 60 FPS
         assert V == 33  # Joints: MediaPipe full body
@@ -189,7 +189,7 @@ class TestDataFormatValidation:
         x_channel = sample_skeleton_data[0, :, :, :]  # x coordinates
         y_channel = sample_skeleton_data[1, :, :, :]  # y coordinates
         conf_channel = sample_skeleton_data[2, :, :, :]  # confidence
-        
+
         assert x_channel.shape == (300, 33, 1)
         assert y_channel.shape == (300, 33, 1)
         assert conf_channel.shape == (300, 33, 1)
@@ -225,7 +225,7 @@ class TestLabelFormat:
     def test_label_tuple_format(self, sample_labels):
         """Test labels are in (filenames, labels) tuple format"""
         filenames, labels = sample_labels
-        
+
         assert isinstance(filenames, list)
         assert isinstance(labels, np.ndarray)
         assert len(filenames) == len(labels)
@@ -234,7 +234,7 @@ class TestLabelFormat:
     def test_label_range(self, sample_labels):
         """Test labels are in valid range [0, 9] for 10 classes"""
         _, labels = sample_labels
-        
+
         assert np.all(labels >= 0)
         assert np.all(labels < 10)
 
@@ -242,7 +242,7 @@ class TestLabelFormat:
     def test_label_count_matches_data(self, sample_labels):
         """Test label count matches number of samples"""
         filenames, labels = sample_labels
-        
+
         assert len(filenames) == 100  # From fixture
         assert len(labels) == 100
 
@@ -251,7 +251,7 @@ class TestLabelFormat:
         """Test class index mapping has all 10 classes"""
         assert len(class_index) == 10
         assert all(i in class_index for i in range(10))
-        
+
         # Check specific classes
         assert class_index[0] == "ballistic"
         assert class_index[7] == "normal"
@@ -263,10 +263,10 @@ class TestLabelFormat:
         """Test detection of wrong label format"""
         # WRONG FORMAT: (labels, count) - This is a common mistake!
         wrong_format = (np.array([0, 1, 2]), 100)
-        
+
         # This would cause len() to return 2 instead of 100!
         assert len(wrong_format) == 2  # WRONG!
-        
+
         # CORRECT FORMAT: (filenames, labels)
         correct_format = (["video1.mp4", "video2.mp4"], np.array([0, 1]))
         assert len(correct_format[1]) == 2  # CORRECT!
@@ -285,9 +285,9 @@ class TestFileIO:
         """Test saving skeleton data to .npy file"""
         output_path = temp_directory / "test_skeleton.npy"
         np.save(output_path, sample_skeleton_batch)
-        
+
         assert output_path.exists()
-        
+
         # Load and verify
         loaded = np.load(output_path)
         assert np.allclose(loaded, sample_skeleton_batch)
@@ -296,17 +296,17 @@ class TestFileIO:
     def test_save_labels_pkl(self, temp_directory, sample_labels):
         """Test saving labels to .pkl file"""
         import pickle
-        
+
         output_path = temp_directory / "test_labels.pkl"
-        with open(output_path, 'wb') as f:
+        with open(output_path, "wb") as f:
             pickle.dump(sample_labels, f)
-        
+
         assert output_path.exists()
-        
+
         # Load and verify
-        with open(output_path, 'rb') as f:
+        with open(output_path, "rb") as f:
             loaded = pickle.load(f)
-        
+
         assert loaded[0] == sample_labels[0]  # filenames
         assert np.array_equal(loaded[1], sample_labels[1])  # labels
 
@@ -314,11 +314,11 @@ class TestFileIO:
     def test_load_corrupted_file_handling(self, temp_directory):
         """Test handling of corrupted files"""
         corrupt_path = temp_directory / "corrupt.npy"
-        
+
         # Create corrupt file
-        with open(corrupt_path, 'wb') as f:
+        with open(corrupt_path, "wb") as f:
             f.write(b"corrupted data")
-        
+
         # Should raise error when loading
         with pytest.raises(Exception):
             np.load(corrupt_path)

@@ -25,10 +25,10 @@ def sample_skeleton_data():
     # Joints: 33
     # Person: 1
     skeleton = np.random.rand(3, 300, 33, 1).astype(np.float32)
-    
+
     # Make realistic confidence values (0.5 to 1.0)
     skeleton[2, :, :, :] = np.random.uniform(0.5, 1.0, (300, 33, 1)).astype(np.float32)
-    
+
     return skeleton
 
 
@@ -37,10 +37,12 @@ def sample_skeleton_batch():
     """Generate batch of skeleton data (N, 3, 300, 33, 1)"""
     batch_size = 16
     skeleton_batch = np.random.rand(batch_size, 3, 300, 33, 1).astype(np.float32)
-    
+
     # Realistic confidence values
-    skeleton_batch[:, 2, :, :, :] = np.random.uniform(0.5, 1.0, (batch_size, 300, 33, 1)).astype(np.float32)
-    
+    skeleton_batch[:, 2, :, :, :] = np.random.uniform(
+        0.5, 1.0, (batch_size, 300, 33, 1)
+    ).astype(np.float32)
+
     return skeleton_batch
 
 
@@ -50,11 +52,15 @@ def sample_landmarks():
     # Shape: (frames, joints, coordinates)
     # Coordinates: x, y, confidence
     landmarks = np.random.rand(300, 33, 3).astype(np.float32)
-    
+
     # Make realistic: x,y in [0, 1], confidence in [0.5, 1.0]
-    landmarks[:, :, 0:2] = np.random.uniform(0, 1, (300, 33, 2)).astype(np.float32)  # x, y
-    landmarks[:, :, 2] = np.random.uniform(0.5, 1.0, (300, 33)).astype(np.float32)  # confidence
-    
+    landmarks[:, :, 0:2] = np.random.uniform(0, 1, (300, 33, 2)).astype(
+        np.float32
+    )  # x, y
+    landmarks[:, :, 2] = np.random.uniform(0.5, 1.0, (300, 33)).astype(
+        np.float32
+    )  # confidence
+
     return landmarks
 
 
@@ -188,9 +194,9 @@ def mock_npy_file(temp_directory, sample_skeleton_batch):
 def mock_label_file(temp_directory, sample_labels):
     """Create mock .pkl label file"""
     import pickle
-    
+
     pkl_path = temp_directory / "test_labels.pkl"
-    with open(pkl_path, 'wb') as f:
+    with open(pkl_path, "wb") as f:
         pickle.dump(sample_labels, f)
     return pkl_path
 
@@ -236,9 +242,5 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "gpu: marks tests requiring GPU (deselect with '-m \"not gpu\"')"
     )
-    config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests"
-    )
-    config.addinivalue_line(
-        "markers", "unit: marks tests as unit tests"
-    )
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
+    config.addinivalue_line("markers", "unit: marks tests as unit tests")
