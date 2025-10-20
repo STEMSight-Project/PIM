@@ -5,19 +5,22 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
-import { ambulanceSessionService, type AmbulanceSession } from "@/services/ambulanceSessionService";
+import {
+  ambulanceSessionService,
+  type AmbulanceSession,
+} from "@/services/ambulanceSessionService";
 import { formatDate } from "@/utils/cn";
 import {
+  ArrowPathIcon,
   CalendarIcon,
   ChartBarIcon,
   ClockIcon,
   EyeIcon,
   PlayIcon,
-  StopIcon,
-  VideoCameraIcon,
-  ArrowPathIcon,
-  ArrowDownTrayIcon,
   ServerIcon,
+  StopIcon,
+  TruckIcon,
+  VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -35,7 +38,7 @@ export default function RecentLiveSessionPage() {
       setError(null);
 
       const result = await ambulanceSessionService.getRecentSessions(20);
-      
+
       if (!result.success) {
         setError(result.error || "Failed to load sessions");
         return;
@@ -60,7 +63,7 @@ export default function RecentLiveSessionPage() {
   };
 
   const getStatusColor = (status: string) => {
-    return status === 'completed'
+    return status === "completed"
       ? "bg-blue-100 text-blue-800"
       : "bg-green-100 text-green-800";
   };
@@ -74,14 +77,15 @@ export default function RecentLiveSessionPage() {
   };
 
   const getStatusLabel = (status: string) => {
-    return status === 'completed' ? "Completed" : "Active";
+    return status === "completed" ? "Completed" : "Active";
   };
 
   // Calculate statistics
   const stats = {
     total: sessions.length,
-    active: sessions.filter((s) => ambulanceSessionService.isSessionActive(s)).length,
-    completed: sessions.filter((s) => s.status === 'completed').length,
+    active: sessions.filter((s) => ambulanceSessionService.isSessionActive(s))
+      .length,
+    completed: sessions.filter((s) => s.status === "completed").length,
     totalSize: sessions.reduce((acc, s) => acc + (s.file_size || 0), 0),
   };
 
@@ -126,8 +130,7 @@ export default function RecentLiveSessionPage() {
           </div>
         </div>
 
-        {realtimeError && <Alert variant="error">{realtimeError}</Alert>}
-
+        {error && <Alert variant="error">{error}</Alert>}
 
         {/* Session Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
@@ -139,9 +142,10 @@ export default function RecentLiveSessionPage() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">
                   Total Sessions
-                  Total Sessions
                 </p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.total}
+                </p>
               </div>
             </div>
           </Card>
@@ -155,7 +159,9 @@ export default function RecentLiveSessionPage() {
                 <p className="text-sm font-medium text-gray-600">
                   Active Sessions
                 </p>
-                <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.active}
+                </p>
               </div>
             </div>
           </Card>
@@ -180,7 +186,9 @@ export default function RecentLiveSessionPage() {
                 <ServerIcon className="h-6 w-6 text-orange-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Storage</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Total Storage
+                </p>
                 <p className="text-2xl font-bold text-gray-900">
                   {ambulanceSessionService.formatFileSize(stats.totalSize)}
                 </p>
@@ -197,7 +205,7 @@ export default function RecentLiveSessionPage() {
             </h3>
           </div>
 
-          {realtimeSessions.length === 0 ? (
+          {sessions.length === 0 ? (
             <div className="text-center py-12">
               <TruckIcon className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">
@@ -210,9 +218,13 @@ export default function RecentLiveSessionPage() {
           ) : (
             <div className="divide-y divide-gray-200">
               {sessions.map((session) => {
-                const duration = ambulanceSessionService.getSessionDuration(session);
-                const isActive = ambulanceSessionService.isSessionActive(session);
-                const fileSize = ambulanceSessionService.formatFileSize(session.file_size);
+                const duration =
+                  ambulanceSessionService.getSessionDuration(session);
+                const isActive =
+                  ambulanceSessionService.isSessionActive(session);
+                const fileSize = ambulanceSessionService.formatFileSize(
+                  session.file_size
+                );
 
                 return (
                   <div
@@ -276,7 +288,9 @@ export default function RecentLiveSessionPage() {
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                router.push(`/streamingDash/${session.session_id}`);
+                                router.push(
+                                  `/streamingDash/${session.session_id}`
+                                );
                               }}
                             >
                               <PlayIcon className="h-4 w-4 mr-1" />
@@ -288,7 +302,10 @@ export default function RecentLiveSessionPage() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('View Subject clicked for session:', session.id);
+                              console.log(
+                                "View Subject clicked for session:",
+                                session.id
+                              );
                             }}
                           >
                             <VideoCameraIcon className="h-4 w-4 mr-1" />
