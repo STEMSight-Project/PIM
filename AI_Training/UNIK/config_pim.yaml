@@ -1,0 +1,70 @@
+# UNIK Training Configuration for PIM Movement Classification
+# 10 classes: normal, ballistic, chorea, decerebrate, decorticate, dystonia,
+#             fencer_posture, myoclonus, tremor, versive_head
+
+work_dir: ./work_dir/pim_movements_10class_new
+model_saved_name: pim_unik_model_10class_new
+weights: no # Start fresh training on new skeleton data
+
+# Feeder
+feeder: feeders.feeder.Feeder
+train_feeder_args:
+  data_path: ../skeleton_data/train_data_train.npy # 80% training data (2080 samples)
+  label_path: ../skeleton_data/train_label_train.pkl
+  random_choose: False
+  random_shift: False
+  random_move: False
+  window_size: -1
+  normalization: False
+  debug: False
+  use_mmap: True
+
+test_feeder_args:
+  data_path: ../skeleton_data/train_data_test.npy # 20% test data (520 samples)
+  label_path: ../skeleton_data/train_label_test.pkl
+
+# Model
+model: model.classifier.Model
+model_args:
+  num_class: 10 # Updated from 9 to 10 (added normal class) # 9 movement classes
+  num_joints: 33 # MediaPipe has 33 landmarks
+  num_person: 2 # Feeder automatically adds 2nd person (zeros)
+  tau: 1 # Temporal window size
+  num_heads: 3 # Number of attention heads
+  in_channels: 3 # x, y, visibility coordinates
+  drop_out: 0
+  backbone_fixed: False
+  # weights: "no" # Removed - training from scratch
+
+# Optim - Optimized for RTX 4070 (12GB VRAM) - AGGRESSIVE SETTINGS
+weight_decay: 0.0004
+# Optimized for faster convergence on RTX 4070:
+# - batch_size increased below (so LR scaled accordingly)
+base_lr: 0.2 # Scaled for batch_size=32 (2x from base 16)
+step: [50, 65, 75] # LR decay schedule tuned for faster convergence
+num_epoch: 80 # Total epochs (kept moderate to save time)
+warm_up_epoch: 5 # Warm-up epochs
+
+# Training - RTX 4070 GPU (12GB VRAM) - OPTIMIZED FOR SPEED
+device: [0] # GPU 0 - NVIDIA GeForce RTX 4070
+# Increase batch size to utilize GPU better. If you hit OOM, reduce to 16.
+batch_size: 8
+test_batch_size: 8
+# Use more dataloader workers to keep GPU fed. Adjust to 6-8 if you have spare CPU cores.
+num_worker: 4
+
+# Optimizer
+optimizer: SGD
+nesterov: True
+
+# Display
+print_log: True
+# Reduce logging frequency to lower overhead during fast epochs
+log_interval: 10 # Print every 10 batches
+save_interval: 5 # Save checkpoint every 5 epochs
+eval_interval: 5 # Evaluate every 5 epochs
+
+# Misc
+phase: train
+save_score: True
+start_epoch: 0 # Start from epoch 0 for new training
