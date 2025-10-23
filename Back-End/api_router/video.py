@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 from core.common import supabase, logger
 from fastapi import APIRouter, Depends, HTTPException
 from security.jwt_verify import current_user
+from services.video_service import VideoService
 
 router = APIRouter(dependencies=[Depends(current_user)])
 
@@ -23,11 +24,143 @@ class VideoUpload(BaseModel):
     description: str = None
 
 
-@router.get("/")
+# New models for ambulance recordings
+class RecordingResponse(BaseModel):
+    """Response model for ambulance session recordings"""
+
+    id: str
+    session_id: str
+    session_name: Optional[str]
+    ambulance_number: Optional[str]
+    file_path: Optional[str]
+    public_video_url: Optional[str]
+    duration: Optional[int]  # Duration in seconds
+    file_size: Optional[int]  # File size in bytes
+    session_start: Optional[datetime]
+    session_end: Optional[datetime]
+    created_at: datetime
+    is_archived: bool  # True if uploaded to Supabase Storage
+
+
+# ============================================================================
+# AMBULANCE RECORDINGS ENDPOINTS (New - from Supabase Storage)
+# ============================================================================
+
+
+@router.get("/recordings", response_model=List[RecordingResponse])
+async def get_all_recordings():
+    """
+    Get all ambulance session recordings with public URLs from Supabase Storage.
+    Returns both archived (uploaded to Supabase) and live (HLS) recordings.
+    """
+    try:
+        recordings = await VideoService.get_all_recordings()
+        return recordings
+    except Exception as e:
+        logger.error("Error getting all recordings: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/recordings/archived", response_model=List[RecordingResponse])
+async def get_archived_recordings():
+    """
+    Get only archived recordings (uploaded to Supabase Storage).
+    Excludes live/ongoing recordings.
+    """
+    try:
+        recordings = await VideoService.get_archived_recordings()
+        return recordings
+    except Exception as e:
+        logger.error("Error getting archived recordings: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/recordings/{recording_id}", response_model=RecordingResponse)
+async def get_recording_by_id(recording_id: str):
+    """
+    Get a specific recording by ID with public URL from Supabase Storage.
+    """
+    try:
+        recording = await VideoService.get_recording_by_id(recording_id)
+        if not recording:
+            raise HTTPException(status_code=404, detail="Recording not found")
+        return recording
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error getting recording %s: %s", recording_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/recordings/session/{session_id}", response_model=List[RecordingResponse])
+async def get_recordings_by_session(session_id: str):
+    """
+    Get all recordings for a specific ambulance session.
+    """
+    try:
+        recordings = await VideoService.get_recordings_by_session(session_id)
+        return recordings
+    except Exception as e:
+        logger.error("Error getting recordings for session %s: %s", session_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get(
+    "/recordings/ambulance/{ambulance_id}", response_model=List[RecordingResponse]
+)
+async def get_recordings_by_ambulance(ambulance_id: str):
+    """
+    Get all recordings for a specific ambulance.
+    """
+    try:
+        recordings = await VideoService.get_recordings_by_ambulance(ambulance_id)
+        return recordings
+    except Exception as e:
+        logger.error("Error getting recordings for ambulance %s: %s", ambulance_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.delete("/recordings/{recording_id}")
+async def delete_recording(recording_id: str):
+    """
+    Delete a recording from the database.
+    Note: This does NOT delete the file from Supabase Storage.
+    """
+    try:
+        await VideoService.delete_recording(recording_id)
+        return {
+            "data": {"message": "Recording deleted successfully"},
+            "error": None,
+        }
+    except Exception as e:
+        logger.error("Error deleting recording %s: %s", recording_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
+# LEGACY PATIENT VIDEO ENDPOINTS (Old - keep for backward compatibility)
+# ============================================================================
+
+
+@router.get("/", response_model=list[Video])
 def get_all_videos():
     try:
         response = supabase.table("video").select("*").execute()
-        return response.data
+        videos: list[Video] = []
+        for obj in response.data:
+            video_url = supabase.storage.from_("recorded.videos").get_public_url(
+                obj["file_path"]
+            )
+            video = Video(
+                id=obj["id"],
+                patient_id=obj["patient_id"],
+                description=obj["description"],
+                file_path=obj["file_path"],
+                public_video_url=video_url,
+                created_at=obj["created_at"],
+            )
+            videos.append(video)
+        return videos
     except Exception as e:
         logger.error("Error getting all videos: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e

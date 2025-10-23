@@ -9,6 +9,15 @@ export type {
   User,
 } from "./authService";
 
+export { realtimeService } from "./realtimeService";
+export type {
+  RealtimeConnection,
+  RealtimeEvent,
+  RealtimeEventHandler,
+  RealtimeOptions,
+  RealtimeService,
+} from "./realtimeService";
+
 export { patientService } from "./patientService";
 export type {
   Patient,
@@ -41,16 +50,26 @@ export type {
 export { noteService } from "./noteService";
 export type { Note, NoteCreateRequest, NoteUpdateRequest } from "./noteService";
 
-export { streamingService } from "./streamingService";
+// Live streaming services for real-time video sessions
+// Ambulance streaming service (new)
 export type {
-  RoomInfo,
+  AmbulanceCamera,
+  AmbulanceSession,
+  AmbulanceSessionCreate,
+  AmbulanceSessionUpdate,
+  AmbulanceStreamingStatus,
+  CameraRoom,
+  CameraRoomCreate,
   SDPData,
-  StreamCreateRequest,
   StreamResponse,
-  StreamSession,
-  StreamStats,
-  StreamUpdateRequest,
+} from "@/types";
+export {
+  ambulanceStreamingService,
+  streamingService,
 } from "./streamingService";
+
+// Historical session review services for post-session analysis
+export { fetchStitchedSessions } from "./sessionService";
 
 // Re-export api and types for convenience
 export type { ApiResponse } from "@/types";

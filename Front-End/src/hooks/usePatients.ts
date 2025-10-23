@@ -8,6 +8,12 @@ import type {
 } from "@/types";
 import { useEffect, useState } from "react";
 
+// -
+function hasAnyToken() {
+  if (typeof window === "undefined") return false;
+  return !!(localStorage.getItem("access_token") || localStorage.getItem("refresh_token"));
+}
+
 export function usePatients() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,6 +23,12 @@ export function usePatients() {
     try {
       setIsLoading(true);
       setError(null);
+
+      // - 
+      if (!hasAnyToken()) {
+        setError("AUTH_MISSING: You’re signed out. Please sign in.");
+        return;
+      }
       const { data, error } = await patientService.getAll();
 
       if (error) {

@@ -1,0 +1,28 @@
+[Unit]
+Description=STEMSight Raspberry Pi Auto Broadcaster
+After=network-online.target
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/stemsight/PIM/Raspberry-Pi
+ExecStart=/usr/bin/python3 /home/pi/stemsight/PIM/Raspberry-Pi/auto_start.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONPATH=/home/pi/stemsight/PIM/Raspberry-Pi
+
+# Ensure camera access
+SupplementaryGroups=video
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target

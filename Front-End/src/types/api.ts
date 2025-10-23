@@ -23,19 +23,21 @@ export interface ErrorResponse {
 export interface StreamingRoom {
   id: string;
   patient_id: string;
-  name: string;
-  is_active: boolean;
+  room_id: string;
+  session_id: string;
+  device_name: string;
+  connected: boolean;
+  started_at: string;
+  ended_at?: string;
+  last_seen: string;
   created_at: string;
   updated_at: string;
 }
 
-// Updated StreamingSession to match backend implementation
+// Updated StreamingSession to match actual database structure
 export interface StreamingSession {
   id: string;
   patient_id: string;
-  room_id: string;
-  device_name?: string;
-  is_live: boolean;
   status: "active" | "ended" | "error" | "disconnected";
   started_at: string;
   ended_at?: string;
@@ -45,14 +47,10 @@ export interface StreamingSession {
 
 export interface StreamingSessionCreate {
   patient_id: string;
-  room_id: string;
-  device_name?: string;
 }
 
 export interface StreamingSessionUpdate {
-  is_live?: boolean;
   status?: "active" | "ended" | "error" | "disconnected";
-  device_name?: string;
 }
 
 export interface VideoAnalysis {

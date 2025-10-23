@@ -23,7 +23,7 @@ class MedicalHistory(MedicalHistoryBase):
 
 class MedicalHistoryCreate(MedicalHistoryBase):
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class MedicalHistoryOut(BaseModel):

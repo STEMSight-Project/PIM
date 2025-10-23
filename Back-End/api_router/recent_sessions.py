@@ -89,74 +89,78 @@ async def get_patient_details(patient_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/export-report")
 async def export_sessions_report():
     """Export recent sessions data as CSV with detailed metrics."""
     try:
-        supabase = get_supabase_client()
         # Get sessions with patient information
-        sessions = supabase.table('monitoring_sessions')\
-            .select('*, patients!inner(name, id, medical_record_number)')\
+        sessions = (
+            supabase.table("monitoring_sessions")
+            .select("*, patients!inner(name, id, medical_record_number)")
             .execute()
-        
+        )
+
         # Create CSV string
         output = StringIO()
         writer = csv.writer(output)
-        
+
         # Write headers
         headers = [
-            'Session ID',
-            'Patient Name',
-            'Patient ID',
-            'Medical Record Number',
-            'Session Date',
-            'Session Time',
-            'Duration (minutes)',
-            'Total Detections',
-            'Detections/Minute',
-            'Total Alerts',
-            'Alerts/Minute',
-            'Confidence Score',
-            'Camera Module',
-            'Session Status'
+            "Session ID",
+            "Patient Name",
+            "Patient ID",
+            "Medical Record Number",
+            "Session Date",
+            "Session Time",
+            "Duration (minutes)",
+            "Total Detections",
+            "Detections/Minute",
+            "Total Alerts",
+            "Alerts/Minute",
+            "Confidence Score",
+            "Camera Module",
+            "Session Status",
         ]
         writer.writerow(headers)
-        
+
         # Write data rows
         for session in sessions.data:
             # Calculate metrics
-            duration = session.get('duration', 0)
-            detections = session.get('total_detections', 0)
-            alerts = session.get('total_alerts', 0)
-            
+            duration = session.get("duration", 0)
+            detections = session.get("total_detections", 0)
+            alerts = session.get("total_alerts", 0)
+
             detection_rate = round(detections / duration if duration > 0 else 0, 2)
             alert_rate = round(alerts / duration if duration > 0 else 0, 2)
-            
+
             # Format timestamp
-            timestamp = datetime.fromisoformat(session.get('timestamp'))
+            timestamp = datetime.fromisoformat(session.get("timestamp"))
             date_str = timestamp.strftime("%Y-%m-%d")
             time_str = timestamp.strftime("%I:%M %p")
-            
+
             # Get patient info
-            patient = session.get('patients', {})
-            
-            writer.writerow([
-                session.get('id'),
-                patient.get('name', 'N/A'),
-                patient.get('id', 'N/A'),
-                patient.get('medical_record_number', 'N/A'),
-                date_str,
-                time_str,
-                duration,
-                detections,
-                detection_rate,
-                alerts,
-                alert_rate,
-                f"{session.get('confidence_score', 0):.1f}%",
-                session.get('camera_module', 'N/A'),
-                session.get('status', 'Completed')
-            ])
-        
+            patient = session.get("patients", {})
+
+            writer.writerow(
+                [
+                    session.get("id"),
+                    patient.get("name", "N/A"),
+                    patient.get("id", "N/A"),
+                    patient.get("medical_record_number", "N/A"),
+                    date_str,
+                    time_str,
+                    duration,
+                    detections,
+                    detection_rate,
+                    alerts,
+                    alert_rate,
+                    f"{session.get('confidence_score', 0):.1f}%",
+                    session.get("camera_module", "N/A"),
+                    session.get("status", "Completed"),
+                ]
+            )
+
         # Create response with CSV file
         response = StreamingResponse(
             iter([output.getvalue()]),
