@@ -1,0 +1,57 @@
+base_lr: 0.2
+batch_size: 8
+config: config_pim.yaml
+device:
+  - 0
+eval_interval: 5
+feeder: feeders.feeder.Feeder
+ignore_weights: []
+log_interval: 10
+model: model.classifier.Model
+model_args:
+  backbone_fixed: false
+  drop_out: 0
+  in_channels: 3
+  num_class: 10
+  num_heads: 3
+  num_joints: 33
+  num_person: 2
+  tau: 1
+model_saved_name: pim_unik_model_10class_new
+nesterov: true
+num_epoch: 80
+num_worker: 4
+only_train_epoch: 0
+only_train_part: false
+optimizer: SGD
+phase: train
+print_log: true
+save_interval: 5
+save_score: true
+seed: 1
+show_topk:
+  - 1
+  - 5
+start_epoch: 0
+step:
+  - 50
+  - 65
+  - 75
+test_batch_size: 8
+test_feeder_args:
+  data_path: ../skeleton_data/train_data_test.npy
+  label_path: ../skeleton_data/train_label_test.pkl
+train_feeder_args:
+  data_path: ../skeleton_data/train_data_train.npy
+  debug: false
+  label_path: ../skeleton_data/train_label_train.pkl
+  normalization: false
+  random_choose: false
+  random_move: false
+  random_shift: false
+  use_mmap: true
+  window_size: -1
+warm_up_epoch: 5
+weight_decay: 0.0004
+weights: false
+work_dir: ./work_dir/pim_movements_10class_new

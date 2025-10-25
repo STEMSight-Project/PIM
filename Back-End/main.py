@@ -4,15 +4,38 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 from api_router.router import api_router
+from api_router.pim_classifier_api import router as pim_router
 from core.common import logger, supabase
 import os
 from pathlib import Path
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events - startup and shutdown."""
+    # Startup
+    logger.info("Starting up STEMSight backend...")
+
+    # Start room manager background tasks
+    from services.streaming.room_service import room_manager
+
+    await room_manager.start_cleanup_task()
+    await room_manager.start_session_monitoring()
+    logger.info("Room manager background tasks started")
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down STEMSight backend...")
+
 
 app = FastAPI(
     title="STEMSight API",
     version="1.0.0",
     description="STEMSight API with Bearer Token Authentication",
+    lifespan=lifespan,
     openapi_tags=[
         {"name": "Auth", "description": "Authentication endpoints"},
         {"name": "Patients", "description": "Patient management"},
@@ -22,6 +45,10 @@ app = FastAPI(
         {"name": "Notes", "description": "Notes management"},
         {"name": "Patient Events", "description": "Patient events management"},
         {"name": "Streaming", "description": "Real-time streaming"},
+        {
+            "name": "PIM Classification",
+            "description": "AI-powered movement classification",
+        },
     ],
 )
 
@@ -103,4 +130,6 @@ RECORDINGS_PATH = Path("recordings")
 RECORDINGS_PATH.mkdir(parents=True, exist_ok=True)
 app.mount("/recordings", StaticFiles(directory=str(RECORDINGS_PATH)), name="recordings")
 
+# Include routers
 app.include_router(api_router)
+app.include_router(pim_router)
