@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HLS Playback - STEMSight PIM</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        padding: 30px;
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 2em;
+      }
+
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 1.1em;
+      }
+
+      .controls {
+        display: grid;
+        gap: 15px;
+        margin-bottom: 30px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 12px;
+      }
+
+      .control-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      label {
+        font-weight: 600;
+        min-width: 120px;
+        color: #444;
+      }
+
+      input[type="text"] {
+        flex: 1;
+        padding: 10px 15px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+
+      input[type="text"]:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      button {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-transform: uppercase;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      .btn-load {
+        background: #667eea;
+        color: white;
+      }
+
+      .btn-list {
+        background: #f59e0b;
+        color: white;
+      }
+
+      .btn-status {
+        background: #10b981;
+        color: white;
+      }
+
+      .video-container {
+        position: relative;
+        margin-bottom: 30px;
+        background: #000;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      video {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      .status {
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-family: "Courier New", monospace;
+        font-size: 13px;
+      }
+
+      .status.info {
+        background: #dbeafe;
+        border-left: 4px solid #3b82f6;
+        color: #1e40af;
+      }
+
+      .status.success {
+        background: #d1fae5;
+        border-left: 4px solid #10b981;
+        color: #065f46;
+      }
+
+      .status.error {
+        background: #fee2e2;
+        border-left: 4px solid #ef4444;
+        color: #991b1b;
+      }
+
+      .recordings-list {
+        margin-top: 30px;
+      }
+
+      .recording-item {
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .recording-info {
+        flex: 1;
+      }
+
+      .recording-title {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 5px;
+      }
+
+      .recording-meta {
+        font-size: 12px;
+        color: #666;
+      }
+
+      .recording-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .btn-play {
+        background: #3b82f6;
+        color: white;
+        padding: 8px 16px;
+        font-size: 12px;
+      }
+
+      .btn-delete {
+        background: #ef4444;
+        color: white;
+        padding: 8px 16px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>📼 HLS Playback - STEMSight PIM</h1>
+      <p class="subtitle">View recorded ambulance sessions</p>
+
+      <div class="controls">
+        <div class="control-row">
+          <label>API Base URL:</label>
+          <input type="text" id="apiUrl" value="http://localhost:8000" />
+        </div>
+
+        <div class="control-row">
+          <label>Session ID:</label>
+          <input type="text" id="sessionId" placeholder="Enter session ID" />
+        </div>
+
+        <div class="control-row">
+          <label>Auth Token:</label>
+          <input
+            type="text"
+            id="authToken"
+            placeholder="Bearer token (if required)"
+          />
+        </div>
+
+        <div class="control-row">
+          <label>Actions:</label>
+          <button class="btn-load" onclick="loadPlayback()">
+            ▶️ Load Playback
+          </button>
+          <button class="btn-status" onclick="checkStatus()">
+            📊 Check Status
+          </button>
+          <button class="btn-list" onclick="listRecordings()">
+            📋 List All Recordings
+          </button>
+        </div>
+      </div>
+
+      <div id="status"></div>
+
+      <div class="video-container">
+        <video id="video" controls></video>
+      </div>
+
+      <div class="recordings-list" id="recordingsList"></div>
+    </div>
+
+    <script>
+      let hls = null;
+      const video = document.getElementById("video");
+
+      function getApiUrl() {
+        return document.getElementById("apiUrl").value;
+      }
+
+      function getSessionId() {
+        return document.getElementById("sessionId").value;
+      }
+
+      function getAuthHeaders() {
+        const token = document.getElementById("authToken").value;
+        const headers = {
+          "Content-Type": "application/json",
+        };
+        if (token) {
+          headers["Authorization"] = token.startsWith("Bearer ")
+            ? token
+            : `Bearer ${token}`;
+        }
+        return headers;
+      }
+
+      function showStatus(message, type = "info") {
+        const statusDiv = document.getElementById("status");
+        statusDiv.className = `status ${type}`;
+        statusDiv.innerHTML = message;
+      }
+
+      function loadPlayback() {
+        const sessionId = getSessionId();
+        if (!sessionId) {
+          showStatus("❌ Please enter a session ID", "error");
+          return;
+        }
+
+        const videoSrc = `${getApiUrl()}/api/videos/hls/${sessionId}/playlist.m3u8`;
+        loadVideo(videoSrc);
+      }
+
+      function loadVideo(videoSrc) {
+        // Destroy existing HLS instance
+        if (hls) {
+          hls.destroy();
+          hls = null;
+        }
+
+        showStatus(`⏳ Loading recording...`, "info");
+
+        if (Hls.isSupported()) {
+          hls = new Hls({
+            enableWorker: true,
+          });
+
+          hls.loadSource(videoSrc);
+          hls.attachMedia(video);
+
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            showStatus(`✅ Recording loaded successfully!`, "success");
+          });
+
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  showStatus(
+                    `❌ Network error: ${data.details}. Recording may not exist.`,
+                    "error"
+                  );
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  showStatus(`❌ Media error: ${data.details}`, "error");
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  showStatus(`❌ Fatal error: ${data.details}`, "error");
+                  break;
+              }
+            }
+          });
+        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          // Native HLS support (Safari)
+          video.src = videoSrc;
+          video.addEventListener("loadedmetadata", () => {
+            showStatus(`✅ Recording loaded successfully!`, "success");
+          });
+          video.addEventListener("error", () => {
+            showStatus(
+              `❌ Error loading recording. Session may not exist.`,
+              "error"
+            );
+          });
+        } else {
+          showStatus("❌ HLS is not supported in this browser", "error");
+        }
+      }
+
+      async function checkStatus() {
+        const sessionId = getSessionId();
+        if (!sessionId) {
+          showStatus("❌ Please enter a session ID", "error");
+          return;
+        }
+
+        try {
+          showStatus("⏳ Checking recording status...", "info");
+
+          const response = await fetch(
+            `${getApiUrl()}/api/videos/hls/${sessionId}/status`,
+            {
+              headers: getAuthHeaders(),
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+
+            let statusMsg = `✅ <strong>Session: ${data.session_id}</strong><br>`;
+            statusMsg += `Status: <strong>${data.status}</strong><br>`;
+
+            if (data.is_active) {
+              statusMsg += `🔴 Recording in progress...<br>`;
+              statusMsg += `Duration: ${formatDuration(data.duration)}<br>`;
+            } else {
+              statusMsg += `Segments: ${data.segment_count}<br>`;
+              statusMsg += `Size: ${formatFileSize(data.file_size)}<br>`;
+            }
+
+            statusMsg += `Playlist: ${data.playlist_url}`;
+
+            showStatus(statusMsg, "success");
+          } else if (response.status === 404) {
+            showStatus(
+              `❌ Recording not found for session: ${sessionId}`,
+              "error"
+            );
+          } else {
+            showStatus(
+              `❌ Error checking status: ${response.statusText}`,
+              "error"
+            );
+          }
+        } catch (error) {
+          showStatus(`❌ Error: ${error.message}`, "error");
+        }
+      }
+
+      async function listRecordings() {
+        try {
+          showStatus("⏳ Loading recordings...", "info");
+
+          const response = await fetch(`${getApiUrl()}/api/videos/hls/list`, {
+            headers: getAuthHeaders(),
+          });
+
+          const recordings = await response.json();
+
+          if (recordings.length === 0) {
+            showStatus("ℹ️ No recordings found", "info");
+            document.getElementById("recordingsList").innerHTML = "";
+            return;
+          }
+
+          showStatus(`✅ Found ${recordings.length} recording(s)`, "success");
+
+          const recordingsHtml = recordings
+            .map(
+              (rec) => `
+                    <div class="recording-item">
+                        <div class="recording-info">
+                            <div class="recording-title">📹 Session: ${
+                              rec.session_id
+                            }</div>
+                            <div class="recording-meta">
+                                Segments: ${rec.segment_count} | 
+                                Size: ${formatFileSize(rec.file_size)} |
+                                Created: ${new Date(
+                                  rec.created_at
+                                ).toLocaleString()}
+                            </div>
+                        </div>
+                        <div class="recording-actions">
+                            <button class="btn-play" onclick="playRecording('${
+                              rec.session_id
+                            }')">▶️ Play</button>
+                            <button class="btn-delete" onclick="deleteRecording('${
+                              rec.session_id
+                            }')">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `
+            )
+            .join("");
+
+          document.getElementById("recordingsList").innerHTML = `
+                    <h2 style="margin-bottom: 15px; color: #333;">📼 Available Recordings</h2>
+                    ${recordingsHtml}
+                `;
+        } catch (error) {
+          showStatus(`❌ Error loading recordings: ${error.message}`, "error");
+        }
+      }
+
+      function playRecording(sessionId) {
+        document.getElementById("sessionId").value = sessionId;
+        const videoSrc = `${getApiUrl()}/api/videos/hls/${sessionId}/playlist.m3u8`;
+        loadVideo(videoSrc);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      async function deleteRecording(sessionId) {
+        if (
+          !confirm(
+            `Are you sure you want to delete recording for session ${sessionId}?`
+          )
+        ) {
+          return;
+        }
+
+        try {
+          showStatus(`⏳ Deleting recording...`, "info");
+
+          const response = await fetch(
+            `${getApiUrl()}/api/videos/hls/${sessionId}`,
+            {
+              method: "DELETE",
+              headers: getAuthHeaders(),
+            }
+          );
+
+          const data = await response.json();
+
+          if (data.success) {
+            showStatus(`✅ Recording deleted successfully`, "success");
+            listRecordings(); // Refresh list
+          } else {
+            showStatus(`❌ Failed to delete recording`, "error");
+          }
+        } catch (error) {
+          showStatus(`❌ Error: ${error.message}`, "error");
+        }
+      }
+
+      function formatDuration(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+      }
+
+      function formatFileSize(bytes) {
+        return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+      }
+
+      // Load recordings on page load
+      window.addEventListener("load", () => {
+        showStatus(
+          'ℹ️ Ready! Click "List All Recordings" to see available sessions',
+          "info"
+        );
+      });
+    </script>
+  </body>
+</html>

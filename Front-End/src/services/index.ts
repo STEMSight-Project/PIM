@@ -47,6 +47,9 @@ export type {
   VideoUploadResponse,
 } from "./videoService";
 
+export { hlsService } from "./hlsService";
+export type { HLSRecordingInfo, HLSRecordingStatus } from "./hlsService";
+
 export { noteService } from "./noteService";
 export type { Note, NoteCreateRequest, NoteUpdateRequest } from "./noteService";
 

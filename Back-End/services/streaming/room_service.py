@@ -5,10 +5,253 @@ Room service for managing WebRTC rooms and connections.
 import asyncio
 import time
 from typing import Set, Optional
+from datetime import datetime
 from aiortc import RTCPeerConnection
 from core.common import logger
 from services.streaming.database_service import StreamingDatabaseService
 from services.streaming.recording_service import recording_manager
+
+
+class StreamActivityMonitor:
+    """Professional monitor for stream activity with automatic timeout handling."""
+
+    TIMEOUT_SECONDS = 120  # Increased to 120 seconds (2 minutes) for stability
+    CHECK_INTERVAL = 10  # Check every 10 seconds (reduced overhead)
+
+    def __init__(self, room_id: str, session_id: Optional[str] = None):
+        self.room_id = room_id
+        self.session_id = session_id
+        self.last_data_timestamp = time.time()
+        self.monitor_task: Optional[asyncio.Task] = None
+        self._db_service = StreamingDatabaseService()
+        self.is_monitoring = False
+        self._has_received_frames = False  # Track if any frames received
+
+    def update_activity(self):
+        """Update the last data timestamp when stream data is received."""
+        old_timestamp = self.last_data_timestamp
+        self.last_data_timestamp = time.time()
+        self._has_received_frames = True
+
+        # Log frame activity for debugging (reduced frequency to avoid spam)
+        if (
+            not hasattr(self, "_last_log_time")
+            or (self.last_data_timestamp - self._last_log_time) > 10
+        ):
+            logger.debug(
+                "[FRAME] Room %s activity updated (delta: %.4fs)",
+                self.room_id,
+                self.last_data_timestamp - old_timestamp if old_timestamp else 0,
+            )
+            self._last_log_time = self.last_data_timestamp
+
+    def start_monitoring(self, streamer_count: int):
+        """Start monitoring stream activity."""
+        if self.monitor_task and not self.monitor_task.done():
+            logger.debug(f"[MONITOR] Already monitoring room {self.room_id}")
+            return
+
+        self.is_monitoring = True
+        self.last_data_timestamp = time.time()
+        self.monitor_task = asyncio.create_task(self._monitor_loop(streamer_count))
+        logger.info(
+            f"✅ [MONITOR] Started activity monitoring for room {self.room_id} "
+            f"(timeout: {self.TIMEOUT_SECONDS}s)"
+        )
+
+    def stop_monitoring(self):
+        """Stop monitoring stream activity."""
+        if self.monitor_task and not self.monitor_task.done():
+            self.is_monitoring = False
+            self.monitor_task.cancel()
+            self.monitor_task = None
+            logger.info(
+                f"🛑 [MONITOR] Stopped activity monitoring for room {self.room_id}"
+            )
+
+    async def _monitor_loop(self, initial_streamer_count: int):
+        """Monitor stream activity and end room if no data for timeout period."""
+        try:
+            logger.info(
+                f"[MONITOR] Monitoring loop started for room {self.room_id} "
+                f"({initial_streamer_count} streamers)"
+            )
+
+            while self.is_monitoring:
+                await asyncio.sleep(self.CHECK_INTERVAL)
+
+                # Calculate time since last data
+                time_since_data = time.time() - self.last_data_timestamp
+
+                # Only log if significant time has passed or approaching timeout
+                if time_since_data >= 10:
+                    logger.info(
+                        f"[MONITOR] Room {self.room_id} check: last_data={time_since_data:.2f}s ago "
+                        f"(has_received_frames={self._has_received_frames})"
+                    )
+                else:
+                    logger.debug(
+                        f"[MONITOR] Room {self.room_id} check: last_data={time_since_data:.2f}s ago"
+                    )
+
+                # Check timeout - only if frames were previously received
+                if time_since_data >= self.TIMEOUT_SECONDS:
+                    # Only timeout if we've actually received frames before
+                    # This prevents timeout on initial connection
+                    if self._has_received_frames:
+                        logger.error(
+                            f"❌ [MONITOR] Room {self.room_id} TIMEOUT after {int(time_since_data)}s "
+                            f"(timeout: {self.TIMEOUT_SECONDS}s, had frames but stopped)"
+                        )
+                        # Stop monitoring first to prevent re-entry
+                        self.is_monitoring = False
+                        await self._end_session_due_to_inactivity()
+                        break
+                    else:
+                        # Still waiting for first frame - reset timer
+                        logger.warning(
+                            f"⏳ [MONITOR] Room {self.room_id} waiting for first frame "
+                            f"({int(time_since_data)}s elapsed)"
+                        )
+                        self.last_data_timestamp = (
+                            time.time()
+                        )  # Reset to give more time
+
+                # Log periodic status
+                if int(time_since_data) >= 15 and int(time_since_data) % 15 == 0:
+                    remaining = self.TIMEOUT_SECONDS - int(time_since_data)
+                    logger.info(
+                        f"[MONITOR] Room {self.room_id}: {int(time_since_data)}s since last data "
+                        f"({remaining}s until timeout)"
+                    )
+
+        except asyncio.CancelledError:
+            logger.info(f"[MONITOR] Monitoring cancelled for room {self.room_id}")
+        except Exception as e:
+            logger.error(
+                f"[MONITOR] Error in monitoring loop for room {self.room_id}: {e}"
+            )
+        finally:
+            # Ensure monitoring is marked as stopped
+            self.is_monitoring = False
+            logger.info(f"[MONITOR] Monitoring loop exited for room {self.room_id}")
+
+    async def _end_session_due_to_inactivity(self):
+        """End the streaming session due to inactivity."""
+        try:
+            if self.session_id:
+                await self._db_service.end_ambulance_session(self.session_id)
+                logger.info(
+                    f"✅ [MONITOR] Ended session {self.session_id} for room {self.room_id} "
+                    f"due to stream inactivity (no data for {self.TIMEOUT_SECONDS}s)"
+                )
+        except Exception as e:
+            logger.error(f"[MONITOR] Error ending session for room {self.room_id}: {e}")
+
+    def get_status(self) -> dict:
+        """Get current monitoring status."""
+        time_since_data = time.time() - self.last_data_timestamp
+        return {
+            "is_monitoring": self.is_monitoring,
+            "last_activity_seconds_ago": time_since_data,
+            "timeout_seconds": self.TIMEOUT_SECONDS,
+            "will_timeout_in_seconds": max(0, self.TIMEOUT_SECONDS - time_since_data),
+        }
+
+
+class ReconnectionHandler:
+    """Professional handler for room reconnection with 5-minute grace period."""
+
+    RECONNECTION_TIMEOUT = 300  # 5 minutes
+
+    def __init__(self, room_id: str, room_db_id: Optional[str] = None):
+        self.room_id = room_id
+        self.room_db_id = room_db_id
+        self.timeout_task: Optional[asyncio.Task] = None
+        self.reconnection_start_time: Optional[datetime] = None
+        self._db_service = StreamingDatabaseService()
+
+    async def start_reconnection_window(self):
+        """Start the 5-minute reconnection window."""
+        if self.timeout_task and not self.timeout_task.done():
+            logger.debug(
+                f"[RECONNECT] Already waiting for reconnection on room {self.room_id}"
+            )
+            return
+
+        self.reconnection_start_time = datetime.utcnow()
+        self.timeout_task = asyncio.create_task(self._handle_timeout())
+
+        # Update room status to disconnected
+        if self.room_db_id:
+            await self._db_service.update_camera_room_status(
+                self.room_db_id, connected=False
+            )
+
+        logger.warning(
+            f"⏱️ [RECONNECT] Started 5-minute reconnection window for room {self.room_id}"
+        )
+
+    async def cancel_reconnection(self):
+        """Cancel reconnection timeout (successful reconnection)."""
+        if self.timeout_task and not self.timeout_task.done():
+            self.timeout_task.cancel()
+            try:
+                await self.timeout_task
+            except asyncio.CancelledError:
+                pass
+
+            self.timeout_task = None
+            self.reconnection_start_time = None
+
+            # Update room status to connected
+            if self.room_db_id:
+                await self._db_service.update_camera_room_status(
+                    self.room_db_id, connected=True
+                )
+
+            elapsed = (
+                datetime.utcnow() - (self.reconnection_start_time or datetime.utcnow())
+            ).total_seconds()
+            logger.info(
+                f"✅ [RECONNECT] Room {self.room_id} reconnected successfully after {elapsed:.1f}s"
+            )
+
+    async def _handle_timeout(self):
+        """Handle reconnection timeout - permanently close after 5 minutes."""
+        try:
+            logger.info(
+                f"[RECONNECT] Room {self.room_id}: Waiting up to {self.RECONNECTION_TIMEOUT}s for reconnection"
+            )
+
+            await asyncio.sleep(self.RECONNECTION_TIMEOUT)
+
+            # Timeout reached
+            logger.error(
+                f"❌ [RECONNECT] Room {self.room_id} timed out after {self.RECONNECTION_TIMEOUT}s, "
+                "closing permanently"
+            )
+            # The close will be handled by the room itself
+
+        except asyncio.CancelledError:
+            logger.info(
+                f"[RECONNECT] Timeout cancelled for room {self.room_id} (reconnected)"
+            )
+
+    def get_status(self) -> dict:
+        """Get reconnection status."""
+        if not self.reconnection_start_time:
+            return {"is_waiting": False}
+
+        elapsed = (datetime.utcnow() - self.reconnection_start_time).total_seconds()
+        remaining = max(0, self.RECONNECTION_TIMEOUT - elapsed)
+
+        return {
+            "is_waiting": True,
+            "elapsed_seconds": elapsed,
+            "remaining_seconds": remaining,
+            "timeout_seconds": self.RECONNECTION_TIMEOUT,
+        }
 
 
 class Room:
@@ -24,32 +267,35 @@ class Room:
         self.session_id = session_id
         self.room_db_id = room_db_id
         self.pcs: Set[RTCPeerConnection] = set()
-        self.streamer_pcs: Set[RTCPeerConnection] = (
-            set()
-        )  # Track streamer connections separately
-        self.viewer_pcs: Set[RTCPeerConnection] = (
-            set()
-        )  # Track viewer connections separately
+        self.streamer_pcs: Set[RTCPeerConnection] = set()
+        self.viewer_pcs: Set[RTCPeerConnection] = set()
         self.is_active = True
-        self.reconnect_timeout_task: Optional[asyncio.Task] = None
         self._db_service = StreamingDatabaseService()
 
-        # Stream activity monitoring
-        self.last_data_timestamp = time.time()  # Track last data activity
-        self.activity_monitor_task: Optional[asyncio.Task] = None
-        self.STREAM_TIMEOUT_SECONDS = 30  # End stream if no data for 30 seconds
+        # Professional handlers (NEW!)
+        self.activity_monitor = StreamActivityMonitor(room_id, session_id)
+        self.reconnection_handler = ReconnectionHandler(room_id, room_db_id)
 
-        # Video track for recording
+        # DEPRECATED: Old monitoring attributes (keeping for backward compatibility)
+        self.reconnect_timeout_task: Optional[asyncio.Task] = None
+        self.last_data_timestamp = time.time()
+        self.activity_monitor_task: Optional[asyncio.Task] = None
+        self.STREAM_TIMEOUT_SECONDS = 30
+
+        # Video track for recording AND for new viewer connections
         self.video_track = None
+        self.relayed_track = None  # Store relayed track for new viewers
 
     async def close(self):
         """Close all peer connections and clean up resources."""
         try:
             if self.is_active:
-                # Cancel activity monitoring task
-                if self.activity_monitor_task:
-                    self.activity_monitor_task.cancel()
-                    self.activity_monitor_task = None
+                # Stop professional handlers
+                self.activity_monitor.stop_monitoring()
+
+                # Cancel reconnection if active
+                if self.reconnection_handler.timeout_task:
+                    self.reconnection_handler.timeout_task.cancel()
 
                 # Update room status in database
                 if self.room_db_id:
@@ -65,12 +311,10 @@ class Room:
                 self.viewer_pcs.clear()
 
                 self.is_active = False
+                logger.info(f"✅ [CLOSE] Room {self.room_id} closed successfully")
 
-        except (OSError, ConnectionError, RuntimeError) as e:
-            logger.error("Error closing room %s: %s", self.room_id, str(e))
-            raise
         except Exception as e:
-            logger.error("Unexpected error closing room %s: %s", self.room_id, str(e))
+            logger.error(f"[CLOSE] Error closing room {self.room_id}: {e}")
             raise
 
     async def handle_disconnection(self):
@@ -79,230 +323,47 @@ class Room:
             if not self.is_active:
                 return
 
-            # Cancel activity monitoring task
-            if self.activity_monitor_task:
-                self.activity_monitor_task.cancel()
-                self.activity_monitor_task = None
+            # Stop activity monitoring
+            self.activity_monitor.stop_monitoring()
 
-            # Update room status to disconnected (but keep session active)
-            if self.room_db_id:
-                await self._db_service.update_camera_room_status(
-                    self.room_db_id, connected=False
-                )
-
-            # Set up reconnection timeout (5 minutes)
-            if self.reconnect_timeout_task:
-                self.reconnect_timeout_task.cancel()
-
-            self.reconnect_timeout_task = asyncio.create_task(
-                self._handle_reconnection_timeout()
-            )
+            # Start 5-minute reconnection window
+            await self.reconnection_handler.start_reconnection_window()
 
             self.is_active = False
-            logger.info(
-                "Room %s disconnected, session remains active, waiting for reconnection",
-                self.room_id,
+            logger.warning(
+                f"⚠️ [DISCONNECT] Room {self.room_id} disconnected, waiting for reconnection"
             )
 
-        except (OSError, ConnectionError, RuntimeError) as e:
-            logger.error(
-                "Error handling disconnection for room %s: %s", self.room_id, str(e)
-            )
-            raise
         except Exception as e:
             logger.error(
-                "Unexpected error handling disconnection for room %s: %s",
-                self.room_id,
-                str(e),
+                f"[DISCONNECT] Error handling disconnection for room {self.room_id}: {e}"
             )
             raise
 
     async def reactivate(self):
         """Reactivate room for reconnection."""
         try:
-            if self.reconnect_timeout_task:
-                self.reconnect_timeout_task.cancel()
-                self.reconnect_timeout_task = None
+            # Cancel reconnection timeout
+            await self.reconnection_handler.cancel_reconnection()
 
-            # Update room status in database
-            if self.room_db_id:
-                await self._db_service.update_camera_room_status(
-                    self.room_db_id, connected=True
-                )
-
-            # Reset activity timestamp and restart monitoring
-            self.last_data_timestamp = time.time()
+            # Restart activity monitoring
             if len(self.streamer_pcs) > 0:
-                self._start_activity_monitoring()
+                self.activity_monitor.start_monitoring(len(self.streamer_pcs))
 
             self.is_active = True
-            logger.info("Room %s reactivated successfully", self.room_id)
+            logger.info(f"✅ [REACTIVATE] Room {self.room_id} reactivated successfully")
 
-        except (OSError, ConnectionError, RuntimeError) as e:
-            logger.error("Error reactivating room %s: %s", self.room_id, str(e))
-            raise
         except Exception as e:
-            logger.error(
-                "Unexpected error reactivating room %s: %s", self.room_id, str(e)
-            )
-            raise
-
-    async def _handle_reconnection_timeout(self):
-        """Handle reconnection timeout - permanently close room after waiting."""
-        try:
-            # Wait 5 minutes for reconnection
-            await asyncio.sleep(300)
-
-            if not self.is_active:  # Still inactive after timeout
-                logger.info(
-                    "Room %s timed out waiting for reconnection, closing permanently",
-                    self.room_id,
-                )
-                await self.close()
-
-        except asyncio.CancelledError:
-            # Reconnection happened, timeout was cancelled
-            logger.info("Reconnection timeout cancelled for room %s", self.room_id)
-        except (OSError, ConnectionError, RuntimeError) as e:
-            logger.error(
-                "Error in reconnection timeout for room %s: %s", self.room_id, str(e)
-            )
-            raise
-        except Exception as e:
-            logger.error(
-                "Unexpected error in reconnection timeout for room %s: %s",
-                self.room_id,
-                str(e),
-            )
+            logger.error(f"[REACTIVATE] Error reactivating room {self.room_id}: {e}")
             raise
 
     def update_stream_activity(self):
         """Update the last data timestamp when stream data is received."""
-        old_timestamp = self.last_data_timestamp
+        # Use professional activity monitor
+        self.activity_monitor.update_activity()
+
+        # Update legacy attribute for backward compatibility
         self.last_data_timestamp = time.time()
-
-        # DEBUG: Log EVERY update to verify this is being called on every frame
-        # This should fire ~30 times per second if working correctly
-        logger.debug(
-            "[FRAME] Room %s activity updated (delta: %.4fs)",
-            self.room_id,
-            self.last_data_timestamp - old_timestamp if old_timestamp else 0,
-        )
-
-    def _start_activity_monitoring(self):
-        """Start monitoring stream activity for timeout."""
-        if self.activity_monitor_task and not self.activity_monitor_task.done():
-            return  # Already monitoring
-
-        self.activity_monitor_task = asyncio.create_task(
-            self._monitor_stream_activity()
-        )
-        logger.info("Started stream activity monitoring for room %s", self.room_id)
-
-    def _stop_activity_monitoring(self):
-        """Stop monitoring stream activity."""
-        if self.activity_monitor_task:
-            self.activity_monitor_task.cancel()
-            self.activity_monitor_task = None
-            logger.info("Stopped stream activity monitoring for room %s", self.room_id)
-
-    async def _monitor_stream_activity(self):
-        """Monitor stream activity and end room if no data for specified timeout."""
-        try:
-            logger.info(
-                "[MONITOR] Started activity monitoring for room %s (timeout: %ds)",
-                self.room_id,
-                self.STREAM_TIMEOUT_SECONDS,
-            )
-
-            while self.is_active and len(self.streamer_pcs) > 0:
-                await asyncio.sleep(5)  # Check every 5 seconds
-
-                # Calculate time since last data
-                time_since_data = time.time() - self.last_data_timestamp
-
-                # DEBUG: Log monitoring check
-                logger.debug(
-                    "[MONITOR] Room %s check: active=%s, streamers=%d, last_data=%.2fs ago",
-                    self.room_id,
-                    self.is_active,
-                    len(self.streamer_pcs),
-                    time_since_data,
-                )
-
-                if time_since_data >= self.STREAM_TIMEOUT_SECONDS:
-                    logger.warning(
-                        "Room %s has been inactive for %d seconds (timeout: %d), ending stream",
-                        self.room_id,
-                        int(time_since_data),
-                        self.STREAM_TIMEOUT_SECONDS,
-                    )
-
-                    # End the stream session due to inactivity
-                    await self._end_session_due_to_inactivity()
-                    break
-
-                # Log periodic status for monitoring
-                if int(time_since_data) % 15 == 0 and time_since_data >= 15:
-                    logger.info(
-                        "Room %s: %d seconds since last data (will timeout at %d)",
-                        self.room_id,
-                        int(time_since_data),
-                        self.STREAM_TIMEOUT_SECONDS,
-                    )
-
-            # Loop exited - log why
-            logger.info(
-                "[MONITOR] Monitoring loop exited for room %s: active=%s, streamers=%d",
-                self.room_id,
-                self.is_active,
-                len(self.streamer_pcs),
-            )
-
-        except asyncio.CancelledError:
-            logger.info(
-                "[MONITOR] Stream activity monitoring cancelled for room %s",
-                self.room_id,
-            )
-        except (OSError, ConnectionError, RuntimeError) as e:
-            logger.error(
-                "Database error in activity monitoring for room %s: %s",
-                self.room_id,
-                str(e),
-            )
-        except Exception as e:
-            logger.error(
-                "Unexpected error in activity monitoring for room %s: %s",
-                self.room_id,
-                str(e),
-            )
-
-    async def _end_session_due_to_inactivity(self):
-        """End the streaming session due to inactivity."""
-        try:
-            # End the ambulance session (which also disconnects all camera rooms)
-            if self.session_id:
-                await self._db_service.end_ambulance_session(self.session_id)
-                logger.info(
-                    "Ended session %s for room %s due to stream inactivity (no data for %d seconds)",
-                    self.session_id,
-                    self.room_id,
-                    self.STREAM_TIMEOUT_SECONDS,
-                )
-
-            # Close the room
-            await self.close()
-
-        except (OSError, ConnectionError, RuntimeError) as e:
-            logger.error(
-                "Database error ending session for room %s: %s", self.room_id, str(e)
-            )
-            raise
-        except Exception as e:
-            logger.error(
-                "Unexpected error ending session for room %s: %s", self.room_id, str(e)
-            )
-            raise
 
     def add_peer_connection(self, pc: RTCPeerConnection, is_streamer: bool = False):
         """Add a peer connection to this room.
@@ -335,8 +396,7 @@ class Room:
             # Only update room status to connected when STREAMER joins
             if was_streamer_empty:
                 logger.info(
-                    "Room %s now has streamer connection, updating status to connected",
-                    self.room_id,
+                    f"✅ Room {self.room_id} now has streamer connection, updating status to connected"
                 )
                 asyncio.create_task(self._update_room_connected())
 
@@ -344,9 +404,8 @@ class Room:
                 if self.session_id:
                     asyncio.create_task(self._start_recording_when_track_ready())
 
-                # Start activity monitoring when first streamer connects
-                self.last_data_timestamp = time.time()
-                self._start_activity_monitoring()
+                # Start professional activity monitoring when first streamer connects
+                self.activity_monitor.start_monitoring(len(self.streamer_pcs))
         else:
             self.viewer_pcs.add(pc)
             logger.info(
@@ -375,28 +434,25 @@ class Room:
 
                 # Only update room status to disconnected when NO STREAMERS remain
                 if len(self.streamer_pcs) == 0:
-                    logger.info(
-                        "Room %s has no streamer connections, updating status to disconnected",
-                        self.room_id,
+                    logger.warning(
+                        f"⚠️ Room {self.room_id} has no streamer connections, updating status to disconnected"
                     )
-                    # Stop activity monitoring when no streamers remain
-                    self._stop_activity_monitoring()
+                    # Stop professional activity monitoring when no streamers remain
+                    self.activity_monitor.stop_monitoring()
                     asyncio.create_task(self._update_room_disconnected())
 
                     # Stop HLS recording when last streamer disconnects
                     if self.session_id:
                         try:
                             logger.info(
-                                f"Stopping HLS recording for session {self.session_id}"
+                                f"Stopping HLS recording for room {self.room_id} (session {self.session_id})"
                             )
                             asyncio.create_task(
-                                recording_manager.stop_session_recording(
-                                    self.session_id
-                                )
+                                recording_manager.stop_session_recording(self.room_id)
                             )
                         except Exception as e:
                             logger.error(
-                                f"Failed to stop recording for session {self.session_id}: {e}"
+                                f"Failed to stop recording for room {self.room_id} (session {self.session_id}): {e}"
                             )
 
             # Check if this was a viewer connection
@@ -521,11 +577,14 @@ class Room:
                         self.room_id.split("-")[1] if "-" in self.room_id else "unknown"
                     )
                     logger.info(
-                        f"Video track ready, starting HLS recording for session {self.session_id}"
+                        f"Video track ready, starting HLS recording for room {self.room_id} (session {self.session_id})"
                     )
 
                     await recording_manager.start_session_recording(
-                        self.session_id, ambulance_number, self.video_track
+                        self.session_id,
+                        self.room_id,
+                        ambulance_number,
+                        self.video_track,
                     )
                     return
 
@@ -533,7 +592,7 @@ class Room:
 
             # Timeout - video track never received
             logger.error(
-                f"Timeout waiting for video track for session {self.session_id}"
+                f"Timeout waiting for video track for room {self.room_id} (session {self.session_id})"
             )
 
         except Exception as e:

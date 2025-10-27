@@ -33,20 +33,15 @@ def get_media_player(media_src: str) -> MediaPlayer:
     if os_name == "Windows":
         format = "dshow"
         options = {
-            "input_format": "h264",
             "framerate": "30",
             "video_size": "640x480",
-            "ar": "44100",
-            "ac": "1",
-            "rtbufsize": "2100M",
-            "preset": "ultrafast",
-            "tune": "zerolatency",
+            # Removed rtbufsize - let FFmpeg use default small buffer for real-time streaming
         }
     elif os_name == "Darwin":
         format = "avfoundation"
         options = {
-            "video_size": "320x240",  # Low resolution
-            "framerate": "10",  # Low framerate
+            "video_size": "640x480",  # Increased from 320x240
+            "framerate": "30",  # Increased from 10
             "pixel_format": "yuyv422",
         }
     return MediaPlayer(media_src, format=format, options=options)
@@ -228,7 +223,16 @@ async def publish(
 
     player = get_media_player(media_src)
 
-    pc = RTCPeerConnection()
+    # Create peer connection with STUN servers for better connectivity
+    from aiortc import RTCConfiguration, RTCIceServer
+
+    config = RTCConfiguration(
+        iceServers=[
+            RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
+            RTCIceServer(urls=["stun:stun1.l.google.com:19302"]),
+        ]
+    )
+    pc = RTCPeerConnection(configuration=config)
 
     if player.video:
         pc.addTrack(player.video)

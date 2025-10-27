@@ -1,0 +1,344 @@
+/**
+ * useHLS Hook
+ *
+ * React hook for managing HLS.js player lifecycle and state.
+ * Handles player initialization, cleanup, events, and error recovery.
+ */
+
+import { HLSRecordingStatus, hlsService } from "@/services/hlsService";
+import Hls, { ErrorData, Events } from "hls.js";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+export interface UseHLSOptions {
+  /** Session ID for the recording */
+  sessionId: string | null;
+
+  /** Auto-play when ready */
+  autoPlay?: boolean;
+
+  /** Enable low latency mode for live streaming */
+  lowLatencyMode?: boolean;
+
+  /** Maximum buffer length in seconds */
+  maxBufferLength?: number;
+
+  /** Enable debug logging */
+  debug?: boolean;
+
+  /** Polling interval for status updates (ms) */
+  statusPollingInterval?: number;
+}
+
+export interface UseHLSReturn {
+  /** Video element ref to attach to <video> */
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+
+  /** Current HLS.js instance */
+  hls: Hls | null;
+
+  /** Loading state */
+  isLoading: boolean;
+
+  /** Error message if any */
+  error: string | null;
+
+  /** Current status message */
+  status: string;
+
+  /** Recording status from backend */
+  recordingStatus: HLSRecordingStatus | null;
+
+  /** Whether HLS is ready for playback */
+  isHLSReady: boolean;
+
+  /** Reload the HLS stream */
+  reload: () => void;
+
+  /** Manually start playback */
+  play: () => Promise<void>;
+
+  /** Pause playback */
+  pause: () => void;
+
+  /** Seek to specific time */
+  seek: (time: number) => void;
+}
+
+export function useHLS(options: UseHLSOptions): UseHLSReturn {
+  const {
+    sessionId,
+    autoPlay = false,
+    lowLatencyMode = false,
+    maxBufferLength = 30,
+    debug = false,
+    statusPollingInterval = 2000,
+  } = options;
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const pollCleanupRef = useRef<(() => void) | null>(null);
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string>("Initializing...");
+  const [recordingStatus, setRecordingStatus] =
+    useState<HLSRecordingStatus | null>(null);
+  const [isHLSReady, setIsHLSReady] = useState(false);
+
+  /**
+   * Initialize HLS player
+   */
+  const initializeHLS = useCallback(() => {
+    if (!sessionId || !videoRef.current) {
+      return;
+    }
+
+    const video = videoRef.current;
+    const playlistUrl = hlsService.getPlaylistUrl(sessionId);
+
+    if (debug) {
+      console.log("[useHLS] Initializing player for session:", sessionId);
+      console.log("[useHLS] Playlist URL:", playlistUrl);
+    }
+
+    // Clean up existing instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setStatus("Loading playlist...");
+
+    // Check browser support
+    if (Hls.isSupported()) {
+      // Modern browsers - use HLS.js
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode,
+        maxBufferLength,
+        debug,
+      });
+
+      hlsRef.current = hls;
+
+      // Load source
+      hls.loadSource(playlistUrl);
+      hls.attachMedia(video);
+
+      // Event: Manifest parsed
+      hls.on(Events.MANIFEST_PARSED, (event, data) => {
+        if (debug) {
+          console.log("[useHLS] Manifest parsed:", data);
+        }
+        setStatus("Ready to play");
+        setIsLoading(false);
+        setIsHLSReady(true);
+
+        if (autoPlay) {
+          video.play().catch((err) => {
+            console.warn("[useHLS] Auto-play prevented:", err);
+            setStatus("Click to play");
+          });
+        }
+      });
+
+      // Event: Fragment loading
+      hls.on(Events.FRAG_LOADING, (event, data) => {
+        if (debug) {
+          console.log(`[useHLS] Loading segment ${data.frag.sn}`);
+        }
+        setStatus(`Loading segment ${data.frag.sn}...`);
+      });
+
+      // Event: Fragment loaded
+      hls.on(Events.FRAG_LOADED, (event, data) => {
+        if (debug) {
+          console.log(`[useHLS] Segment ${data.frag.sn} loaded`);
+        }
+      });
+
+      // Event: Error
+      hls.on(Events.ERROR, (event, data: ErrorData) => {
+        if (debug) {
+          console.error("[useHLS] HLS error:", data);
+        }
+
+        if (data.fatal) {
+          setIsLoading(false);
+
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              setError(`Network error: ${data.details}`);
+              setStatus("Network error - retrying...");
+
+              // Try to recover
+              setTimeout(() => {
+                if (hlsRef.current) {
+                  hlsRef.current.startLoad();
+                }
+              }, 1000);
+              break;
+
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              setError(`Media error: ${data.details}`);
+              setStatus("Media error - recovering...");
+
+              // Try to recover
+              if (hlsRef.current) {
+                hlsRef.current.recoverMediaError();
+              }
+              break;
+
+            default:
+              setError(`Fatal error: ${data.details}`);
+              setStatus("Fatal error occurred");
+              break;
+          }
+        }
+      });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Safari - native HLS support
+      if (debug) {
+        console.log("[useHLS] Using native HLS support");
+      }
+
+      video.src = playlistUrl;
+
+      video.addEventListener("loadedmetadata", () => {
+        setStatus("Ready to play");
+        setIsLoading(false);
+        setIsHLSReady(true);
+
+        if (autoPlay) {
+          video.play().catch((err) => {
+            console.warn("[useHLS] Auto-play prevented:", err);
+            setStatus("Click to play");
+          });
+        }
+      });
+
+      video.addEventListener("error", () => {
+        setError("Failed to load recording");
+        setStatus("Error loading video");
+        setIsLoading(false);
+      });
+    } else {
+      setError("HLS not supported in this browser");
+      setStatus("Browser not supported");
+      setIsLoading(false);
+    }
+  }, [sessionId, autoPlay, lowLatencyMode, maxBufferLength, debug]);
+
+  /**
+   * Start polling recording status
+   */
+  const startStatusPolling = useCallback(() => {
+    if (!sessionId) return;
+
+    // Clean up existing polling
+    if (pollCleanupRef.current) {
+      pollCleanupRef.current();
+      pollCleanupRef.current = null;
+    }
+
+    // Start new polling
+    const cleanup = hlsService.pollRecordingStatus(
+      sessionId,
+      (status) => {
+        setRecordingStatus(status);
+
+        if (debug && status) {
+          console.log("[useHLS] Status update:", status);
+        }
+      },
+      statusPollingInterval
+    );
+
+    pollCleanupRef.current = cleanup;
+  }, [sessionId, statusPollingInterval, debug]);
+
+  /**
+   * Reload the stream
+   */
+  const reload = useCallback(() => {
+    if (debug) {
+      console.log("[useHLS] Reloading stream");
+    }
+    initializeHLS();
+  }, [initializeHLS, debug]);
+
+  /**
+   * Play video
+   */
+  const play = useCallback(async () => {
+    if (videoRef.current) {
+      try {
+        await videoRef.current.play();
+      } catch (err) {
+        console.error("[useHLS] Play error:", err);
+        throw err;
+      }
+    }
+  }, []);
+
+  /**
+   * Pause video
+   */
+  const pause = useCallback(() => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
+  }, []);
+
+  /**
+   * Seek to time
+   */
+  const seek = useCallback((time: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+    }
+  }, []);
+
+  /**
+   * Initialize player when sessionId changes
+   */
+  useEffect(() => {
+    if (sessionId) {
+      initializeHLS();
+      startStatusPolling();
+    } else {
+      setIsLoading(false);
+      setError("No session ID provided");
+      setStatus("No session");
+    }
+
+    // Cleanup
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+
+      if (pollCleanupRef.current) {
+        pollCleanupRef.current();
+        pollCleanupRef.current = null;
+      }
+    };
+  }, [sessionId, initializeHLS, startStatusPolling]);
+
+  return {
+    videoRef,
+    hls: hlsRef.current,
+    isLoading,
+    error,
+    status,
+    recordingStatus,
+    isHLSReady,
+    reload,
+    play,
+    pause,
+    seek,
+  };
+}

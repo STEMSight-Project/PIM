@@ -15,6 +15,39 @@
 
 ## ⚠️ CRITICAL PROJECT STANDARDS
 
+### Documentation and Testing Workflow
+
+**IMPORTANT**: Follow these strict guidelines when assisting with code changes:
+
+**Never create**:
+
+- ❌ New `.md` documentation files after code changes (unless explicitly requested)
+- ❌ Standalone test files (e.g., `test_*.py` outside pytest framework)
+- ❌ Summary documents or change logs after edits
+- ❌ Ad-hoc validation scripts for testing purposes
+
+**Always do**:
+
+- ✅ Run tests using terminal commands (`pytest`, `python -m pytest`, `npm test`)
+- ✅ Use existing testing frameworks (pytest for backend, Vitest for frontend)
+- ✅ Provide inline explanations in conversation instead of markdown files
+- ✅ Execute verification commands directly in terminal
+
+**Testing Commands**:
+
+```bash
+# Backend tests
+cd Back-End
+pytest                           # Run all tests
+pytest tests/specific_test.py    # Run specific test file
+python -m pytest -v             # Verbose output
+
+# Frontend tests
+cd Front-End
+npm test                        # Run all tests
+npm test -- ComponentName       # Run specific test
+```
+
 ### Testing Framework Requirements
 
 **IMPORTANT**: All tests must use the official testing frameworks. DO NOT create standalone test files.
