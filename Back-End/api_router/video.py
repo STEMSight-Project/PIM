@@ -303,50 +303,14 @@ async def get_hls_playlist(room_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/hls/{room_id}/{segment_name}")
-async def get_hls_segment(room_id: str, segment_name: str):
-    """
-    Get HLS segment file for playback
-
-    Args:
-        room_id: Camera room identifier
-        segment_name: Segment filename (e.g., segment-001.ts)
-    """
-    try:
-        # Security: Validate segment name to prevent path traversal
-        if (
-            not segment_name.endswith(".ts")
-            or ".." in segment_name
-            or "/" in segment_name
-        ):
-            raise HTTPException(status_code=400, detail="Invalid segment name")
-
-        segment_path = RECORDINGS_BASE_PATH / f"room-{room_id}" / segment_name
-
-        if not segment_path.exists():
-            raise HTTPException(status_code=404, detail="Segment not found")
-
-        return FileResponse(
-            path=segment_path,
-            media_type="video/MP2T",
-            headers={
-                "Cache-Control": "public, max-age=31536000",
-                "Access-Control-Allow-Origin": "*",
-            },
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error serving segment {segment_name} for {room_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get("/hls/{room_id}/status")
 async def get_recording_status(room_id: str):
     """
     Get status of a camera room recording (active or completed)
     Includes real-time segment count for monitoring HLS creation
+
+    ⚠️ IMPORTANT: This route MUST be defined BEFORE the catch-all segment route
+    to prevent /status from being captured as a segment name.
     """
     try:
         # Check if recording is active
@@ -392,6 +356,79 @@ async def get_recording_status(room_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting recording status for {room_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hls/{room_id}/{segment_name:path}")
+async def get_hls_segment(room_id: str, segment_name: str):
+    """
+    Get HLS segment file for playback
+
+    ⚠️ IMPORTANT: This catch-all route MUST be defined AFTER specific routes
+    like /status, /playlist.m3u8 to prevent path conflicts.
+
+    Args:
+        room_id: Camera room identifier
+        segment_name: Segment filename (e.g., segment-001.ts)
+    """
+    try:
+        # Debug logging
+        logger.info(
+            f"[HLS] Segment request - Room: {room_id}, Raw segment: '{segment_name}', Length: {len(segment_name)}, Repr: {repr(segment_name)}"
+        )
+
+        # Remove any leading slashes or backslashes first
+        segment_name = segment_name.lstrip("/\\")
+        logger.info(f"[HLS] After stripping: '{segment_name}'")
+
+        # Security: Validate segment name to prevent path traversal
+        # Only allow filename (no subdirectories)
+        if "/" in segment_name or "\\" in segment_name:
+            logger.warning(f"Segment name contains path separators: {segment_name}")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid segment name - no subdirectories allowed",
+            )
+
+        # Prevent directory traversal
+        if ".." in segment_name:
+            logger.warning(f"Directory traversal attempted: {segment_name}")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid segment name - directory traversal not allowed",
+            )
+
+        # Allow only .ts files (check lowercase to handle case variations)
+        if not segment_name.lower().endswith(".ts"):
+            logger.warning(
+                f"Non-TS file requested: '{segment_name}' (ends with: '{segment_name[-10:] if len(segment_name) > 10 else segment_name}')"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid segment name - only .ts files allowed (got: {segment_name})",
+            )
+
+        segment_path = RECORDINGS_BASE_PATH / f"room-{room_id}" / segment_name
+
+        if not segment_path.exists():
+            logger.warning(f"Segment not found: {segment_path}")
+            raise HTTPException(
+                status_code=404, detail=f"Segment not found: {segment_name}"
+            )
+
+        return FileResponse(
+            path=segment_path,
+            media_type="video/MP2T",
+            headers={
+                "Cache-Control": "public, max-age=31536000",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving segment {segment_name} for {room_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -577,7 +614,7 @@ async def serve_hls_playlist_public(room_id: str):
     return await get_hls_playlist(room_id)
 
 
-@public_hls_router.get("/hls/{room_id}/{segment_name}")
+@public_hls_router.get("/hls/{room_id}/{segment_name:path}")
 async def serve_hls_segment_public(room_id: str, segment_name: str):
     """Serve HLS segment file (public endpoint)"""
     return await get_hls_segment(room_id, segment_name)

@@ -298,6 +298,13 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
   const seek = useCallback((time: number) => {
     if (videoRef.current) {
       videoRef.current.currentTime = time;
+
+      // If video is paused, play it after seeking
+      if (videoRef.current.paused) {
+        videoRef.current.play().catch((err) => {
+          console.warn("[useHLS] Play after seek prevented:", err);
+        });
+      }
     }
   }, []);
 

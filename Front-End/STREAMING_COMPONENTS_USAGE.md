@@ -1,6 +1,7 @@
 # 🎥 Streaming Components - Usage Guide
 
 ## Overview
+
 All streaming components now use **room-based architecture** instead of session-based. This matches the backend test player endpoints.
 
 ---
@@ -8,17 +9,19 @@ All streaming components now use **room-based architecture** instead of session-
 ## ✅ Updated Components
 
 ### 1. **HLSPlayer** (Full-featured player)
+
 **File:** `components/HLSPlayer.tsx`
 
 **Props:**
+
 ```typescript
 interface HLSPlayerProps {
-  roomId: string | null;           // Room ID (e.g., "AMB-001-ROOM-001")
-  autoPlay?: boolean;               // Default: false
-  showControls?: boolean;           // Default: true
-  showStatus?: boolean;             // Default: true
-  showStats?: boolean;              // Default: false
-  lowLatencyMode?: boolean;         // Default: false
+  roomId: string | null; // Room ID (e.g., "AMB-001-ROOM-001")
+  autoPlay?: boolean; // Default: false
+  showControls?: boolean; // Default: true
+  showStatus?: boolean; // Default: true
+  showStats?: boolean; // Default: false
+  lowLatencyMode?: boolean; // Default: false
   className?: string;
   debug?: boolean;
   onReady?: () => void;
@@ -27,6 +30,7 @@ interface HLSPlayerProps {
 ```
 
 **Usage:**
+
 ```tsx
 import { HLSPlayer } from "@/components/HLSPlayer";
 
@@ -37,10 +41,11 @@ import { HLSPlayer } from "@/components/HLSPlayer";
   showStatus={true}
   showStats={true}
   className="w-full"
-/>
+/>;
 ```
 
 **Features:**
+
 - ✅ Built-in controls and status display
 - ✅ Real-time segment count updates
 - ✅ Recording status polling
@@ -50,23 +55,26 @@ import { HLSPlayer } from "@/components/HLSPlayer";
 ---
 
 ### 2. **HLSVideoPlayer** (Simple player)
+
 **File:** `components/HLSVideoPlayer.tsx`
 
 **Props:**
+
 ```typescript
 interface HLSVideoPlayerProps {
-  roomId: string | null;            // Room ID
-  autoPlay?: boolean;               // Default: false
-  controls?: boolean;               // Default: true (native controls)
-  lowLatencyMode?: boolean;         // Default: false
+  roomId: string | null; // Room ID
+  autoPlay?: boolean; // Default: false
+  controls?: boolean; // Default: true (native controls)
+  lowLatencyMode?: boolean; // Default: false
   className?: string;
-  aspectRatio?: string;             // Default: "aspect-video"
+  aspectRatio?: string; // Default: "aspect-video"
   onReady?: () => void;
   onError?: (error: string) => void;
 }
 ```
 
 **Usage:**
+
 ```tsx
 import { HLSVideoPlayer } from "@/components/HLSVideoPlayer";
 
@@ -75,10 +83,11 @@ import { HLSVideoPlayer } from "@/components/HLSVideoPlayer";
   autoPlay={false}
   controls={true}
   className="w-full rounded-lg"
-/>
+/>;
 ```
 
 **Features:**
+
 - ✅ Minimal UI (just video element)
 - ✅ Native browser controls
 - ✅ Loading and error overlays
@@ -87,20 +96,23 @@ import { HLSVideoPlayer } from "@/components/HLSVideoPlayer";
 ---
 
 ### 3. **HybridStreamPlayer** (Live + Playback)
+
 **File:** `components/HybridStreamPlayer.tsx`
 
 **Props:**
+
 ```typescript
 interface HybridStreamPlayerProps {
-  ambulanceId: string;              // Ambulance ID for live streaming
-  roomId: string;                   // Room ID for both live and playback
+  ambulanceId: string; // Ambulance ID for live streaming
+  roomId: string; // Room ID for both live and playback
   className?: string;
-  showAdvancedControls?: boolean;   // Default: false (skip buttons)
-  debug?: boolean;                  // Default: false
+  showAdvancedControls?: boolean; // Default: false (skip buttons)
+  debug?: boolean; // Default: false
 }
 ```
 
 **Usage:**
+
 ```tsx
 import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
 
@@ -109,10 +121,11 @@ import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
   roomId="AMB-001-ROOM-001"
   showAdvancedControls={true}
   debug={false}
-/>
+/>;
 ```
 
 **Features:**
+
 - ✅ Seamless switch between Live WebRTC and HLS Playback
 - ✅ Timeline scrubbing with live edge indicator
 - ✅ "Go Live" button to jump back to live
@@ -121,10 +134,12 @@ import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
 - ✅ DVR-style playback with seek controls
 
 **View Modes:**
+
 - **Live Mode**: WebRTC real-time streaming (low latency)
 - **Playback Mode**: HLS recorded footage (seekable)
 
 **User Flow:**
+
 1. Component loads → Auto-starts **Live Mode**
 2. User clicks **Pause** → Switches to **Playback Mode**
 3. User scrubs timeline → Stays in **Playback Mode**
@@ -135,6 +150,7 @@ import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
 ## 🔄 Migration Guide
 
 ### Before (Session-based) ❌
+
 ```tsx
 // OLD - Don't use this anymore
 <HLSPlayer sessionId={currentSessionId} />
@@ -147,6 +163,7 @@ import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
 ```
 
 ### After (Room-based) ✅
+
 ```tsx
 // NEW - Use room ID directly
 <HLSPlayer roomId={selectedRoomId} />
@@ -171,6 +188,7 @@ GET  /videos/hls/list                     # List all recordings
 ```
 
 **Example API Response:**
+
 ```json
 {
   "room_id": "AMB-001-ROOM-001",
@@ -189,28 +207,27 @@ GET  /videos/hls/list                     # List all recordings
 ## 🎯 Recommended Usage
 
 ### For Simple Playback
+
 Use **HLSVideoPlayer** when you just need a basic video player:
+
 ```tsx
 <HLSVideoPlayer roomId={roomId} controls={true} />
 ```
 
 ### For Dashboard Monitoring
+
 Use **HLSPlayer** when you need status info and statistics:
+
 ```tsx
-<HLSPlayer
-  roomId={roomId}
-  showStatus={true}
-  showStats={true}
-/>
+<HLSPlayer roomId={roomId} showStatus={true} showStats={true} />
 ```
 
 ### For Live + Playback Hybrid
+
 Use **HybridStreamPlayer** for the best user experience:
+
 ```tsx
-<HybridStreamPlayer
-  ambulanceId={ambulanceId}
-  roomId={selectedRoomId}
-/>
+<HybridStreamPlayer ambulanceId={ambulanceId} roomId={selectedRoomId} />
 ```
 
 ---
@@ -220,24 +237,28 @@ Use **HybridStreamPlayer** for the best user experience:
 Test the updated components:
 
 1. **Start Backend:**
+
    ```bash
    cd Back-End
    python -m uvicorn main:app --reload
    ```
 
 2. **Start Frontend:**
+
    ```bash
    cd Front-End
    npm run dev
    ```
 
 3. **Start Broadcaster:**
+
    ```bash
    cd Back-End/Testing_files
    python broadcaster.py --ambulance_number 001 --room 001 --video_device "Logitech BRIO"
    ```
 
 4. **Test Playback:**
+
    - Go to: http://localhost:3000/streamingDash/AMB-001?room=AMB-001-ROOM-001
    - Toggle to "Playback (HLS)" mode
    - Should see recorded footage with controls
@@ -252,16 +273,19 @@ Test the updated components:
 ## 🐛 Troubleshooting
 
 ### "No recording available"
+
 - Check if broadcaster is running
 - Wait 10-15 seconds for FFmpeg to create playlist
 - Check backend logs for recording errors
 
 ### "Playlist not found"
+
 - Verify room ID is correct (e.g., "AMB-001-ROOM-001")
 - Check recordings directory: `Back-End/recordings/room-{room_id}/`
 - Ensure FFmpeg is installed and in PATH
 
 ### "HLS not supported"
+
 - Update browser (Chrome 34+, Safari 8+, Firefox 42+)
 - Check console for HLS.js errors
 - Try native HLS in Safari

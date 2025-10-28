@@ -213,9 +213,7 @@ export function HLSPlayer({
         <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-600">Room ID:</span>
-            <span className="font-mono text-xs">
-              {recordingStatus.room_id}
-            </span>
+            <span className="font-mono text-xs">{recordingStatus.room_id}</span>
           </div>
 
           {recordingStatus.session_id && (

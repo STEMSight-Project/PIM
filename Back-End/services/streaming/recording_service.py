@@ -51,6 +51,26 @@ class SessionRecorder:
         # Create recording directory
         self.recording_path.mkdir(parents=True, exist_ok=True)
 
+    def get_duration(self) -> int:
+        """Get recording duration in seconds"""
+        if not self.start_time:
+            return 0
+        return int((datetime.utcnow() - self.start_time).total_seconds())
+
+    def get_segment_count(self) -> int:
+        """Get number of HLS segments created"""
+        if not self.recording_path.exists():
+            return 0
+        return len(list(self.recording_path.glob("segment-*.ts")))
+
+    def is_hls_ready(self) -> bool:
+        """Check if HLS playlist is ready for playback"""
+        return self.playlist_path.exists() and self.get_segment_count() >= 3
+
+    def get_playlist_url(self) -> str:
+        """Get HLS playlist URL"""
+        return f"/videos/hls/{self.room_id}/playlist.m3u8"
+
     async def start_recording(self, video_track: MediaStreamTrack):
         """Start recording from WebRTC video track"""
         try:
