@@ -25,7 +25,7 @@ export interface UseHLSOptions {
   /** Enable debug logging */
   debug?: boolean;
 
-  /** Polling interval for status updates (ms) */
+  /** Polling interval for status updates (ms) - default: 15000ms (15s, matches segment duration/2) */
   statusPollingInterval?: number;
 }
 
@@ -71,12 +71,14 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
     lowLatencyMode = false,
     maxBufferLength = 30,
     debug = false,
-    statusPollingInterval = 2000,
+    statusPollingInterval = 15000, // Poll every 15 seconds (half of 30s segment duration)
   } = options;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const pollCleanupRef = useRef<(() => void) | null>(null);
+  const lastDurationRef = useRef<number>(0);
+  const reloadTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +158,72 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
       hls.on(Events.FRAG_LOADED, (event, data) => {
         if (debug) {
           console.log(`[useHLS] Segment ${data.frag.sn} loaded`);
+        }
+
+        // Check if new segments might be available (for live/growing recordings)
+        // Reload playlist every 15 seconds to check for new segments (half of segment duration)
+        if (reloadTimerRef.current) {
+          clearTimeout(reloadTimerRef.current);
+        }
+
+        reloadTimerRef.current = setTimeout(() => {
+          if (hlsRef.current) {
+            const currentDuration = videoRef.current?.duration || 0;
+
+            // Only reload if we're near the end (within 30 seconds) or duration changed
+            const isNearEnd = videoRef.current
+              ? Math.abs(currentDuration - videoRef.current.currentTime) < 30
+              : false;
+
+            if (isNearEnd || currentDuration !== lastDurationRef.current) {
+              if (debug) {
+                console.log(
+                  `[useHLS] Reloading playlist to check for new segments (duration: ${currentDuration}s)`
+                );
+              }
+
+              lastDurationRef.current = currentDuration;
+              hlsRef.current.loadLevel = -1; // Reset to auto quality
+
+              // Trigger playlist reload without disrupting playback
+              try {
+                hlsRef.current.startLoad();
+              } catch (err) {
+                if (debug) {
+                  console.warn("[useHLS] Error reloading playlist:", err);
+                }
+              }
+            }
+          }
+        }, 15000); // Check every 15 seconds (half of 30-second segments)
+      });
+
+      // Event: Level updated (playlist updated with new segments)
+      hls.on(Events.LEVEL_UPDATED, (event, data) => {
+        if (debug) {
+          console.log(
+            `[useHLS] Playlist updated - segments: ${
+              data.details?.fragments?.length || 0
+            }`
+          );
+        }
+
+        // Force video to update its duration
+        if (
+          videoRef.current &&
+          videoRef.current.duration !== lastDurationRef.current
+        ) {
+          const newDuration = videoRef.current.duration;
+          lastDurationRef.current = newDuration;
+
+          if (debug) {
+            console.log(
+              `[useHLS] Duration updated: ${newDuration.toFixed(2)}s`
+            );
+          }
+
+          // Dispatch a custom event to notify components about duration update
+          videoRef.current.dispatchEvent(new Event("durationchange"));
         }
       });
 
@@ -323,6 +391,12 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
 
     // Cleanup
     return () => {
+      // Clear reload timer
+      if (reloadTimerRef.current) {
+        clearTimeout(reloadTimerRef.current);
+        reloadTimerRef.current = null;
+      }
+
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;

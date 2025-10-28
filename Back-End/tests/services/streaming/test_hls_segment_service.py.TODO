@@ -1,0 +1,88 @@
+"""
+Unit tests for HLS segment service
+Tests segment monitoring and management functionality.
+"""
+import pytest
+from pathlib import Path
+from unittest.mock import MagicMock, AsyncMock, patch
+from services.streaming.hls_segment_service import HLSSegmentService
+
+
+class TestHLSSegmentService:
+    """Test HLSSegmentService class"""
+
+    def test_init(self):
+        """Test HLSSegmentService initialization"""
+        service = HLSSegmentService()
+        
+        assert isinstance(service.monitored_rooms, dict)
+        assert len(service.monitored_rooms) == 0
+
+    @pytest.mark.asyncio
+    async def test_start_monitoring_room(self, temp_recording_dir):
+        """Test starting room monitoring"""
+        service = HLSSegmentService()
+        room_id = "AMB-001-ROOM-001"
+        
+        await service.start_monitoring_room(room_id, temp_recording_dir)
+        
+        assert room_id in service.monitored_rooms
+        assert service.monitored_rooms[room_id]["path"] == temp_recording_dir
+        assert "segments" in service.monitored_rooms[room_id]
+
+    @pytest.mark.asyncio
+    async def test_stop_monitoring_room(self, temp_recording_dir):
+        """Test stopping room monitoring"""
+        service = HLSSegmentService()
+        room_id = "AMB-001-ROOM-001"
+        
+        await service.start_monitoring_room(room_id, temp_recording_dir)
+        await service.stop_monitoring_room(room_id)
+        
+        assert room_id not in service.monitored_rooms
+
+    @pytest.mark.asyncio
+    async def test_stop_monitoring_room_not_found(self):
+        """Test stopping monitoring for non-existent room"""
+        service = HLSSegmentService()
+        
+        # Should not raise exception
+        await service.stop_monitoring_room("non-existent-room")
+
+    @pytest.mark.asyncio
+    async def test_get_room_segments(self, temp_recording_dir):
+        """Test getting segments for a room"""
+        service = HLSSegmentService()
+        room_id = "AMB-001-ROOM-001"
+        
+        # Create mock segments
+        for i in range(3):
+            (temp_recording_dir / f"segment-{i:03d}.ts").touch()
+        
+        await service.start_monitoring_room(room_id, temp_recording_dir)
+        segments = service.get_room_segments(room_id)
+        
+        assert len(segments) >= 3
+
+    def test_get_room_segments_not_monitored(self):
+        """Test getting segments for non-monitored room"""
+        service = HLSSegmentService()
+        
+        segments = service.get_room_segments("non-existent-room")
+        
+        assert segments == []
+
+    @pytest.mark.asyncio
+    async def test_check_new_segments(self, temp_recording_dir):
+        """Test detecting new segments"""
+        service = HLSSegmentService()
+        room_id = "AMB-001-ROOM-001"
+        
+        await service.start_monitoring_room(room_id, temp_recording_dir)
+        
+        # Create new segment
+        (temp_recording_dir / "segment-000.ts").touch()
+        
+        new_segments = await service.check_new_segments(room_id)
+        
+        assert len(new_segments) > 0

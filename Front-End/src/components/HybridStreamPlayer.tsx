@@ -17,6 +17,7 @@
 
 "use client";
 
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useHLS } from "@/hooks/useHLS";
 import { useStreaming } from "@/hooks/useStreaming";
@@ -29,7 +30,6 @@ import {
   PlayIcon,
   SignalIcon,
 } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface HybridStreamPlayerProps {
   /** Ambulance ID for live streaming */
@@ -154,18 +154,33 @@ export function HybridStreamPlayer({
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
 
+    // Handler for duration change (when new segments are added)
+    const handleDurationChange = () => {
+      const newDuration = video.duration || 0;
+      if (newDuration !== duration) {
+        setDuration(newDuration);
+        if (debug) {
+          console.log(
+            `[HybridPlayer] Video duration updated: ${newDuration.toFixed(2)}s`
+          );
+        }
+      }
+    };
+
     video.addEventListener("timeupdate", handleTimeUpdate);
     video.addEventListener("play", handlePlay);
     video.addEventListener("pause", handlePause);
     video.addEventListener("loadedmetadata", handleTimeUpdate);
+    video.addEventListener("durationchange", handleDurationChange);
 
     return () => {
       video.removeEventListener("timeupdate", handleTimeUpdate);
       video.removeEventListener("play", handlePlay);
       video.removeEventListener("pause", handlePause);
       video.removeEventListener("loadedmetadata", handleTimeUpdate);
+      video.removeEventListener("durationchange", handleDurationChange);
     };
-  }, [hlsVideoRef, viewMode]);
+  }, [hlsVideoRef, viewMode, duration, debug]);
 
   // ============================================================================
   // EFFECTS - POLL DVR INFO (Update live edge during playback)

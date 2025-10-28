@@ -1,6 +1,20 @@
 """
 HLS Recording Service for Ambulance Camera Streams
 Direct FFmpeg Pipeline for WebRTC to HLS conversion
+
+Database Schema (ambulance_session_recordings):
+- id: UUID (auto-generated primary key)
+- session_id: UUID (foreign key to ambulance_streaming_sessions)
+- camera_id: TEXT (camera identifier, e.g., "AMB-002-CAM-01")
+- recording_path: TEXT (local recording directory path)
+- storage_url: TEXT (Supabase Storage public URL)
+- file_size: BIGINT (total file size in bytes)
+- duration: INTEGER (recording duration in seconds)
+- session_start: TIMESTAMP (when recording started)
+- session_end: TIMESTAMP (when recording ended)
+- status: TEXT ("recording" | "completed")
+- created_at: TIMESTAMP (auto-generated)
+- updated_at: TIMESTAMP (auto-updated)
 """
 
 import asyncio
@@ -20,7 +34,7 @@ LOGGER = logging.getLogger(__name__)
 
 # Recording configuration
 RECORDINGS_BASE_PATH = Path("recordings")
-HLS_SEGMENT_DURATION = 2  # 2-second segments
+HLS_SEGMENT_DURATION = 30  # 30-second segments (reduced server load)
 
 
 class SessionRecorder:
@@ -95,9 +109,6 @@ class SessionRecorder:
             await hls_segment_service.start_monitoring_room(
                 self.room_id, self.recording_path
             )
-
-            # Create database entry
-            await self._create_recording_entry()
 
             LOGGER.info(f"✅ [RECORDING] Recording started for room {self.room_id}")
 
@@ -306,11 +317,13 @@ class SessionRecorder:
             # Stop segment monitoring
             await hls_segment_service.stop_monitoring_room(self.room_id)
 
-            # Upload to Supabase
-            await self._upload_to_supabase_storage()
+            # Upload to Supabase (this will also create database entry)
+            storage_url = await self._upload_to_supabase_storage()
 
-            # Finalize database
-            await self._finalize_recording_entry()
+            # Clean up HLS files after successful upload
+            if storage_url:
+                await self._cleanup_hls_files()
+                LOGGER.info(f"✅ HLS files cleaned up for room {self.room_id}")
 
             LOGGER.info(f"🎬 Recording stopped for room {self.room_id}")
 
@@ -331,81 +344,93 @@ class SessionRecorder:
             except:
                 pass
 
-    async def _create_recording_entry(self):
-        """Create recording entry in database"""
+    async def _cleanup_hls_files(self):
+        """Clean up HLS segments and playlist after successful upload"""
         try:
-            recording_data = {
-                "session_id": self.session_id,
-                "room_id": self.room_id,
-                "hls_playlist_url": f"/videos/hls/{self.room_id}/playlist.m3u8",
-                "recording_path": str(self.recording_path),
-                "session_start": self.start_time.isoformat(),
-                "status": "recording",
-            }
+            import shutil
 
-            result = (
-                supabase.table("ambulance_session_recordings")
-                .insert(recording_data)
-                .execute()
-            )
+            if not self.recording_path.exists():
+                LOGGER.warning(f"Recording path not found: {self.recording_path}")
+                return
 
-            if result.data:
-                LOGGER.info(f"Recording entry created: {result.data[0]['id']}")
+            files_deleted = 0
+            total_size_freed = 0
 
-        except Exception as e:
-            LOGGER.error(f"Failed to create recording entry: {e}")
+            # Delete HLS segments (.ts files)
+            for segment_file in self.recording_path.glob("segment-*.ts"):
+                try:
+                    size = segment_file.stat().st_size
+                    segment_file.unlink()
+                    files_deleted += 1
+                    total_size_freed += size
+                except Exception as e:
+                    LOGGER.warning(f"Failed to delete segment {segment_file.name}: {e}")
 
-    async def _finalize_recording_entry(self):
-        """Update recording entry"""
-        try:
-            duration = int((datetime.utcnow() - self.start_time).total_seconds())
+            # Delete HLS playlist (playlist.m3u8)
+            if self.playlist_path.exists():
+                try:
+                    self.playlist_path.unlink()
+                    files_deleted += 1
+                except Exception as e:
+                    LOGGER.warning(f"Failed to delete playlist: {e}")
 
-            total_size = 0
+            # Delete MP4 file (already uploaded to Supabase)
             if self.mp4_path.exists():
-                total_size = self.mp4_path.stat().st_size
-            else:
-                total_size = sum(
-                    f.stat().st_size for f in self.recording_path.glob("segment-*.ts")
-                )
+                try:
+                    size = self.mp4_path.stat().st_size
+                    self.mp4_path.unlink()
+                    files_deleted += 1
+                    total_size_freed += size
+                    LOGGER.info(
+                        f"🗑️ Deleted local MP4 file ({size / (1024*1024):.2f} MB)"
+                    )
+                except Exception as e:
+                    LOGGER.warning(f"Failed to delete MP4: {e}")
 
-            storage_url = await self._upload_to_supabase_storage()
+            # Delete recording directory if empty
+            try:
+                if self.recording_path.exists() and not any(
+                    self.recording_path.iterdir()
+                ):
+                    self.recording_path.rmdir()
+                    LOGGER.info(f"🗑️ Removed empty recording directory")
+            except Exception as e:
+                LOGGER.warning(f"Failed to remove directory: {e}")
 
-            update_data = {
-                "session_end": datetime.utcnow().isoformat(),
-                "duration": duration,
-                "file_size": total_size,
-                "status": "completed",
-            }
-
-            if storage_url:
-                update_data["storage_url"] = storage_url
-
-            result = (
-                supabase.table("ambulance_session_recordings")
-                .update(update_data)
-                .eq("session_id", self.session_id)
-                .execute()
+            size_freed_mb = total_size_freed / (1024 * 1024)
+            LOGGER.info(
+                f"🧹 Cleaned up {files_deleted} files, freed {size_freed_mb:.2f} MB for room {self.room_id}"
             )
 
-            LOGGER.info(f"✅ Recording entry finalized")
-
         except Exception as e:
-            LOGGER.error(f"Failed to finalize recording: {e}")
+            LOGGER.error(f"Failed to cleanup HLS files: {e}", exc_info=True)
 
     async def _upload_to_supabase_storage(self) -> Optional[str]:
-        """Upload MP4 to Supabase Storage"""
+        """Upload MP4 to Supabase Storage and create database entry"""
         try:
             if not self.mp4_path.exists():
                 LOGGER.error(f"MP4 file not found: {self.mp4_path}")
                 return None
 
-            file_size_mb = self.mp4_path.stat().st_size / (1024 * 1024)
-            LOGGER.info(f"Uploading {file_size_mb:.2f} MB...")
+            file_size_bytes = self.mp4_path.stat().st_size
+            file_size_mb = file_size_bytes / (1024 * 1024)
+            duration = int((datetime.utcnow() - self.start_time).total_seconds())
+
+            LOGGER.info(f"📤 Uploading {file_size_mb:.2f} MB to Supabase...")
 
             with open(self.mp4_path, "rb") as f:
-                storage_path = f"recordings/room-{self.room_id}/recording.mp4"
+                # Use session-based storage path: recordings/{session_id}/{room_id}.mp4
+                storage_path = f"recordings/{self.session_id}/{self.room_id}.mp4"
+
+                LOGGER.info(f"📁 Storage path: {storage_path}")
+
                 result = SUPABASE_ADMIN.storage.from_("ambulance-recordings").upload(
-                    storage_path, f, file_options={"content-type": "video/mp4"}
+                    storage_path,
+                    f,
+                    file_options={
+                        "content-type": "video/mp4",
+                        "upsert": "true",  # Overwrite if exists
+                    },
                 )
 
             public_url = SUPABASE_ADMIN.storage.from_(
@@ -413,11 +438,59 @@ class SessionRecorder:
             ).get_public_url(storage_path)
 
             LOGGER.info(f"✅ Upload complete: {public_url}")
+
+            # Create database entry to track the recording
+            await self._create_recording_database_entry(
+                storage_url=public_url,
+                storage_path=storage_path,
+                file_size=file_size_bytes,
+                duration=duration,
+            )
+
             return public_url
 
         except Exception as e:
-            LOGGER.error(f"Failed to upload: {e}")
+            LOGGER.error(f"❌ Failed to upload to Supabase: {e}", exc_info=True)
             return None
+
+    async def _create_recording_database_entry(
+        self, storage_url: str, storage_path: str, file_size: int, duration: int
+    ):
+        """Create database entry in ambulance_session_recordings table"""
+        try:
+            # Match actual database schema from table
+            recording_data = {
+                "session_id": self.session_id,
+                "camera_id": self.room_id,  # Room ID is the camera identifier
+                "recording_path": str(self.recording_path),
+                "storage_url": storage_url,
+                "file_size": file_size,
+                "duration": duration,
+                "session_start": (
+                    self.start_time.isoformat() if self.start_time else None
+                ),
+                "session_end": datetime.utcnow().isoformat(),
+                "status": "completed",
+            }
+
+            result = (
+                SUPABASE_ADMIN.table("ambulance_session_recordings")
+                .insert(recording_data)
+                .execute()
+            )
+
+            if result.data:
+                LOGGER.info(
+                    f"✅ Database entry created: {result.data[0].get('id', 'unknown')}"
+                )
+                LOGGER.info(
+                    f"📊 Recording tracked - Camera: {self.room_id}, Duration: {duration}s, Size: {file_size / (1024*1024):.2f} MB"
+                )
+            else:
+                LOGGER.warning(f"⚠️ Database insert returned no data")
+
+        except Exception as e:
+            LOGGER.error(f"❌ Failed to create database entry: {e}", exc_info=True)
 
 
 class RecordingManager:

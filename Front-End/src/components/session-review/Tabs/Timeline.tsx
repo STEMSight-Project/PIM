@@ -1,9 +1,9 @@
 "use client";
 
+import React, { useEffect, useState } from "react";
 import { Detection } from "@/components/session-review/types";
 import { usePatientEvents } from "@/hooks/usePatientEvents";
 import { CheckCircle, Clock, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
 
 interface TimelineProps {
   setCurrentTimestamp: (time: number) => void;

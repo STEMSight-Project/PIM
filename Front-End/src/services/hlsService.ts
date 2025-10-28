@@ -169,29 +169,55 @@ class HLSService {
    * Poll recording status
    *
    * Continuously polls the status endpoint and calls a callback with updates.
+   * Only triggers callback when segment_count changes to reduce unnecessary updates.
    * Returns a cleanup function to stop polling.
    *
    * @param sessionId - The session ID to monitor
-   * @param callback - Function to call with status updates
-   * @param intervalMs - Polling interval in milliseconds (default: 2000)
+   * @param callback - Function to call with status updates (only on segment count change)
+   * @param intervalMs - Polling interval in milliseconds (default: 15000)
    * @returns Cleanup function to stop polling
    */
   pollRecordingStatus(
     sessionId: string,
     callback: (status: HLSRecordingStatus | null) => void,
-    intervalMs: number = 2000
+    intervalMs: number = 15000
   ): () => void {
     let isPolling = true;
+    let lastSegmentCount: number | undefined = undefined;
 
     const poll = async () => {
       while (isPolling) {
         const status = await this.getRecordingStatus(sessionId);
-        callback(status);
 
-        // Stop polling if recording is completed
-        if (status && !status.is_active) {
-          isPolling = false;
-          break;
+        // Only call callback if segment count changed or first fetch
+        if (status) {
+          const currentSegmentCount = status.segment_count;
+
+          if (
+            lastSegmentCount === undefined ||
+            currentSegmentCount !== lastSegmentCount
+          ) {
+            lastSegmentCount = currentSegmentCount;
+            callback(status);
+
+            console.log(
+              `[HLSService] Status update triggered (segment_count: ${currentSegmentCount})`
+            );
+          } else {
+            // Segment count unchanged - skip callback
+            console.log(
+              `[HLSService] Segment count unchanged (${currentSegmentCount}), skipping update`
+            );
+          }
+
+          // Stop polling if recording is completed
+          if (!status.is_active) {
+            isPolling = false;
+            break;
+          }
+        } else {
+          // Status fetch failed - still call callback
+          callback(status);
         }
 
         await new Promise((resolve) => setTimeout(resolve, intervalMs));

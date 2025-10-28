@@ -189,9 +189,16 @@ class WebRTCService:
 
     def _start_monitoring(self):
         """Start background monitoring task."""
-        if self.monitoring_task is None or self.monitoring_task.done():
-            self.monitoring_task = asyncio.create_task(self._monitor_cameras())
-            logger.info("Started camera monitoring task")
+        try:
+            # Only start monitoring if there's a running event loop
+            if self.monitoring_task is None or self.monitoring_task.done():
+                self.monitoring_task = asyncio.create_task(self._monitor_cameras())
+                logger.info("Started camera monitoring task")
+        except RuntimeError:
+            # No event loop running yet (e.g., during import in tests)
+            logger.debug(
+                "Event loop not running - monitoring will start when event loop is available"
+            )
 
     async def _monitor_cameras(self):
         """Background task to monitor camera activity and update database status."""
