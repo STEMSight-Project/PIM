@@ -20,21 +20,23 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { CustomCamera, CustomDash, CustomPatient, CustomRecent, CustomReplay } from "../ui/CustomIcons";
+
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
-  { name: "Patients", href: "/patients", icon: UserGroupIcon },
+  { name: "Dashboard", href: "/dashboard", icon: CustomDash },
+  { name: "Patients", href: "/patients", icon: CustomPatient },
   {
     name: "Recent Live Session",
     href: "/recent-live-session",
-    icon: DocumentTextIcon,
+    icon: CustomRecent,
   },
-  { name: "Live Cameras", href: "/streamingDash", icon: VideoCameraIcon },
-  { name: "Video Playback", href: "/video-playback", icon: PlayIcon },
+  { name: "Live Cameras", href: "/streamingDash", icon: CustomCamera },
+  { name: "Video Playback", href: "/video-playback", icon: CustomReplay },
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
