@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { Alert, Button, Input, Loading } from "@/components/ui";
 import { usePatients } from "@/hooks";
