@@ -21,7 +21,6 @@ router = APIRouter()
 # - All error handling is in place for robust authentication flows.
 # - No custom confirmation logic needed; Supabase manages the verification process.
 # These comments are for presentation/demo purposes and can be removed after review.
-=======
 
 
 class LoginRequest(BaseModel):
@@ -183,7 +182,7 @@ class ConfirmResetRequest(BaseModel):
 
 
 @router.post("/confirm-password-reset")
-def confirm_password_reset(data: ConfirmResetRequest):
+async def confirm_password_reset(data: ConfirmResetRequest):
     """
     Confirms password reset using the access token and new password.
     """
