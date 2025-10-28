@@ -8,6 +8,7 @@ from typing import Set, Optional
 from aiortc import RTCPeerConnection
 from core.common import logger
 from services.streaming.database_service import StreamingDatabaseService
+from services.streaming.recording_service import recording_manager
 
 
 class Room:
@@ -38,6 +39,9 @@ class Room:
         self.activity_monitor_task: Optional[asyncio.Task] = None
         self.STREAM_TIMEOUT_SECONDS = 30  # End stream if no data for 30 seconds
 
+        # Video track for recording
+        self.video_track = None
+
     async def close(self):
         """Close all peer connections and clean up resources."""
         try:
@@ -61,7 +65,6 @@ class Room:
                 self.viewer_pcs.clear()
 
                 self.is_active = False
-                logger.info("Room %s closed successfully", self.room_id)
 
         except (OSError, ConnectionError, RuntimeError) as e:
             logger.error("Error closing room %s: %s", self.room_id, str(e))
@@ -337,6 +340,10 @@ class Room:
                 )
                 asyncio.create_task(self._update_room_connected())
 
+                # Schedule recording to start after video track is received
+                if self.session_id:
+                    asyncio.create_task(self._start_recording_when_track_ready())
+
                 # Start activity monitoring when first streamer connects
                 self.last_data_timestamp = time.time()
                 self._start_activity_monitoring()
@@ -375,6 +382,22 @@ class Room:
                     # Stop activity monitoring when no streamers remain
                     self._stop_activity_monitoring()
                     asyncio.create_task(self._update_room_disconnected())
+
+                    # Stop HLS recording when last streamer disconnects
+                    if self.session_id:
+                        try:
+                            logger.info(
+                                f"Stopping HLS recording for session {self.session_id}"
+                            )
+                            asyncio.create_task(
+                                recording_manager.stop_session_recording(
+                                    self.session_id
+                                )
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to stop recording for session {self.session_id}: {e}"
+                            )
 
             # Check if this was a viewer connection
             elif pc in self.viewer_pcs:
@@ -487,6 +510,37 @@ class Room:
             monitoring_status,
         )
 
+    async def _start_recording_when_track_ready(self):
+        """Wait for video track to be available, then start recording"""
+        try:
+            # Wait up to 10 seconds for video track
+            for _ in range(20):  # 20 * 0.5 = 10 seconds
+                if self.video_track:
+                    # Video track is available, start recording
+                    ambulance_number = (
+                        self.room_id.split("-")[1] if "-" in self.room_id else "unknown"
+                    )
+                    logger.info(
+                        f"Video track ready, starting HLS recording for session {self.session_id}"
+                    )
+
+                    await recording_manager.start_session_recording(
+                        self.session_id, ambulance_number, self.video_track
+                    )
+                    return
+
+                await asyncio.sleep(0.5)
+
+            # Timeout - video track never received
+            logger.error(
+                f"Timeout waiting for video track for session {self.session_id}"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to start recording for session {self.session_id}: {e}"
+            )
+
 
 class RoomManager:
     """Manages multiple rooms and their lifecycle."""
@@ -494,6 +548,13 @@ class RoomManager:
     def __init__(self):
         self.rooms: dict[str, Room] = {}
         self.cleanup_task: Optional[asyncio.Task] = None
+        self.session_monitor_task: Optional[asyncio.Task] = None
+        self.session_inactivity_timers: dict[str, asyncio.Task] = (
+            {}
+        )  # session_id -> timeout task
+        self.SESSION_TIMEOUT_MINUTES = (
+            20  # End session if no active cameras for 20 minutes
+        )
 
     def get_room(self, room_id: str) -> Optional[Room]:
         """Get a room by ID."""
@@ -580,6 +641,121 @@ class RoomManager:
             logger.error("Database error during room cleanup: %s", str(e))
         except Exception as e:
             logger.error("Unexpected error during room cleanup: %s", str(e))
+
+    async def start_session_monitoring(self):
+        """Start the periodic session monitoring task."""
+        if self.session_monitor_task and not self.session_monitor_task.done():
+            return  # Already running
+
+        self.session_monitor_task = asyncio.create_task(self._monitor_sessions())
+        logger.info("Started session monitoring task")
+
+    async def _monitor_sessions(self):
+        """Periodically monitor sessions for inactivity and end them after timeout."""
+        while True:
+            try:
+                await asyncio.sleep(60)  # Check every 1 minute
+                await self._check_session_inactivity()
+            except asyncio.CancelledError:
+                logger.info("Session monitoring task cancelled")
+                break
+            except (OSError, ConnectionError, RuntimeError) as e:
+                logger.error("Database error in session monitoring: %s", str(e))
+            except Exception as e:
+                logger.error("Unexpected error in session monitoring: %s", str(e))
+
+    async def _check_session_inactivity(self):
+        """Check all active sessions and start/cancel timeout timers."""
+        try:
+            db_service = StreamingDatabaseService()
+
+            # Get all active sessions
+            active_sessions = await db_service.get_all_ambulance_sessions(
+                is_active=True, limit=100
+            )
+
+            for session in active_sessions:
+                session_id = session["id"]
+
+                # Check if session has any active cameras
+                has_active = await db_service.has_active_cameras(session_id)
+
+                if has_active:
+                    # Session has active cameras - cancel any existing timeout timer
+                    if session_id in self.session_inactivity_timers:
+                        self.session_inactivity_timers[session_id].cancel()
+                        del self.session_inactivity_timers[session_id]
+                        logger.info(
+                            "Session %s has active cameras - timeout timer cancelled",
+                            session_id,
+                        )
+                else:
+                    # Session has NO active cameras
+                    if session_id not in self.session_inactivity_timers:
+                        # Start new timeout timer
+                        timeout_task = asyncio.create_task(
+                            self._handle_session_timeout(session_id)
+                        )
+                        self.session_inactivity_timers[session_id] = timeout_task
+                        logger.warning(
+                            "Session %s has no active cameras - started %d minute timeout timer",
+                            session_id,
+                            self.SESSION_TIMEOUT_MINUTES,
+                        )
+
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error("Database error checking session inactivity: %s", str(e))
+        except Exception as e:
+            logger.error("Unexpected error checking session inactivity: %s", str(e))
+
+    async def _handle_session_timeout(self, session_id: str):
+        """Handle session timeout after no active cameras for configured duration."""
+        try:
+            # Wait for configured timeout (20 minutes)
+            await asyncio.sleep(self.SESSION_TIMEOUT_MINUTES * 60)
+
+            # Verify session still has no active cameras
+            db_service = StreamingDatabaseService()
+            has_active = await db_service.has_active_cameras(session_id)
+
+            if not has_active:
+                logger.warning(
+                    "Session %s has had no active cameras for %d minutes - ending session",
+                    session_id,
+                    self.SESSION_TIMEOUT_MINUTES,
+                )
+
+                # End the session
+                await db_service.end_ambulance_session(session_id)
+
+                # Remove from tracking
+                if session_id in self.session_inactivity_timers:
+                    del self.session_inactivity_timers[session_id]
+
+                logger.info("Session %s ended due to inactivity", session_id)
+            else:
+                # Camera reconnected during timeout period
+                logger.info(
+                    "Session %s timeout cancelled - camera reconnected", session_id
+                )
+                if session_id in self.session_inactivity_timers:
+                    del self.session_inactivity_timers[session_id]
+
+        except asyncio.CancelledError:
+            # Timeout was cancelled (camera reconnected)
+            logger.info(
+                "Timeout cancelled for session %s - camera reconnected", session_id
+            )
+            if session_id in self.session_inactivity_timers:
+                del self.session_inactivity_timers[session_id]
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error(
+                "Database error in session timeout for %s: %s", session_id, str(e)
+            )
+        except Exception as e:
+            logger.error(
+                "Unexpected error in session timeout for %s: %s", session_id, str(e)
+            )
 
 
 # Global room manager instance

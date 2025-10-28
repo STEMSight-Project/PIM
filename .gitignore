@@ -1,26 +1,140 @@
-*.pyc
-__pycache__/
+# ============================================================
+# Large Model & Data Files (Tracked with Git LFS)
+# ============================================================
+*.pt
+*.pth
+*.pkl
+*.npy
+pose_landmarker_heavy.task
 
-# Python cache
+# ============================================================
+# Python Cache & Build Files
+# ============================================================
+*.pyc
 *.pyo
 *.pyd
 .Python
+__pycache__/
+build/
+dist/
+*.spec
+*.egg-info/
+.eggs/
+lib/
+lib64/
 
-# Secure File with Sensitive Data
-# .env
+# ============================================================
+# Video Files (Too Large)
+# ============================================================
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.flv
+*.wmv
 
-# Test and documentation files
+# ============================================================
+# Document & Office Files
+# ============================================================
+*.xlsx
+*.xls
+*.docx
+*.doc
+
+# ============================================================
+# Recording Directories
+# ============================================================
+recordings/
+Back-End/recordings/
+
+# ============================================================
+# Environment & Secrets
+# ============================================================
+.env
+.env.local
+*.key
+*.pem
+credentials.json
+secrets.json
+
+# ============================================================
+# IDE & Editor Files
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================
+# Virtual Environments
+# ============================================================
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# ============================================================
+# Database Files
+# ============================================================
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+
+# ============================================================
+# Logs & Temporary Files
+# ============================================================
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+test_output.mp4
+screenshots/
+
+# ============================================================
+# Testing & Coverage
+# ============================================================
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.hypothesis/
 Testing_files/**/*.md
 Testing_files/*_clean.py
 Testing_files/save_*.py
 
-# Old/deprecated files
+# ============================================================
+# Project Specific
+# ============================================================
+# Raw split videos (too large)
+AI_Training/split_videos/
+AI_Training/segmented_videos/
+
+# Old/deprecated
 "for supabase, couldnt log in"
 
-# Build artifacts
-build/
-dist/
-*.spec
-
-# Package lock files in root
+# Package lock in root
 /package-lock.json
+
+# ============================================================
+# OS Files
+# ============================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

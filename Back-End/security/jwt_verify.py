@@ -90,7 +90,6 @@ def current_user(
     # Priority 1: OAuth2 token (from FastAPI docs Authorize button)
     if oauth2_token:
         access_token = oauth2_token
-        logger.info("Using OAuth2 token")
     else:
         # Priority 2: Authorization header (from frontend/manual requests)
         authorization = request.headers.get("authorization")
@@ -109,7 +108,6 @@ def current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    logger.info("About to verify token...")
     return _verify_token(access_token)
 
 

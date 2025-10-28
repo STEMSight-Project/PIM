@@ -7,9 +7,7 @@ import type { CameraRoom } from "@/types";
 import {
   ArrowLeftIcon,
   ExclamationTriangleIcon,
-  PlayIcon,
   SignalIcon,
-  StopIcon,
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -61,6 +59,23 @@ export default function SimpleAmbulanceStreamingPage() {
     return availableRooms.find((room) => room.room_id === selectedRoomId);
   }, [availableRooms, selectedRoomId]);
 
+  // AUTO-START: Automatically start streaming when a room is selected
+  useEffect(() => {
+    if (selectedRoomId && !isStreaming && !isConnecting) {
+      // Auto-start streaming when room is selected
+      startStreaming(ambulanceId, selectedRoomId);
+    }
+  }, [selectedRoomId, ambulanceId]);
+
+  // AUTO-CLEANUP: Stop streaming when component unmounts or room changes
+  useEffect(() => {
+    return () => {
+      if (isStreaming) {
+        stopStreaming();
+      }
+    };
+  }, [selectedRoomId]); // Stop when room changes
+
   // NEW: Check if room disconnected while streaming
   useEffect(() => {
     if (isStreaming && selectedRoom && !selectedRoom.connected) {
@@ -69,22 +84,19 @@ export default function SimpleAmbulanceStreamingPage() {
     }
   }, [isStreaming, selectedRoom, selectedRoomId]);
 
-  const handleStartStream = () => {
-    if (selectedRoomId) {
-      startStreaming(ambulanceId);
-    }
-  };
-
-  const handleStopStream = () => {
-    stopStreaming();
-  };
-
   const handleRoomSelect = (roomId: string) => {
+    // Stop current stream before switching
+    if (isStreaming) {
+      stopStreaming();
+    }
+
     setSelectedRoomId(roomId);
     // Update URL
     const url = new URL(window.location.href);
     url.searchParams.set("room", roomId);
     window.history.replaceState({}, "", url.toString());
+
+    // The auto-start effect will handle starting the new stream
   };
 
   const getConnectionStatus = () => {
@@ -237,12 +249,14 @@ export default function SimpleAmbulanceStreamingPage() {
                       <VideoCameraIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
                       {selectedRoomId ? (
                         <>
-                          <p className="text-lg font-medium">Camera Ready</p>
+                          <p className="text-lg font-medium">
+                            Initializing Camera
+                          </p>
                           <p className="text-sm opacity-75 mb-2">
                             Room: {selectedRoomId}
                           </p>
                           <p className="text-sm opacity-75">
-                            Click "Start Watching" to view live camera feed
+                            Auto-streaming will begin shortly...
                           </p>
                         </>
                       ) : (
@@ -251,7 +265,7 @@ export default function SimpleAmbulanceStreamingPage() {
                             Select a Camera Room
                           </p>
                           <p className="text-sm opacity-75">
-                            Choose a camera room to start watching
+                            Choose a camera room to start auto-streaming
                           </p>
                         </>
                       )}
@@ -271,27 +285,18 @@ export default function SimpleAmbulanceStreamingPage() {
                 )}
               </div>
 
-              {/* Simple Controls */}
-              <div className="flex items-center justify-center gap-4 mt-4">
-                {!isStreaming ? (
-                  <Button
-                    onClick={handleStartStream}
-                    disabled={isConnecting || !selectedRoomId}
-                    className="flex items-center gap-2"
-                  >
-                    <PlayIcon className="h-4 w-4" />
-                    {selectedRoomId ? "Start Watching" : "Select Room First"}
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleStopStream}
-                    variant="outline"
-                    className="flex items-center gap-2"
-                  >
-                    <StopIcon className="h-4 w-4" />
-                    Stop Watching
-                  </Button>
-                )}
+              {/* Auto-streaming Status Info */}
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-center gap-2 text-sm text-blue-700">
+                  <SignalIcon className="h-4 w-4" />
+                  <span>
+                    {isStreaming && selectedRoomId
+                      ? `Auto-streaming from ${selectedRoomId}`
+                      : selectedRoomId
+                      ? "Connecting to camera..."
+                      : "Select a camera room to begin auto-streaming"}
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>

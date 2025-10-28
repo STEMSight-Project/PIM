@@ -288,7 +288,9 @@ export function useStreaming(): UseStreamingReturn {
   }, []);
 
   const createPeerConnection = useCallback(
-    async (cameraId: string): Promise<RTCPeerConnection> => {
+    async (roomId: string): Promise<RTCPeerConnection> => {
+      // Note: roomId parameter is used as camera_id in the API endpoint
+      // In our system: room_id IS the camera identifier (e.g., "AMB-001-ROOM-001")
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -451,9 +453,10 @@ export function useStreaming(): UseStreamingReturn {
       });
 
       // Send offer to server and get answer using ambulance camera streaming
+      // Note: roomId is passed as camera_id parameter to the API
       try {
         const response = await ambulanceStreamingService.connectCameraViewer(
-          cameraId,
+          roomId, // room_id is used as camera_id parameter
           {
             sdp: pc.localDescription!.sdp,
             type: pc.localDescription!.type as any,
@@ -506,7 +509,7 @@ export function useStreaming(): UseStreamingReturn {
   );
 
   const startStreaming = useCallback(
-    async (ambulanceId: string, cameraId?: string): Promise<void> => {
+    async (ambulanceId: string, roomId?: string): Promise<void> => {
       if (isConnecting || isConnected) {
         console.warn("Streaming already in progress");
         return;
@@ -533,37 +536,42 @@ export function useStreaming(): UseStreamingReturn {
           );
         }
 
-        // If no specific camera ID provided, get cameras for this ambulance
-        let targetCameraId = cameraId;
-        if (!targetCameraId) {
-          const camerasResponse =
-            await ambulanceStreamingService.getAmbulanceCameras(ambulanceId);
-          if (camerasResponse.data && camerasResponse.data.length > 0) {
-            targetCameraId = camerasResponse.data[0].id; // Use first available camera
+        // Get camera rooms for this ambulance session
+        let targetRoomId = roomId;
+        if (!targetRoomId) {
+          const roomsResponse = await ambulanceStreamingService.getCameraRooms({
+            session_id: session.id,
+          });
+          if (roomsResponse.data && roomsResponse.data.length > 0) {
+            // Use the first connected room, or first room if none connected
+            const connectedRoom = roomsResponse.data.find((r) => r.connected);
+            targetRoomId = (connectedRoom || roomsResponse.data[0]).room_id;
           } else {
-            throw new Error("No cameras found for this ambulance");
+            throw new Error("No camera rooms found for this ambulance session");
           }
         }
 
-        // Store the camera ID after it's determined
-        currentCameraIdRef.current = targetCameraId;
+        // Store the room_id (which IS the camera identifier in our API)
+        currentCameraIdRef.current = targetRoomId;
 
         // Clean up any existing connection
         if (peerConnectionRef.current) {
           peerConnectionRef.current.close();
         }
 
-        if (!targetCameraId) {
-          throw new Error("Camera ID is required for streaming");
+        if (!targetRoomId) {
+          throw new Error("Room ID is required for streaming");
         }
-        const pc = await createPeerConnection(targetCameraId);
+
+        // Create peer connection using room_id (which is the camera_id parameter in API)
+        const pc = await createPeerConnection(targetRoomId);
         peerConnectionRef.current = pc;
 
         console.log(
           "Ambulance streaming connection established with session:",
           session.id,
-          "camera:",
-          targetCameraId
+          "room_id:",
+          targetRoomId
         );
         setUserFriendlyStatus("Connected to ambulance camera successfully!");
       } catch (err) {

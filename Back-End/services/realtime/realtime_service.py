@@ -37,11 +37,6 @@ class SupabaseRealtimeService:
         channel_name = (
             f"realtime_{table}_{patient_id or 'all'}_{asyncio.get_event_loop().time()}"
         )
-        logger.info(
-            "Creating Supabase SSE stream for table %s, channel: %s",
-            table,
-            channel_name,
-        )
 
         # Create event queue for this stream
         queue = asyncio.Queue()
@@ -124,12 +119,6 @@ class SupabaseRealtimeService:
 
             # Store subscription reference
             self.active_subscriptions[channel_name] = channel
-
-            logger.info(
-                "Started Supabase subscription for table %s with channel %s",
-                table,
-                channel_name,
-            )
 
             # Send initial connection confirmation
             initial_msg = f"data: {json.dumps({'type': 'connected', 'channel': channel_name, 'table': table})}\n\n"

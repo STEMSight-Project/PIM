@@ -286,26 +286,27 @@ async def get_camera_details(camera_id: str):
 
 @router.post("/camera/{camera_id}/streamer")
 async def camera_streamer(camera_id: str, body: SDPBody):
-    """Establish WebRTC connection for camera streamer (publisher)."""
-    try:
-        # Find active camera room for this camera
-        camera_rooms = await StreamingDatabaseService.get_camera_rooms_by_camera_id(
-            camera_id
-        )
+    """
+    Establish WebRTC connection for camera streamer (publisher).
 
-        if not camera_rooms:
+    Note: camera_id parameter is actually the room_id (e.g., 'AMB-001-ROOM-001').
+    In our system, room_id IS the camera identifier.
+    """
+    try:
+        # The parameter is called camera_id for API consistency, but it's actually room_id
+        room_id = camera_id
+
+        logger.info("Looking up camera room for room_id: %s", room_id)
+
+        # Look up the camera room by room_id
+        camera_room = await StreamingDatabaseService.get_camera_room_by_room_id(room_id)
+
+        if not camera_room:
             raise HTTPException(
-                status_code=404, detail="No active camera room found for this camera"
+                status_code=404, detail=f"Camera room not found for room_id: {room_id}"
             )
 
-        # Use the first active room
-        camera_room = camera_rooms[0]
-        room_id = camera_room.get("room_id")
-
-        if not room_id:
-            raise HTTPException(status_code=400, detail="Camera room has no room_id")
-
-        logger.info("Setting up streamer for camera %s in room %s", camera_id, room_id)
+        logger.info("Found camera room: %s", camera_room.get("id"))
 
         # Create or get WebRTC room
         room = room_manager.get_room(room_id)
@@ -329,6 +330,8 @@ async def camera_streamer(camera_id: str, body: SDPBody):
             camera_room["id"], connected=True
         )
 
+        logger.info("✅ Streamer connected successfully to room %s", room_id)
+
         # Return only SDP fields (no camera_id to avoid WebRTC errors)
         return {"sdp": sdp_response["sdp"], "type": sdp_response["type"]}
 
@@ -341,37 +344,41 @@ async def camera_streamer(camera_id: str, body: SDPBody):
 
 @router.post("/camera/{camera_id}/viewer")
 async def camera_viewer(camera_id: str, body: SDPBody):
-    """Establish WebRTC connection for camera viewer (subscriber)."""
-    try:
-        # Find active camera room for this camera
-        camera_rooms = await StreamingDatabaseService.get_camera_rooms_by_camera_id(
-            camera_id
-        )
+    """
+    Establish WebRTC connection for camera viewer (subscriber).
 
-        if not camera_rooms:
+    Note: camera_id parameter is actually the room_id (e.g., 'AMB-001-ROOM-001').
+    In our system, room_id IS the camera identifier.
+    """
+    try:
+        # The parameter is called camera_id for API consistency, but it's actually room_id
+        room_id = camera_id
+
+        logger.info("Looking up camera room for room_id: %s", room_id)
+
+        # Look up the camera room by room_id
+        camera_room = await StreamingDatabaseService.get_camera_room_by_room_id(room_id)
+
+        if not camera_room:
             raise HTTPException(
-                status_code=404, detail="No active camera room found for this camera"
+                status_code=404, detail=f"Camera room not found for room_id: {room_id}"
             )
 
-        # Use the first active room
-        camera_room = camera_rooms[0]
-        room_id = camera_room.get("room_id")
-
-        if not room_id:
-            raise HTTPException(status_code=400, detail="Camera room has no room_id")
-
-        logger.info("Setting up viewer for camera %s in room %s", camera_id, room_id)
+        logger.info("Found camera room: %s", camera_room.get("id"))
+        logger.info("Setting up viewer for camera room %s", room_id)
 
         # Get existing WebRTC room (should exist from streamer)
         room = room_manager.get_room(room_id)
         if not room:
             raise HTTPException(
                 status_code=404,
-                detail=f"No active streaming session found for camera {camera_id}",
+                detail=f"No active streaming session found for room {room_id}",
             )
 
         # Create WebRTC connection for viewer
         sdp_response = await webrtc_service.create_viewer_connection(room_id, body)
+
+        logger.info("✅ Viewer connected successfully to room %s", room_id)
 
         # Return only SDP fields (no camera_id to avoid WebRTC errors)
         return {"sdp": sdp_response["sdp"], "type": sdp_response["type"]}
@@ -448,6 +455,112 @@ async def get_camera_connection_stats(camera_id: str):
         raise
     except Exception as e:
         logger.error("Error getting stats for camera %s: %s", camera_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ==============================================================================
+# ROOM-ID BASED STREAMING ENDPOINTS (Preferred for broadcasters)
+# ==============================================================================
+
+
+@router.post("/camera/{room_id}/streamer")
+async def room_streamer(room_id: str, body: SDPBody):
+    """
+    Establish WebRTC connection for camera streamer using room_id.
+    This endpoint is preferred for broadcasters as they know the room_id.
+    """
+    try:
+        # Get camera room by room_id
+        camera_room = await StreamingDatabaseService.get_camera_room_by_room_id(room_id)
+
+        if not camera_room:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Camera room not found for room_id: {room_id}",
+            )
+
+        logger.info(
+            "Setting up streamer for room %s (camera: %s)",
+            room_id,
+            camera_room.get("camera_id"),
+        )
+
+        # Create or get WebRTC room
+        room = room_manager.get_room(room_id)
+        if not room:
+            room = room_manager.create_room(
+                room_id=room_id,
+                session_id=camera_room.get("session_id"),
+                room_db_id=camera_room.get("id"),
+            )
+
+        # Register camera room for monitoring
+        webrtc_service.register_camera_room(
+            room_id, camera_room["id"], camera_room.get("session_id")
+        )
+
+        # Create WebRTC connection for streamer
+        sdp_response = await webrtc_service.create_streamer_connection(room_id, body)
+
+        # Update camera room status to connected
+        await StreamingDatabaseService.update_camera_room_status(
+            camera_room["id"], connected=True
+        )
+
+        logger.info("✅ Streamer connected successfully to room %s", room_id)
+
+        # Return only SDP fields (no camera_id to avoid WebRTC errors)
+        return {"sdp": sdp_response["sdp"], "type": sdp_response["type"]}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error setting up streamer for room %s: %s", room_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/camera/{room_id}/viewer")
+async def room_viewer(room_id: str, body: SDPBody):
+    """
+    Establish WebRTC connection for camera viewer using room_id.
+    This endpoint is preferred for viewers as they know the room_id from the session.
+    """
+    try:
+        # Get camera room by room_id
+        camera_room = await StreamingDatabaseService.get_camera_room_by_room_id(room_id)
+
+        if not camera_room:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Camera room not found for room_id: {room_id}",
+            )
+
+        logger.info(
+            "Setting up viewer for room %s (camera: %s)",
+            room_id,
+            camera_room.get("camera_id"),
+        )
+
+        # Get existing WebRTC room (should exist from streamer)
+        room = room_manager.get_room(room_id)
+        if not room:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No active streaming session found for room {room_id}",
+            )
+
+        # Create WebRTC connection for viewer
+        sdp_response = await webrtc_service.create_viewer_connection(room_id, body)
+
+        logger.info("✅ Viewer connected successfully to room %s", room_id)
+
+        # Return only SDP fields (no camera_id to avoid WebRTC errors)
+        return {"sdp": sdp_response["sdp"], "type": sdp_response["type"]}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error setting up viewer for room %s: %s", room_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -669,4 +782,277 @@ async def get_camera_monitoring_status():
 
     except Exception as e:
         logger.error("Error getting monitoring status: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ==============================================================================
+# SESSION RECORDING ENDPOINTS (HLS DVR)
+# ==============================================================================
+
+
+@router.get("/sessions/{session_id}/recording")
+async def get_session_recording(session_id: str):
+    """
+    Get HLS recording information for a session.
+    Returns playlist URL and recording metadata.
+    """
+    try:
+        # Query recording from database
+        result = (
+            supabase.table("ambulance_session_recordings")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        if not result.data:
+            raise HTTPException(
+                status_code=404, detail=f"No recording found for session {session_id}"
+            )
+
+        recording = result.data[0]
+
+        # Check if session is still live
+        session_result = (
+            supabase.table("ambulance_streaming_sessions")
+            .select("is_active")
+            .eq("id", session_id)
+            .single()
+            .execute()
+        )
+
+        is_live = (
+            session_result.data.get("is_active", False)
+            if session_result.data
+            else False
+        )
+
+        return {
+            "data": {
+                "id": recording["id"],
+                "session_id": recording["session_id"],
+                "hls_url": recording["hls_playlist_url"],
+                "session_start": recording["session_start"],
+                "session_end": recording.get("session_end"),
+                "duration": recording.get("duration"),  # seconds
+                "file_size": recording.get("file_size"),  # bytes
+                "status": recording["status"],
+                "is_live": is_live,
+                "created_at": recording["created_at"],
+            },
+            "error": None,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error fetching session recording: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/sessions/{session_id}/recordings")
+async def get_session_recordings_list(session_id: str):
+    """
+    Get all recordings for a session (in case of multiple recording segments).
+    """
+    try:
+        result = (
+            supabase.table("ambulance_session_recordings")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+
+        recordings = result.data or []
+
+        return {"data": recordings, "error": None, "count": len(recordings)}
+
+    except Exception as e:
+        logger.error("Error fetching session recordings: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/ambulances/{ambulance_id}/recordings")
+async def get_ambulance_recordings(
+    ambulance_id: str, limit: int = 50, offset: int = 0, status: Optional[str] = None
+):
+    """
+    Get all recordings for an ambulance across all sessions.
+    Useful for historical playback and session review.
+    """
+    try:
+        # Get ambulance sessions with recordings
+        query = (
+            supabase.table("ambulance_session_recordings")
+            .select(
+                """
+                id,
+                session_id,
+                hls_playlist_url,
+                session_start,
+                session_end,
+                duration,
+                file_size,
+                status,
+                created_at,
+                ambulance_streaming_sessions!inner(
+                    ambulance_id,
+                    session_name,
+                    session_type,
+                    priority_level
+                )
+            """
+            )
+            .eq("ambulance_streaming_sessions.ambulance_id", ambulance_id)
+            .order("session_start", desc=True)
+            .range(offset, offset + limit - 1)
+        )
+
+        if status:
+            query = query.eq("status", status)
+
+        result = query.execute()
+
+        recordings = result.data or []
+
+        return {"data": recordings, "error": None, "count": len(recordings)}
+
+    except Exception as e:
+        logger.error("Error fetching ambulance recordings: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ==============================================================================
+# DVR PLAYBACK ENDPOINTS (For viewers joining mid-session)
+# ==============================================================================
+
+
+@router.get("/sessions/{session_id}/dvr-info")
+async def get_dvr_playback_info(session_id: str):
+    """
+    Get DVR playback information for a session.
+    This endpoint is used when a viewer joins mid-session and wants to:
+    1. Check if DVR recording is available
+    2. Get HLS URL for playback from beginning
+    3. Know the current live timestamp
+
+    Returns:
+    - recording_available: bool
+    - hls_url: str (for HLS.js player)
+    - session_start: timestamp
+    - current_duration: seconds from start
+    - is_live: bool (session still active)
+    """
+    try:
+        # Get session info
+        session_result = (
+            supabase.table("ambulance_streaming_sessions")
+            .select("*")
+            .eq("id", session_id)
+            .single()
+            .execute()
+        )
+
+        if not session_result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = session_result.data
+        is_live = session.get("is_active", False)
+
+        # Get recording info
+        recording_result = (
+            supabase.table("ambulance_session_recordings")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        if not recording_result.data:
+            return {
+                "data": {
+                    "recording_available": False,
+                    "hls_url": None,
+                    "storage_url": None,
+                    "session_start": session.get("started_at"),
+                    "current_duration": 0,
+                    "is_live": is_live,
+                    "message": "Recording not yet started or not available",
+                },
+                "error": None,
+            }
+
+        recording = recording_result.data[0]
+
+        # Calculate current duration
+        from datetime import datetime
+
+        start_time = datetime.fromisoformat(
+            recording["session_start"].replace("Z", "+00:00")
+        )
+        current_time = datetime.now(start_time.tzinfo)
+        current_duration = int((current_time - start_time).total_seconds())
+
+        return {
+            "data": {
+                "recording_available": True,
+                "hls_url": recording["hls_playlist_url"],  # Local URL for live sessions
+                "storage_url": recording.get(
+                    "storage_url"
+                ),  # Supabase URL for completed sessions
+                "session_start": recording["session_start"],
+                "session_end": recording.get("session_end"),
+                "current_duration": current_duration,
+                "total_duration": recording.get(
+                    "duration"
+                ),  # Only set when session ends
+                "is_live": is_live,
+                "status": recording["status"],
+                "file_size": recording.get("file_size"),
+                "message": "Recording available for playback",
+            },
+            "error": None,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error fetching DVR info for session %s: %s", session_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/camera-rooms/{room_id}/dvr-info")
+async def get_room_dvr_info(room_id: str):
+    """
+    Get DVR info by room_id (convenience endpoint).
+    Looks up the session associated with the room and returns DVR info.
+    """
+    try:
+        # Get room to find session_id
+        room_result = (
+            supabase.table("ambulance_camera_rooms")
+            .select("session_id")
+            .eq("room_id", room_id)
+            .single()
+            .execute()
+        )
+
+        if not room_result.data or not room_result.data.get("session_id"):
+            raise HTTPException(
+                status_code=404, detail=f"No session found for room {room_id}"
+            )
+
+        session_id = room_result.data["session_id"]
+
+        # Redirect to session DVR info endpoint
+        return await get_dvr_playback_info(session_id)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error fetching DVR info for room %s: %s", room_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e

@@ -136,6 +136,14 @@ class StreamingDatabaseService:
             raise
 
     @staticmethod
+    async def get_camera_room_by_room_id(room_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get existing camera room from database by room_id string (e.g., 'AMB-002-ROOM-002').
+        Alias for get_camera_room_by_id for clarity.
+        """
+        return await StreamingDatabaseService.get_camera_room_by_id(room_id)
+
+    @staticmethod
     async def update_camera_room_status(
         room_db_id: str, connected: bool, ended_at: Optional[str] = None
     ) -> None:
@@ -290,6 +298,26 @@ class StreamingDatabaseService:
         except Exception as e:
             logger.error(
                 "Error fetching camera rooms for session %s: %s", session_id, e
+            )
+            raise
+
+    @staticmethod
+    async def has_active_cameras(session_id: str) -> bool:
+        """Check if a session has any active (connected) camera rooms."""
+        try:
+            result = (
+                supabase.table("camera_streaming_rooms")
+                .select("id")
+                .eq("session_id", session_id)
+                .eq("connected", True)
+                .execute()
+            )
+
+            return len(result.data or []) > 0
+
+        except Exception as e:
+            logger.error(
+                "Error checking active cameras for session %s: %s", session_id, e
             )
             raise
 

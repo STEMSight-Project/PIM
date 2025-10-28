@@ -8,7 +8,12 @@ import {
   Bars3Icon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
+  DocumentTextIcon,
+  HomeIcon,
+  PlayIcon,
+  UserGroupIcon,
   UserIcon,
+  VideoCameraIcon,
   XMarkIcon
 } from "@heroicons/react/24/outline";
 import Image from "next/image";
@@ -39,7 +44,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  // Derive display name/email from authenticated user to display in sidebar 
+  const firstName = (user as any)?.first_name ?? (user as any)?.user_metadata?.first_name ?? "";
+  const lastName = (user as any)?.last_name ?? (user as any)?.user_metadata?.last_name ?? "";
+  const hasName = Boolean(firstName || lastName);
+  const displayName = hasName
+    ? `Dr. ${[firstName, lastName].filter(Boolean).join(" ")}`
+    : user?.email
+      ? `Dr. ${user.email.split("@")[0]}`
+      : "Doctor";
+  const displayEmail = user?.email ?? "";
 
   // Load collapsed state from localStorage
   useEffect(() => {
@@ -170,7 +185,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 scale-105"
                       : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:scale-102",
                     sidebarCollapsed &&
-                      "lg:justify-center lg:space-x-0 lg:w-12 lg:h-12 lg:mx-auto lg:p-0"
+                    "lg:justify-center lg:space-x-0 lg:w-12 lg:h-12 lg:mx-auto lg:p-0"
                   )}
                   onClick={() => setSidebarOpen(false)}
                   title={sidebarCollapsed ? item.name : undefined}
@@ -214,10 +229,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {(!sidebarCollapsed || sidebarOpen) && (
                 <div className="flex-1 min-w-0 transition-opacity duration-300">
                   <p className="text-sm font-semibold text-slate-900 truncate">
-                    Dr. Smith
+                    {displayName}
                   </p>
                   <p className="text-xs text-slate-500 truncate">
-                    doctor@stemsight.com
+                    {displayEmail}
                   </p>
                 </div>
               )}
