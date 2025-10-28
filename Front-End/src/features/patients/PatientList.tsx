@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import React from "react";
 import { usePatients } from "@/hooks";
 import type { PatientCreateRequest } from "@/types";
 import { formatDate } from "@/utils/cn";
@@ -220,22 +221,20 @@ export function PatientList() {
             <div className="flex items-center bg-gray-100 rounded-xl p-1">
               <button
                 onClick={() => setViewMode("grid")}
-                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                  viewMode === "grid"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
+                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === "grid"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+                  }`}
               >
                 <Squares2X2Icon className="h-4 w-4 mr-2" />
                 Grid
               </button>
               <button
                 onClick={() => setViewMode("table")}
-                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                  viewMode === "table"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
+                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === "table"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+                  }`}
               >
                 <ListBulletIcon className="h-4 w-4 mr-2" />
                 Table
