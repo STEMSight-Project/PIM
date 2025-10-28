@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MediaPipe WebRTC Test Client</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #111; color: #eee; text-align: center; }
+        video { width: 720px; height: auto; background: #000; margin-top: 20px; }
+        button { padding: 10px; margin: 10px; font-size: 16px; }
+        #log { text-align:left; max-width:720px; margin:20px auto; background:#222; padding:10px; border-radius:6px; }
+    </style>
+</head>
+<body>
+    <h2>WebRTC Streaming Test</h2>
+    <button onclick="start()">Start WebRTC Stream</button>
+    <video id="video" autoplay playsinline></video>
+
+    <pre id="log"></pre>
+
+    <script>
+        const logElement = document.getElementById('log');
+        function log(message) {
+            console.log(message);
+            logElement.textContent += message + "\n";
+        }
+
+        async function start() {
+            log("Starting WebRTC...");
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+            });
+
+            pc.ontrack = (event) => {
+                log("Track received");
+                document.getElementById("video").srcObject = event.streams[0];
+            };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            log("Sending SDP offer...");
+            const response = await fetch("/offer", {
+                method: "POST",
+                headers: { "Content-Type": "application/sdp" },
+                body: offer.sdp
+            });
+
+            const answer_sdp = await response.text();
+            log("Received SDP answer");
+            await pc.setRemoteDescription({ type: "answer", sdp: answer_sdp });
+        }
+    </script>
+</body>
+</html>
+

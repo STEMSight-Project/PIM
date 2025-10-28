@@ -3,9 +3,10 @@ AI Detection Database Service
 Handles database operations for AI movement detection results
 """
 
-from typing import Dict, List, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Dict, List, Optional
+
 from ...core.common import SUPABASE_ADMIN as supabase
 
 logger = logging.getLogger(__name__)
@@ -91,13 +92,16 @@ class AIDetectionService:
             }
 
             result = (
-                supabase.table(AIDetectionService.TABLE_NAME).insert(data).execute()
+                supabase.table(AIDetectionService.TABLE_NAME).insert(
+                    data).execute()
             )
 
             if result.data:
                 logger.info(
-                    f"✅ Created AI detection: session={session_id}, video={video_id}, "
-                    f"movement={movement_type}, confidence={confidence_score:.1%}"
+                    f"✅ Created AI detection: session={
+                        session_id}, video={video_id}, "
+                    f"movement={movement_type}, confidence={
+                        confidence_score:.1%}"
                 )
                 return result.data[0]
             else:
@@ -132,7 +136,8 @@ class AIDetectionService:
             return result.data if result.data else []
 
         except Exception as e:
-            logger.error(f"Error fetching detections for video {video_id}: {str(e)}")
+            logger.error(f"Error fetching detections for video {
+                         video_id}: {str(e)}")
             raise
 
     @staticmethod
@@ -191,7 +196,8 @@ class AIDetectionService:
             return result.data if result.data else []
 
         except Exception as e:
-            logger.error(f"Error fetching detections requiring review: {str(e)}")
+            logger.error(
+                f"Error fetching detections requiring review: {str(e)}")
             raise
 
     @staticmethod

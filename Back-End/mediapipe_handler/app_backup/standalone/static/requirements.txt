@@ -1,0 +1,7 @@
+aiohttp>=3.8
+aiortc>=1.7.0
+opencv-python>=4.5
+mediapipe>=0.10
+av>=10.0
+numpy>=1.20
+

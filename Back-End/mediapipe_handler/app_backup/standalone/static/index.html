@@ -1,0 +1,87 @@
+```html
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MediaPipe WebRTC Playback</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    video { width: 640px; height: auto; border: 1px solid #444; background: #000; }
+    #status { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>MediaPipe WebRTC Stream (Server → Browser)</h1>
+  <p>This client creates a WebRTC offer and sends it to the server. The server
+     will send a MediaPipe-processed video track back to the browser.</p>
+
+  <button id="start">Start stream</button>
+  <button id="stop" disabled>Stop</button>
+
+  <div>
+    <video id="remoteVideo" autoplay playsinline></video>
+  </div>
+  <div id="status"></div>
+
+  <script>
+    let pc = null;
+    const startBtn = document.getElementById('start');
+    const stopBtn = document.getElementById('stop');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const statusDiv = document.getElementById('status');
+
+    function logStatus(s) {
+      statusDiv.textContent = s;
+      console.log(s);
+    }
+
+    startBtn.onclick = async () => {
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      pc = new RTCPeerConnection();
+
+      pc.ontrack = (event) => {
+        // Attach the first track to the video element
+        if (remoteVideo.srcObject !== event.streams[0]) {
+          remoteVideo.srcObject = event.streams[0];
+          logStatus("Received remote stream");
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        logStatus("Connection state: " + pc.connectionState);
+      };
+
+      // We don't send any local tracks; only receive remote server track.
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      // send offer to server
+      logStatus("Sending SDP offer to server...");
+      const resp = await fetch('/offer', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({sdp: pc.localDescription.sdp, type: pc.localDescription.type})
+      });
+
+      const answer = await resp.json();
+      await pc.setRemoteDescription(answer);
+      logStatus("Remote description set (connected)");
+    };
+
+    stopBtn.onclick = async () => {
+      stopBtn.disabled = true;
+      startBtn.disabled = false;
+      if (pc) {
+        pc.getSenders().forEach(s => { try { s.track && s.track.stop(); } catch(e){} });
+        pc.close();
+        pc = null;
+        remoteVideo.srcObject = null;
+        logStatus("Stopped");
+      }
+    };
+  </script>
+</body>
+</html>

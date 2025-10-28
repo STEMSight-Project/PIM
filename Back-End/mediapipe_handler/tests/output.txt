@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.8, pytest-8.4.2, pluggy-1.6.0 -- /home/luvhamr/Repos/test/mediapipe_handler/venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/luvhamr/Repos/test/mediapipe_handler
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.11.0, cov-7.0.0
+collecting ... collected 6 items
+
+tests/test_playback_video.py::test_run_invalid_file PASSED               [ 16%]
+tests/test_playback_video.py::test_run_valid_file PASSED                 [ 33%]
+tests/test_playback_video.py::test_on_trackbar_sets_frame_position PASSED [ 50%]
+tests/test_record_video.py::test_run_recording_saves_video PASSED        [ 66%]
+tests/test_record_video.py::test_run_graceful_failure_on_read PASSED     [ 83%]
+tests/test_record_video.py::test_output_filepath_format PASSED           [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.8-final-0 ________________
+
+Name                               Stmts   Miss  Cover   Missing
+----------------------------------------------------------------
+app/__init__.py                        0      0   100%
+app/main.py                           14     14     0%   1-40
+app/standalone/playback_video.py      36      8    78%   17-18, 29, 41-45
+app/standalone/record_video.py        40      2    95%   44-45
+app/webrtc_streamer.py                43     43     0%   5-61
+----------------------------------------------------------------
+TOTAL                                133     67    50%
+============================== 6 passed in 1.12s ===============================

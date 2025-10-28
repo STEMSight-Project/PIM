@@ -1,0 +1,198 @@
+
+tests/test_ai_modules.py::test_ai_modules_importable FAILED              [  8%]
+tests/test_ambulance_service.py::test_get_all_ambulances FAILED          [ 16%]
+tests/test_ambulance_service.py::test_get_ambulance_by_id_and_create FAILED [ 25%]
+tests/test_ambulance_service.py::test_delete_ambulance_with_active_sessions_raises FAILED [ 33%]
+tests/test_email_service.py::test_email_service_send_confirmation_returns_true FAILED [ 41%]
+tests/test_email_service.py::test_email_service_singleton_export FAILED  [ 50%]
+tests/test_password_reset_service.py::test_get_email_client_raises_when_env_missing FAILED [ 58%]
+tests/test_password_reset_service.py::test_send_password_reset_email_flow FAILED [ 66%]
+tests/test_realtime_service.py::test_realtime_service_smoke FAILED       [ 75%]
+tests/test_streaming_services.py::test_streaming_recording_service_imports FAILED [ 83%]
+tests/test_streaming_services.py::test_streaming_room_service_imports FAILED [ 91%]
+tests/test_video_service.py::test_get_all_recordings_format FAILED       [100%]
+
+=================================== FAILURES ===================================
+__________________________ test_ai_modules_importable __________________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+
+    def test_ai_modules_importable(repo_root, fake_core_modules):
+>       from Back_End.tests.conftest import load_service_module
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_ai_modules.py:2: ModuleNotFoundError
+___________________________ test_get_all_ambulances ____________________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f50704b8610>
+
+    @pytest.mark.asyncio
+    async def test_get_all_ambulances(repo_root, fake_core_modules, monkeypatch):
+        # prepare fake data
+        data_map = {
+            "ambulances": [
+                {"id": "a1", "ambulance_number": "AMB-001"},
+                {"id": "a2", "ambulance_number": "AMB-002"},
+            ]
+        }
+        fake_core_modules.supabase = fake_core_modules.supabase = __import__(
+            "types"
+        ).SimpleNamespace()
+        # Use the helper to create a mock supabase consistent with conftest
+>       from Back_End.tests.conftest import (
+            _make_mock_supabase,  # local import for the helper
+        )
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_ambulance_service.py:17: ModuleNotFoundError
+_____________________ test_get_ambulance_by_id_and_create ______________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f50704b92d0>
+
+    @pytest.mark.asyncio
+    async def test_get_ambulance_by_id_and_create(
+        repo_root, fake_core_modules, monkeypatch
+    ):
+>       from Back_End.tests.conftest import _make_mock_supabase
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_ambulance_service.py:38: ModuleNotFoundError
+______________ test_delete_ambulance_with_active_sessions_raises _______________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+
+    @pytest.mark.asyncio
+    async def test_delete_ambulance_with_active_sessions_raises(
+        repo_root, fake_core_modules
+    ):
+>       from Back_End.tests.conftest import _make_mock_supabase
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_ambulance_service.py:64: ModuleNotFoundError
+______________ test_email_service_send_confirmation_returns_true _______________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f50703359d0>
+
+    def test_email_service_send_confirmation_returns_true(
+        repo_root, fake_core_modules, monkeypatch
+    ):
+        # Load module
+>       from Back_End.tests.conftest import load_service_module
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_email_service.py:8: ModuleNotFoundError
+_____________________ test_email_service_singleton_export ______________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+
+    def test_email_service_singleton_export(repo_root, fake_core_modules):
+>       from Back_End.tests.conftest import load_service_module
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_email_service.py:18: ModuleNotFoundError
+________________ test_get_email_client_raises_when_env_missing _________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507033cc50>
+
+    @pytest.mark.asyncio
+    async def test_get_email_client_raises_when_env_missing(
+        repo_root, fake_core_modules, monkeypatch
+    ):
+        # set env to missing values
+        sys_mod = __import__("sys")
+>       core_env = sys.modules.get("core.env")
+                   ^^^
+E       NameError: name 'sys' is not defined
+
+tests/test_password_reset_service.py:10: NameError
+_____________________ test_send_password_reset_email_flow ______________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507033efd0>
+
+    @pytest.mark.asyncio
+    async def test_send_password_reset_email_flow(
+        repo_root, fake_core_modules, monkeypatch
+    ):
+        # monkeypatch store_reset_token to avoid DB calls and get_email_client to a Fake FastMail
+>       from Back_End.tests.conftest import load_service_module
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_password_reset_service.py:33: ModuleNotFoundError
+_________________________ test_realtime_service_smoke __________________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+
+    @pytest.mark.asyncio
+    async def test_realtime_service_smoke(repo_root, fake_core_modules):
+>       from Back_End.tests.conftest import load_service_module
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_realtime_service.py:6: ModuleNotFoundError
+___________________ test_streaming_recording_service_imports ___________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+
+    @pytest.mark.asyncio
+    async def test_streaming_recording_service_imports(repo_root, fake_core_modules):
+>       from Back_End.tests.conftest import load_service_module
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_streaming_services.py:6: ModuleNotFoundError
+_____________________ test_streaming_room_service_imports ______________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+
+    @pytest.mark.asyncio
+    async def test_streaming_room_service_imports(repo_root, fake_core_modules):
+>       from Back_End.tests.conftest import load_service_module
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_streaming_services.py:19: ModuleNotFoundError
+________________________ test_get_all_recordings_format ________________________
+
+repo_root = PosixPath('/home/luvhamr/Repos/PIM')
+fake_core_modules = <module 'core.common'>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5070369e10>
+
+    @pytest.mark.asyncio
+    async def test_get_all_recordings_format(repo_root, fake_core_modules, monkeypatch):
+>       from Back_End.tests.conftest import _make_mock_supabase, load_service_module
+E       ModuleNotFoundError: No module named 'Back_End'
+
+tests/test_video_service.py:6: ModuleNotFoundError
+=============================== warnings summary ===============================
+../../venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1533
+  /home/luvhamr/Repos/PIM/venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1533: PytestConfigWarning: No files were found in testpaths; consider removing or adjusting your testpaths configuration. Searching recursively from the current directory instead.
+    self.args, self.args_source = self._decide_args(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_ai_modules.py::test_ai_modules_importable - ModuleNotFoundE...
+FAILED tests/test_ambulance_service.py::test_get_all_ambulances - ModuleNotFo...
+FAILED tests/test_ambulance_service.py::test_get_ambulance_by_id_and_create
+FAILED tests/test_ambulance_service.py::test_delete_ambulance_with_active_sessions_raises
+FAILED tests/test_email_service.py::test_email_service_send_confirmation_returns_true
+FAILED tests/test_email_service.py::test_email_service_singleton_export - Mod...
+FAILED tests/test_password_reset_service.py::test_get_email_client_raises_when_env_missing
+FAILED tests/test_password_reset_service.py::test_send_password_reset_email_flow
+FAILED tests/test_realtime_service.py::test_realtime_service_smoke - ModuleNo...
+FAILED tests/test_streaming_services.py::test_streaming_recording_service_imports
+FAILED tests/test_streaming_services.py::test_streaming_room_service_imports
+FAILED tests/test_video_service.py::test_get_all_recordings_format - ModuleNo...
+======================== 12 failed, 1 warning in 0.07s =========================
