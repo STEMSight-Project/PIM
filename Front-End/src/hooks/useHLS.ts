@@ -10,8 +10,8 @@ import Hls, { ErrorData, Events } from "hls.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface UseHLSOptions {
-  /** Session ID for the recording */
-  sessionId: string | null;
+  /** Room ID for the recording (e.g., AMB-001-ROOM-001) */
+  roomId: string | null;
 
   /** Auto-play when ready */
   autoPlay?: boolean;
@@ -66,7 +66,7 @@ export interface UseHLSReturn {
 
 export function useHLS(options: UseHLSOptions): UseHLSReturn {
   const {
-    sessionId,
+    roomId,
     autoPlay = false,
     lowLatencyMode = false,
     maxBufferLength = 30,
@@ -89,15 +89,15 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
    * Initialize HLS player
    */
   const initializeHLS = useCallback(() => {
-    if (!sessionId || !videoRef.current) {
+    if (!roomId || !videoRef.current) {
       return;
     }
 
     const video = videoRef.current;
-    const playlistUrl = hlsService.getPlaylistUrl(sessionId);
+    const playlistUrl = hlsService.getPlaylistUrl(roomId);
 
     if (debug) {
-      console.log("[useHLS] Initializing player for session:", sessionId);
+      console.log("[useHLS] Initializing player for room:", roomId);
       console.log("[useHLS] Playlist URL:", playlistUrl);
     }
 
@@ -229,13 +229,13 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
       setStatus("Browser not supported");
       setIsLoading(false);
     }
-  }, [sessionId, autoPlay, lowLatencyMode, maxBufferLength, debug]);
+  }, [roomId, autoPlay, lowLatencyMode, maxBufferLength, debug]);
 
   /**
    * Start polling recording status
    */
   const startStatusPolling = useCallback(() => {
-    if (!sessionId) return;
+    if (!roomId) return;
 
     // Clean up existing polling
     if (pollCleanupRef.current) {
@@ -245,7 +245,7 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
 
     // Start new polling
     const cleanup = hlsService.pollRecordingStatus(
-      sessionId,
+      roomId,
       (status) => {
         setRecordingStatus(status);
 
@@ -257,7 +257,7 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
     );
 
     pollCleanupRef.current = cleanup;
-  }, [sessionId, statusPollingInterval, debug]);
+  }, [roomId, statusPollingInterval, debug]);
 
   /**
    * Reload the stream
@@ -302,16 +302,16 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
   }, []);
 
   /**
-   * Initialize player when sessionId changes
+   * Initialize player when roomId changes
    */
   useEffect(() => {
-    if (sessionId) {
+    if (roomId) {
       initializeHLS();
       startStatusPolling();
     } else {
       setIsLoading(false);
-      setError("No session ID provided");
-      setStatus("No session");
+      setError("No room ID provided");
+      setStatus("No room selected");
     }
 
     // Cleanup
@@ -326,7 +326,7 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
         pollCleanupRef.current = null;
       }
     };
-  }, [sessionId, initializeHLS, startStatusPolling]);
+  }, [roomId, initializeHLS, startStatusPolling]);
 
   return {
     videoRef,

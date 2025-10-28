@@ -281,7 +281,9 @@ export default function SimpleAmbulanceStreamingPage() {
                   <span className="text-gray-500">Camera Status:</span>
                   <span
                     className={
-                      selectedRoom.connected ? "text-green-600" : "text-red-600"
+                      selectedRoom.connected
+                        ? "text-green-600"
+                        : "text-red-600"
                     }
                   >
                     {selectedRoom.connected ? "Online" : "Offline"}

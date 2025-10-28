@@ -11,8 +11,8 @@ import { useHLS } from "@/hooks/useHLS";
 import { cn } from "@/utils/cn";
 
 export interface HLSVideoPlayerProps {
-  /** Session ID for the recording */
-  sessionId: string | null;
+  /** Room ID for the recording (e.g., AMB-001-ROOM-001) */
+  roomId: string | null;
 
   /** Auto-play when ready */
   autoPlay?: boolean;
@@ -40,7 +40,7 @@ export interface HLSVideoPlayerProps {
  * Simple HLS video player with minimal UI
  */
 export function HLSVideoPlayer({
-  sessionId,
+  roomId,
   autoPlay = false,
   controls = true,
   lowLatencyMode = false,
@@ -50,7 +50,7 @@ export function HLSVideoPlayer({
   onError,
 }: HLSVideoPlayerProps) {
   const { videoRef, isLoading, error } = useHLS({
-    sessionId,
+    roomId,
     autoPlay,
     lowLatencyMode,
   });

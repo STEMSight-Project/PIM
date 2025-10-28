@@ -402,6 +402,12 @@ class Room:
 
                 # Schedule recording to start after video track is received
                 if self.session_id:
+                    print(
+                        f"\n🔥🔥🔥 CREATING RECORDING TASK FOR SESSION {self.session_id} 🔥🔥🔥\n"
+                    )
+                    logger.info(
+                        f"🔥 [RECORDING] Creating recording task for session {self.session_id}"
+                    )
                     asyncio.create_task(self._start_recording_when_track_ready())
 
                 # Start professional activity monitoring when first streamer connects
@@ -568,16 +574,23 @@ class Room:
 
     async def _start_recording_when_track_ready(self):
         """Wait for video track to be available, then start recording"""
+        print(
+            f"\n🔥🔥🔥 _START_RECORDING_WHEN_TRACK_READY CALLED FOR ROOM {self.room_id} 🔥🔥🔥\n"
+        )
         try:
+            logger.info(f"[RECORDING] Waiting for video track for room {self.room_id}")
             # Wait up to 10 seconds for video track
-            for _ in range(20):  # 20 * 0.5 = 10 seconds
+            for i in range(20):  # 20 * 0.5 = 10 seconds
+                logger.debug(
+                    f"[RECORDING] Check #{i+1}/20 - video_track is {'AVAILABLE' if self.video_track else 'None'}"
+                )
                 if self.video_track:
                     # Video track is available, start recording
                     ambulance_number = (
                         self.room_id.split("-")[1] if "-" in self.room_id else "unknown"
                     )
                     logger.info(
-                        f"Video track ready, starting HLS recording for room {self.room_id} (session {self.session_id})"
+                        f"✅ [RECORDING] Video track ready, starting HLS recording for room {self.room_id} (session {self.session_id})"
                     )
 
                     await recording_manager.start_session_recording(
@@ -586,13 +599,16 @@ class Room:
                         ambulance_number,
                         self.video_track,
                     )
+                    logger.info(
+                        f"✅ [RECORDING] start_session_recording() completed for room {self.room_id}"
+                    )
                     return
 
                 await asyncio.sleep(0.5)
 
             # Timeout - video track never received
             logger.error(
-                f"Timeout waiting for video track for room {self.room_id} (session {self.session_id})"
+                f"❌ [RECORDING] Timeout waiting for video track for room {self.room_id} (session {self.session_id}) - video_track is still None!"
             )
 
         except Exception as e:

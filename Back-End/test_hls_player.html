@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HLS Test Player - AMB-003-ROOM-001</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 50px auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        border-bottom: 3px solid #4caf50;
+        padding-bottom: 10px;
+      }
+      .info {
+        background: #e3f2fd;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 20px 0;
+      }
+      video {
+        width: 100%;
+        max-width: 800px;
+        border-radius: 5px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        background: #000;
+      }
+      .controls {
+        margin: 20px 0;
+      }
+      button {
+        background: #4caf50;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 10px;
+      }
+      button:hover {
+        background: #45a049;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      .status {
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+      }
+      .status.success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .status.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .status.info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin: 20px 0;
+      }
+      .stat-card {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        border-left: 4px solid #4caf50;
+      }
+      .stat-label {
+        font-size: 12px;
+        color: #666;
+        text-transform: uppercase;
+      }
+      .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #333;
+      }
+      code {
+        background: #f4f4f4;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: "Courier New", monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎥 HLS Recording Test Player</h1>
+
+      <div class="info">
+        <strong>Room ID:</strong> <code>AMB-003-ROOM-001</code><br />
+        <strong>Playlist URL:</strong>
+        <code id="playlistUrl"
+          >http://localhost:8000/videos/hls/AMB-003-ROOM-001/playlist.m3u8</code
+        ><br />
+        <strong>Backend:</strong> <code>http://localhost:8000</code>
+      </div>
+
+      <div id="status" class="status info">⏳ Initializing player...</div>
+
+      <div class="controls">
+        <button id="loadBtn" onclick="loadVideo()">▶️ Load HLS Stream</button>
+        <button id="checkBtn" onclick="checkPlaylist()">
+          🔍 Check Playlist
+        </button>
+        <button id="refreshBtn" onclick="location.reload()">
+          🔄 Refresh Page
+        </button>
+      </div>
+
+      <video id="video" controls autoplay muted></video>
+
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-label">Playback Status</div>
+          <div class="stat-value" id="playbackStatus">Not Started</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Current Time</div>
+          <div class="stat-value" id="currentTime">0:00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Duration</div>
+          <div class="stat-value" id="duration">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Buffer Health</div>
+          <div class="stat-value" id="bufferHealth">-</div>
+        </div>
+      </div>
+
+      <h2>📋 Debug Logs</h2>
+      <div
+        id="logs"
+        style="
+          background: #f4f4f4;
+          padding: 15px;
+          border-radius: 5px;
+          max-height: 300px;
+          overflow-y: auto;
+          font-family: monospace;
+          font-size: 12px;
+        "
+      >
+        <div style="color: #666">Waiting for actions...</div>
+      </div>
+    </div>
+
+    <script>
+      const video = document.getElementById("video");
+      const statusDiv = document.getElementById("status");
+      const logsDiv = document.getElementById("logs");
+      const playlistUrl =
+        "http://localhost:8000/videos/hls/AMB-003-ROOM-001/playlist.m3u8";
+
+      let hls;
+
+      function log(message, type = "info") {
+        const timestamp = new Date().toLocaleTimeString();
+        const color =
+          type === "error"
+            ? "#d32f2f"
+            : type === "success"
+            ? "#388e3c"
+            : "#666";
+        logsDiv.innerHTML += `<div style="color: ${color}; margin: 5px 0;">[${timestamp}] ${message}</div>`;
+        logsDiv.scrollTop = logsDiv.scrollHeight;
+        console.log(`[${timestamp}] ${message}`);
+      }
+
+      function setStatus(message, type = "info") {
+        statusDiv.className = `status ${type}`;
+        statusDiv.innerHTML = message;
+      }
+
+      function updateStats() {
+        if (video.paused) {
+          document.getElementById("playbackStatus").textContent = "Paused";
+        } else if (video.ended) {
+          document.getElementById("playbackStatus").textContent = "Ended";
+        } else {
+          document.getElementById("playbackStatus").textContent = "Playing";
+        }
+
+        const currentMinutes = Math.floor(video.currentTime / 60);
+        const currentSeconds = Math.floor(video.currentTime % 60);
+        document.getElementById(
+          "currentTime"
+        ).textContent = `${currentMinutes}:${currentSeconds
+          .toString()
+          .padStart(2, "0")}`;
+
+        if (video.duration && !isNaN(video.duration)) {
+          const durationMinutes = Math.floor(video.duration / 60);
+          const durationSeconds = Math.floor(video.duration % 60);
+          document.getElementById(
+            "duration"
+          ).textContent = `${durationMinutes}:${durationSeconds
+            .toString()
+            .padStart(2, "0")}`;
+        }
+
+        if (hls && hls.media) {
+          const buffered = video.buffered;
+          if (buffered.length > 0) {
+            const bufferEnd = buffered.end(buffered.length - 1);
+            const bufferHealth = bufferEnd - video.currentTime;
+            document.getElementById(
+              "bufferHealth"
+            ).textContent = `${bufferHealth.toFixed(1)}s`;
+          }
+        }
+      }
+
+      async function checkPlaylist() {
+        log("🔍 Checking if playlist exists...", "info");
+        setStatus("🔍 Checking playlist availability...", "info");
+
+        try {
+          const response = await fetch(playlistUrl, {
+            method: "HEAD",
+            headers: {
+              Accept: "application/vnd.apple.mpegurl",
+            },
+          });
+
+          if (response.ok) {
+            log("✅ Playlist found! Status: " + response.status, "success");
+            setStatus("✅ Playlist is available! Ready to play.", "success");
+
+            // Try to fetch content
+            const contentResponse = await fetch(playlistUrl);
+            const content = await contentResponse.text();
+            log(
+              "📄 Playlist content length: " + content.length + " bytes",
+              "info"
+            );
+            log("First line: " + content.split("\n")[0], "info");
+          } else {
+            log("❌ Playlist not found. Status: " + response.status, "error");
+            setStatus(
+              `❌ Playlist not found (HTTP ${response.status}). Recording may not have started yet.`,
+              "error"
+            );
+          }
+        } catch (error) {
+          log("❌ Error checking playlist: " + error.message, "error");
+          setStatus("❌ Error: " + error.message, "error");
+        }
+      }
+
+      function loadVideo() {
+        if (Hls.isSupported()) {
+          log("✅ HLS.js is supported", "success");
+          hls = new Hls({
+            debug: true,
+            enableWorker: true,
+            lowLatencyMode: false,
+          });
+
+          hls.loadSource(playlistUrl);
+          hls.attachMedia(video);
+
+          hls.on(Hls.Events.MANIFEST_PARSED, function () {
+            log("✅ Manifest parsed successfully!", "success");
+            setStatus("✅ HLS stream loaded! Playing...", "success");
+            video.play().catch((e) => {
+              log("❌ Autoplay failed: " + e.message, "error");
+            });
+          });
+
+          hls.on(Hls.Events.ERROR, function (event, data) {
+            log("❌ HLS Error: " + data.type + " - " + data.details, "error");
+            if (data.fatal) {
+              setStatus("❌ Fatal HLS error: " + data.details, "error");
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  log("🔄 Network error, attempting recovery...", "info");
+                  hls.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  log("🔄 Media error, attempting recovery...", "info");
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  log("💥 Unrecoverable error, destroying player", "error");
+                  hls.destroy();
+                  break;
+              }
+            }
+          });
+
+          hls.on(Hls.Events.FRAG_LOADED, function (event, data) {
+            log(
+              `📦 Fragment loaded: ${data.frag.sn} (${Math.round(
+                data.frag.duration
+              )}s)`,
+              "info"
+            );
+          });
+        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          log("✅ Native HLS support detected (Safari)", "success");
+          video.src = playlistUrl;
+          video.addEventListener("loadedmetadata", function () {
+            log("✅ Video metadata loaded", "success");
+            setStatus("✅ Video loaded! Playing...", "success");
+            video.play();
+          });
+        } else {
+          log("❌ HLS not supported in this browser", "error");
+          setStatus("❌ HLS playback not supported in this browser", "error");
+        }
+      }
+
+      // Video event listeners
+      video.addEventListener("play", () => {
+        log("▶️ Video playing", "success");
+        updateStats();
+      });
+
+      video.addEventListener("pause", () => {
+        log("⏸️ Video paused", "info");
+        updateStats();
+      });
+
+      video.addEventListener("ended", () => {
+        log("🏁 Video ended", "info");
+        updateStats();
+      });
+
+      video.addEventListener("error", (e) => {
+        log("❌ Video error: " + e.message, "error");
+      });
+
+      video.addEventListener("timeupdate", updateStats);
+
+      // Auto-check playlist on load
+      window.addEventListener("load", () => {
+        log("🚀 Page loaded, checking playlist...", "info");
+        checkPlaylist();
+      });
+    </script>
+  </body>
+</html>

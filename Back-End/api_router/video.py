@@ -1,13 +1,15 @@
 from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
+from uuid import uuid4
 from pydantic import BaseModel
 from core.common import supabase, logger
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from security.jwt_verify import current_user
 from services.video_service import VideoService
 from services.streaming.recording_service import recording_manager, RECORDINGS_BASE_PATH
+from services.streaming.hls_segment_service import hls_segment_service
 
 router = APIRouter()
 
@@ -287,7 +289,9 @@ async def get_hls_playlist(room_id: str):
             path=playlist_path,
             media_type="application/vnd.apple.mpegurl",
             headers={
-                "Cache-Control": "public, max-age=3600",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
                 "Access-Control-Allow-Origin": "*",
             },
         )
@@ -633,3 +637,302 @@ async def get_recording_status_public(room_id: str):
 async def list_hls_recordings_public():
     """List all available HLS recordings (public endpoint)"""
     return await list_hls_recordings()
+
+
+# ============================================================================
+# HLS SEGMENT SSE ENDPOINTS (Real-time segment notifications)
+# ============================================================================
+
+
+@router.get("/hls/segments/{room_id}/events")
+async def hls_segment_events(request: Request, room_id: str):
+    """
+    Server-Sent Events (SSE) endpoint for real-time HLS segment notifications.
+
+    Clients can connect to this endpoint to receive events when new HLS segments
+    are created during recording. This enables real-time HLS playback updates.
+
+    Event Types:
+    - connected: Initial connection confirmation
+    - new_segment: New HLS segment created
+    - heartbeat: Keep-alive ping every 30 seconds
+    - error: Error occurred
+
+    Args:
+        request: FastAPI request object
+        room_id: Camera room ID
+
+    Returns:
+        StreamingResponse with SSE events
+
+    Example client usage (JavaScript):
+    ```javascript
+    const eventSource = new EventSource('/videos/hls/segments/AMB-001-ROOM-001/events');
+
+    eventSource.addEventListener('message', (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'new_segment') {
+            console.log('New segment:', data.segment_name);
+            // Reload HLS player to get latest segments
+            hls.loadSource('/videos/hls/AMB-001-ROOM-001/playlist.m3u8');
+        }
+    });
+    ```
+    """
+    try:
+        # Get segment monitor for this room
+        monitor = hls_segment_service.get_monitor(room_id)
+
+        if not monitor:
+            raise HTTPException(
+                status_code=404, detail=f"No active recording found for room {room_id}"
+            )
+
+        # Generate unique client ID
+        client_id = str(uuid4())
+
+        # Create SSE stream
+        return StreamingResponse(
+            monitor.create_sse_stream(request, client_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating SSE stream for room {room_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hls/segments/stats")
+async def get_segment_service_stats():
+    """
+    Get statistics about active HLS segment monitoring.
+
+    Useful for debugging and monitoring the segment service health.
+
+    Returns:
+        Statistics including active monitors, SSE clients, and segment counts
+    """
+    try:
+        stats = hls_segment_service.get_stats()
+        return {"data": stats, "error": None}
+    except Exception as e:
+        logger.error(f"Error getting segment service stats: {e}")
+        return {"data": None, "error": str(e)}
+
+
+@public_hls_router.get("/hls/segments/{room_id}/events")
+async def hls_segment_events_public(request: Request, room_id: str):
+    """Public endpoint for HLS segment SSE (no authentication required)"""
+    return await hls_segment_events(request, room_id)
+
+
+# ============================================================================
+# TEST ENDPOINTS
+# ============================================================================
+
+
+@public_hls_router.get("/test-player/{room_id}")
+async def get_test_player(room_id: str):
+    """
+    Serve a test HTML page for HLS playback testing
+
+    Example: http://localhost:8000/videos/test-player/AMB-003-ROOM-001
+    """
+    from fastapi.responses import HTMLResponse
+
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HLS Test Player - {room_id}</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }}
+        .container {{
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }}
+        .info {{
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }}
+        video {{
+            width: 100%;
+            max-width: 800px;
+            border-radius: 5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background: #000;
+        }}
+        .controls {{
+            margin: 20px 0;
+        }}
+        button {{
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }}
+        button:hover {{
+            background: #45a049;
+        }}
+        .status {{
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }}
+        .status.success {{
+            background: #d4edda;
+            color: #155724;
+        }}
+        .status.error {{
+            background: #f8d7da;
+            color: #721c24;
+        }}
+        .status.info {{
+            background: #d1ecf1;
+            color: #0c5460;
+        }}
+        code {{
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }}
+        #logs {{
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎥 HLS Recording Test Player</h1>
+        
+        <div class="info">
+            <strong>Room ID:</strong> <code>{room_id}</code><br>
+            <strong>Playlist URL:</strong> <code id="playlistUrl">http://localhost:8000/videos/hls/{room_id}/playlist.m3u8</code>
+        </div>
+
+        <div id="status" class="status info">
+            ⏳ Ready to test...
+        </div>
+
+        <div class="controls">
+            <button onclick="checkPlaylist()">🔍 Check Playlist</button>
+            <button onclick="loadVideo()">▶️ Load Stream</button>
+            <button onclick="location.reload()">🔄 Refresh</button>
+        </div>
+
+        <video id="video" controls autoplay muted></video>
+
+        <h2>📋 Debug Logs</h2>
+        <div id="logs">
+            <div style="color: #666;">Waiting for actions...</div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const statusDiv = document.getElementById('status');
+        const logsDiv = document.getElementById('logs');
+        const playlistUrl = 'http://localhost:8000/videos/hls/{room_id}/playlist.m3u8';
+        let hls;
+
+        function log(message, type = 'info') {{
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#d32f2f' : type === 'success' ? '#388e3c' : '#666';
+            logsDiv.innerHTML += `<div style="color: ${{color}}; margin: 5px 0;">[$${{timestamp}}] $${{message}}</div>`;
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }}
+
+        function setStatus(message, type = 'info') {{
+            statusDiv.className = `status ${{type}}`;
+            statusDiv.innerHTML = message;
+        }}
+
+        async function checkPlaylist() {{
+            log('🔍 Checking playlist...', 'info');
+            try {{
+                const response = await fetch(playlistUrl);
+                if (response.ok) {{
+                    const content = await response.text();
+                    log('✅ Playlist found! (' + content.length + ' bytes)', 'success');
+                    setStatus('✅ Playlist is available!', 'success');
+                }} else {{
+                    log('❌ Playlist not found. Status: ' + response.status, 'error');
+                    setStatus('❌ Recording not found. Has the stream started?', 'error');
+                }}
+            }} catch (error) {{
+                log('❌ Error: ' + error.message, 'error');
+                setStatus('❌ Error: ' + error.message, 'error');
+            }}
+        }}
+
+        function loadVideo() {{
+            if (Hls.isSupported()) {{
+                log('✅ HLS.js supported', 'success');
+                hls = new Hls({{ debug: true }});
+                hls.loadSource(playlistUrl);
+                hls.attachMedia(video);
+
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {{
+                    log('✅ Stream loaded!', 'success');
+                    setStatus('✅ Playing...', 'success');
+                    video.play();
+                }});
+
+                hls.on(Hls.Events.ERROR, function(event, data) {{
+                    log('❌ HLS Error: ' + data.details, 'error');
+                    setStatus('❌ Playback error: ' + data.details, 'error');
+                }});
+            }} else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
+                log('✅ Native HLS (Safari)', 'success');
+                video.src = playlistUrl;
+                video.play();
+            }} else {{
+                log('❌ HLS not supported', 'error');
+                setStatus('❌ Browser not supported', 'error');
+            }}
+        }}
+
+        // Auto-check on load
+        window.addEventListener('load', checkPlaylist);
+    </script>
+</body>
+</html>
+    """
+
+    return HTMLResponse(content=html_content)

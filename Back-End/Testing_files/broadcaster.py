@@ -689,6 +689,16 @@ def main() -> None:
         required=False,
         help="End a specific session ID (for testing purposes)",
     )
+    parser.add_argument(
+        "--ambulance_number",
+        required=False,
+        help="Ambulance number (e.g., 001, 003). If not provided, will prompt for input.",
+    )
+    parser.add_argument(
+        "--room",
+        required=False,
+        help="Room number (e.g., 001, 002). If not provided, will prompt for input.",
+    )
     args = parser.parse_args()
 
     # Handle end session command
@@ -697,8 +707,14 @@ def main() -> None:
         asyncio.run(end_session_manually(args.signaling, args.end_session))
         return
 
-    # Get ambulance and room numbers from user input
-    ambulance_number, room_number = get_user_input()
+    # Get ambulance and room numbers from command line or user input
+    if args.ambulance_number and args.room:
+        # Use command-line parameters
+        ambulance_number = args.ambulance_number.zfill(3)
+        room_number = args.room.zfill(3)
+    else:
+        # Get from user input
+        ambulance_number, room_number = get_user_input()
 
     ambulance_name = f"AMB-{ambulance_number}"
     room_name = f"AMB-{ambulance_number}-ROOM-{room_number}"

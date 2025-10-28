@@ -19,8 +19,8 @@ import {
 import { useEffect, useState } from "react";
 
 export interface HLSPlayerProps {
-  /** Session ID for the recording */
-  sessionId: string | null;
+  /** Room ID for the recording (e.g., AMB-001-ROOM-001) */
+  roomId: string | null;
 
   /** Auto-play when ready */
   autoPlay?: boolean;
@@ -51,7 +51,7 @@ export interface HLSPlayerProps {
 }
 
 export function HLSPlayer({
-  sessionId,
+  roomId,
   autoPlay = false,
   showControls = true,
   showStatus = true,
@@ -73,7 +73,7 @@ export function HLSPlayer({
     play,
     pause,
   } = useHLS({
-    sessionId,
+    roomId,
     autoPlay,
     lowLatencyMode,
     debug,
@@ -212,11 +212,20 @@ export function HLSPlayer({
       {showStats && recordingStatus && (
         <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-gray-600">Session ID:</span>
+            <span className="text-gray-600">Room ID:</span>
             <span className="font-mono text-xs">
-              {recordingStatus.session_id}
+              {recordingStatus.room_id}
             </span>
           </div>
+
+          {recordingStatus.session_id && (
+            <div className="flex justify-between">
+              <span className="text-gray-600">Session ID:</span>
+              <span className="font-mono text-xs">
+                {recordingStatus.session_id}
+              </span>
+            </div>
+          )}
 
           {recordingStatus.segment_count !== undefined && (
             <div className="flex justify-between">
