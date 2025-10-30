@@ -9,7 +9,16 @@ from api_router.router import api_router
 from api_router.pim_classifier_api import router as pim_router
 from core.common import logger, supabase
 import os
+import sys
+import asyncio
 from pathlib import Path
+
+# ✅ FIX: Windows asyncio subprocess support
+# Windows ProactorEventLoop doesn't support subprocesses
+# Use SelectorEventLoop instead for FFmpeg recording
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    logger.info("🪟 Windows: Using SelectorEventLoop for subprocess support")
 
 
 @asynccontextmanager

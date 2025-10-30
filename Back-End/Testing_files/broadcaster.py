@@ -3,7 +3,9 @@ import asyncio
 import inspect
 import logging
 import platform
-from typing import Optional
+import subprocess
+import re
+from typing import Optional, List, Tuple
 
 import aiohttp
 from aiortc import RTCPeerConnection, RTCSessionDescription
@@ -12,6 +14,127 @@ from aiortc.contrib.media import MediaPlayer
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("publisher")
+
+
+def detect_video_devices() -> List[Tuple[str, str]]:
+    """
+    Detect available video devices on the system.
+    Returns list of tuples: (device_name, device_identifier)
+    """
+    os_name = platform.system()
+    devices = []
+
+    try:
+        if os_name == "Windows":
+            # Use dshow to list Windows devices
+            result = subprocess.run(
+                ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            output = result.stderr  # FFmpeg outputs device list to stderr
+
+            # Parse video devices (format: "Device Name" (video))
+            video_pattern = r'"([^"]+)"\s+\(video\)'
+            matches = re.finditer(video_pattern, output)
+            for match in matches:
+                device_name = match.group(1)
+                devices.append((device_name, f"video={device_name}"))
+
+        elif os_name == "Darwin":  # macOS
+            # Use avfoundation to list macOS devices
+            result = subprocess.run(
+                ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            output = result.stderr
+
+            # Parse video devices (format: [AVFoundation indev @ 0x...] [0] Device Name)
+            video_pattern = r"\[(\d+)\]\s+(.+?)(?:\n|$)"
+            in_video_section = False
+            for line in output.split("\n"):
+                if "AVFoundation video devices:" in line:
+                    in_video_section = True
+                    continue
+                elif "AVFoundation audio devices:" in line:
+                    in_video_section = False
+                    break
+
+                if in_video_section:
+                    match = re.search(video_pattern, line)
+                    if match:
+                        device_index = match.group(1)
+                        device_name = match.group(2).strip()
+                        devices.append((device_name, f"{device_index}:none"))
+
+        else:  # Linux / *BSD
+            # List /dev/video* devices
+            result = subprocess.run(
+                ["ls", "/dev/video*"], capture_output=True, text=True, shell=True
+            )
+            if result.returncode == 0:
+                for device_path in result.stdout.strip().split("\n"):
+                    device_name = device_path.split("/")[-1]  # Get video0, video1, etc.
+                    devices.append((f"Video Device ({device_name})", device_path))
+
+    except subprocess.TimeoutExpired:
+        LOGGER.error("⏱️  Device detection timed out")
+    except FileNotFoundError:
+        LOGGER.error("❌ FFmpeg not found. Please install FFmpeg to detect devices.")
+    except Exception as e:
+        LOGGER.error(f"❌ Error detecting devices: {e}")
+
+    return devices
+
+
+def select_video_device() -> Optional[str]:
+    """
+    Display available video devices and let user select one.
+    Returns the device identifier string for FFmpeg.
+    """
+    print("\n📹 Detecting available video devices...")
+    devices = detect_video_devices()
+
+    if not devices:
+        print("❌ No video devices found!")
+        print("💡 Make sure cameras are connected and FFmpeg is installed")
+        return None
+
+    print(f"\n{'='*60}")
+    print("📷 Available Video Devices:")
+    print(f"{'='*60}")
+
+    for idx, (name, identifier) in enumerate(devices, 1):
+        print(f"  {idx}. {name}")
+
+    print(f"{'='*60}\n")
+
+    while True:
+        try:
+            choice = input(
+                f"Select device number (1-{len(devices)}) or press Enter for default: "
+            ).strip()
+
+            if not choice:  # User pressed Enter - use default
+                print(f"✅ Using default device: {devices[0][0]}")
+                return devices[0][1]
+
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(devices):
+                selected_name, selected_identifier = devices[choice_num - 1]
+                print(f"✅ Selected: {selected_name}")
+                return selected_identifier
+            else:
+                print(f"❌ Please enter a number between 1 and {len(devices)}")
+
+        except ValueError:
+            print("❌ Please enter a valid number")
+        except KeyboardInterrupt:
+            print("\n🛑 Device selection cancelled")
+            return None
 
 
 def default_device() -> str:
@@ -33,20 +156,15 @@ def get_media_player(media_src: str) -> MediaPlayer:
     if os_name == "Windows":
         format = "dshow"
         options = {
-            "input_format": "h264",
             "framerate": "30",
             "video_size": "640x480",
-            "ar": "44100",
-            "ac": "1",
-            "rtbufsize": "2100M",
-            "preset": "ultrafast",
-            "tune": "zerolatency",
+            # Removed rtbufsize - let FFmpeg use default small buffer for real-time streaming
         }
     elif os_name == "Darwin":
         format = "avfoundation"
         options = {
-            "video_size": "320x240",  # Low resolution
-            "framerate": "10",  # Low framerate
+            "video_size": "640x480",  # Increased from 320x240
+            "framerate": "30",  # Increased from 10
             "pixel_format": "yuyv422",
         }
     return MediaPlayer(media_src, format=format, options=options)
@@ -222,13 +340,33 @@ async def publish(
     ambulance_id = ambulance_data.get("id")
     LOGGER.info("✅ Using Ambulance ID: %s for %s", ambulance_id, ambulance_name)
 
-    media_src = default_device()
-    if video_device or audio_device:
+    # Step 2: Select video device
+    if video_device:
+        # Use specified device
         media_src = get_media_src(video_device, audio_device)
+        print(f"📹 Using specified device: {video_device}")
+    else:
+        # Auto-detect and let user choose
+        selected_device = select_video_device()
+        if not selected_device:
+            LOGGER.error("❌ No device selected. Exiting...")
+            return
+
+        # selected_device is already in the correct format for the platform
+        media_src = selected_device
 
     player = get_media_player(media_src)
 
-    pc = RTCPeerConnection()
+    # Create peer connection with STUN servers for better connectivity
+    from aiortc import RTCConfiguration, RTCIceServer
+
+    config = RTCConfiguration(
+        iceServers=[
+            RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
+            RTCIceServer(urls=["stun:stun1.l.google.com:19302"]),
+        ]
+    )
+    pc = RTCPeerConnection(configuration=config)
 
     if player.video:
         pc.addTrack(player.video)
@@ -653,7 +791,25 @@ async def end_session_manually(base_url: str, session_id: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="WebRTC camera publisher with smart session management"
+        description="WebRTC camera publisher with smart session management and auto device detection",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Interactive mode (will prompt for ambulance, room, and device selection)
+  python broadcaster.py
+
+  # Specify ambulance and room, but choose device interactively
+  python broadcaster.py --ambulance_number 001 --room 001
+
+  # Fully automated with specific device (Windows)
+  python broadcaster.py --ambulance_number 001 --room 001 --video_device "Logitech BRIO"
+
+  # Fully automated with specific device (macOS)
+  python broadcaster.py --ambulance_number 001 --room 001 --video_device "0"
+
+  # End a session manually
+  python broadcaster.py --end_session SESSION_ID_HERE
+        """,
     )
     parser.add_argument(
         "--signaling",
@@ -663,16 +819,14 @@ def main() -> None:
     parser.add_argument(
         "--video_device",
         required=False,
-        help="Check your device available with: "
-        '\n\tMacOS: ffmpeg -f avfoundation -list_devices true -i ""'
-        "\n\tWindows: ffmpeg -list_devices true -f dshow -i dummy ",
+        help="Specify video device directly (skips auto-detection). "
+        "If not provided, will show available devices for selection.",
     )
     parser.add_argument(
         "--audio_device",
         required=False,
-        help="Check your device available with: "
-        '\n\tMacOS: ffmpeg -f avfoundation -list_devices true -i ""'
-        "\n\tWindows: ffmpeg -list_devices true -f dshow -i dummy ",
+        help="Specify audio device (optional). "
+        "If not provided, audio will be disabled for better performance.",
     )
     parser.add_argument(
         "--device_name",
@@ -685,6 +839,16 @@ def main() -> None:
         required=False,
         help="End a specific session ID (for testing purposes)",
     )
+    parser.add_argument(
+        "--ambulance_number",
+        required=False,
+        help="Ambulance number (e.g., 001, 003). If not provided, will prompt for input.",
+    )
+    parser.add_argument(
+        "--room",
+        required=False,
+        help="Room number (e.g., 001, 002). If not provided, will prompt for input.",
+    )
     args = parser.parse_args()
 
     # Handle end session command
@@ -693,8 +857,14 @@ def main() -> None:
         asyncio.run(end_session_manually(args.signaling, args.end_session))
         return
 
-    # Get ambulance and room numbers from user input
-    ambulance_number, room_number = get_user_input()
+    # Get ambulance and room numbers from command line or user input
+    if args.ambulance_number and args.room:
+        # Use command-line parameters
+        ambulance_number = args.ambulance_number.zfill(3)
+        room_number = args.room.zfill(3)
+    else:
+        # Get from user input
+        ambulance_number, room_number = get_user_input()
 
     ambulance_name = f"AMB-{ambulance_number}"
     room_name = f"AMB-{ambulance_number}-ROOM-{room_number}"
@@ -704,15 +874,18 @@ def main() -> None:
     print(f"🚑 Ambulance: {ambulance_name}")
     print(f"🏠 Room: {room_name}")
     print(f"🌐 Server: {args.signaling}")
-    print(f"📹 Video Device: {args.video_device or 'Default'}")
-    print(f"🎤 Audio Device: {args.audio_device or 'Default'}")
+    print(
+        f"📹 Video Device: {args.video_device or 'Auto-detect (interactive selection)'}"
+    )
+    print(f"🎤 Audio Device: {args.audio_device or 'Disabled'}")
     print(f"🏷️  Device Name: {args.device_name}")
-    print(f"\n� Connection Strategy:")
+    print(f"\n🔧 Connection Strategy:")
     print(f"   1️⃣  Check if ambulance exists in database")
-    print(f"   2️⃣  Create/reconnect to ambulance session")
-    print(f"   3️⃣  Get existing camera or select from available")
-    print(f"   4️⃣  Check if camera room exists, create/rejoin")
-    print(f"   5️⃣  Connect to streaming endpoint (3 retry attempts)")
+    print(f"   2️⃣  Auto-detect video devices (if not specified)")
+    print(f"   3️⃣  Create/reconnect to ambulance session")
+    print(f"   4️⃣  Get existing camera or select from available")
+    print(f"   5️⃣  Check if camera room exists, create/rejoin")
+    print(f"   6️⃣  Connect to streaming endpoint (3 retry attempts)")
     print(f"\n🔄 Auto-reconnect: Room will be reused if it exists")
     print(f"⏱️  Stream Timeout: 30 seconds of inactivity")
     print(f"{'='*60}\n")

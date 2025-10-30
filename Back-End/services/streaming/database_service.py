@@ -15,7 +15,18 @@ class StreamingDatabaseService:
     async def get_or_create_ambulance_session(
         ambulance_id: str, session_type: str = "emergency"
     ) -> Dict[str, Any]:
-        """Get existing ACTIVE session for ambulance or create new one."""
+        """
+        Get existing ACTIVE session for ambulance or create new one.
+
+        IMPORTANT: This method NEVER reactivates inactive sessions.
+        When an ambulance reconnects after session timeout, a NEW session is created.
+        This ensures clean session lifecycle and prevents data inconsistencies.
+
+        Logic:
+        1. Query for active session (is_active=True)
+        2. If found: return existing active session
+        3. If not found: create NEW session (inactive sessions are ignored)
+        """
         try:
             # Check if an ACTIVE session already exists for this ambulance
             session_result = (
@@ -28,30 +39,14 @@ class StreamingDatabaseService:
 
             if session_result.data:
                 logger.info(
-                    "Using existing active session for ambulance %s", ambulance_id
+                    "Using existing active session %s for ambulance %s",
+                    session_result.data[0]["id"],
+                    ambulance_id,
                 )
                 return session_result.data[0]
 
-            # Check if there are any non-ended sessions (should not create new ones)
-            all_sessions_result = (
-                supabase.table("ambulance_streaming_sessions")
-                .select("*")
-                .eq("ambulance_id", ambulance_id)
-                .eq("is_active", True)
-                .execute()
-            )
-
-            if all_sessions_result.data:
-                # There's a non-ended session, return the most recent one
-                existing_session = all_sessions_result.data[0]
-                logger.warning(
-                    "Ambulance %s has active session %s. Not creating new session.",
-                    ambulance_id,
-                    existing_session["id"],
-                )
-                return existing_session
-
-            # Create new session only if no active sessions exist
+            # No active session found - create NEW session
+            # NOTE: Inactive sessions remain in database for historical records
             session_result = (
                 supabase.table("ambulance_streaming_sessions")
                 .insert(
@@ -67,7 +62,11 @@ class StreamingDatabaseService:
             if not session_result.data:
                 raise Exception("Failed to create ambulance streaming session")
 
-            logger.info("Created new session for ambulance %s", ambulance_id)
+            logger.info(
+                "Created new session %s for ambulance %s (inactive sessions ignored)",
+                session_result.data[0]["id"],
+                ambulance_id,
+            )
             return session_result.data[0]
 
         except Exception as e:
@@ -574,7 +573,12 @@ class StreamingDatabaseService:
     async def cleanup_inactive_camera_rooms(
         inactive_threshold_minutes: int = 30,
     ) -> int:
-        """Clean up camera rooms that have been inactive for too long."""
+        """Clean up camera rooms that have been DISCONNECTED for too long.
+
+        NOTE: This only cleans up rooms that are already disconnected (connected=False)
+        and have been disconnected for more than the threshold. It does NOT touch
+        active streaming rooms.
+        """
         try:
             # Calculate cutoff time (using Python datetime instead of SQL interval)
             from datetime import datetime, timedelta
@@ -582,12 +586,14 @@ class StreamingDatabaseService:
             cutoff_time = datetime.now() - timedelta(minutes=inactive_threshold_minutes)
             cutoff_time_str = cutoff_time.isoformat()
 
-            # Update camera rooms that haven't had activity recently
+            # Only update rooms that are ALREADY disconnected (connected=False)
+            # and have been disconnected for more than threshold
             result = (
                 supabase.table("camera_streaming_rooms")
-                .update({"connected": False, "connection_ended_at": "now()"})
+                .update({"connection_ended_at": "now()"})
+                .eq("connected", False)  # ONLY cleanup already disconnected rooms
+                .is_("connection_ended_at", "null")  # And haven't been cleaned up yet
                 .lt("connection_started_at", cutoff_time_str)
-                .eq("connected", True)
                 .execute()
             )
 

@@ -1,17 +1,16 @@
 "use client";
 
+import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
 import { useRealtimeAmbulanceSessions } from "@/hooks/useRealtime";
-import { useStreaming } from "@/hooks/useStreaming";
 import type { CameraRoom } from "@/types";
 import {
   ArrowLeftIcon,
   ExclamationTriangleIcon,
-  SignalIcon,
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 export default function SimpleAmbulanceStreamingPage() {
   const params = useParams();
@@ -43,80 +42,17 @@ export default function SimpleAmbulanceStreamingPage() {
     return rooms;
   }, [realtimeSessions, ambulanceId]);
 
-  // Streaming functionality
-  const {
-    isConnected: isStreaming,
-    isConnecting,
-    error: streamingError,
-    videoRef,
-    startStreaming,
-    stopStreaming,
-    isWaitingForData, // NEW: Get waiting for data state
-  } = useStreaming();
-
-  // NEW: Monitor selected room's connection status
+  // Monitor selected room's connection status
   const selectedRoom = useMemo(() => {
     return availableRooms.find((room) => room.room_id === selectedRoomId);
   }, [availableRooms, selectedRoomId]);
 
-  // AUTO-START: Automatically start streaming when a room is selected
-  useEffect(() => {
-    if (selectedRoomId && !isStreaming && !isConnecting) {
-      // Auto-start streaming when room is selected
-      startStreaming(ambulanceId, selectedRoomId);
-    }
-  }, [selectedRoomId, ambulanceId]);
-
-  // AUTO-CLEANUP: Stop streaming when component unmounts or room changes
-  useEffect(() => {
-    return () => {
-      if (isStreaming) {
-        stopStreaming();
-      }
-    };
-  }, [selectedRoomId]); // Stop when room changes
-
-  // NEW: Check if room disconnected while streaming
-  useEffect(() => {
-    if (isStreaming && selectedRoom && !selectedRoom.connected) {
-      // Room has disconnected while we're streaming
-      // The UI will automatically show the disconnection message
-    }
-  }, [isStreaming, selectedRoom, selectedRoomId]);
-
   const handleRoomSelect = (roomId: string) => {
-    // Stop current stream before switching
-    if (isStreaming) {
-      stopStreaming();
-    }
-
     setSelectedRoomId(roomId);
     // Update URL
     const url = new URL(window.location.href);
     url.searchParams.set("room", roomId);
     window.history.replaceState({}, "", url.toString());
-
-    // The auto-start effect will handle starting the new stream
-  };
-
-  const getConnectionStatus = () => {
-    if (isConnecting) return "Connecting...";
-    if (isStreaming && selectedRoom && !selectedRoom.connected)
-      return "Camera Offline";
-    if (isStreaming && isWaitingForData) return "Waiting for Data";
-    if (isStreaming) return "Connected";
-    if (streamingError) return "Error";
-    return "Disconnected";
-  };
-
-  const getStatusColor = () => {
-    if (isConnecting) return "text-yellow-600";
-    if (isStreaming && selectedRoom && !selectedRoom.connected)
-      return "text-red-600";
-    if (isStreaming && isWaitingForData) return "text-yellow-500";
-    if (isStreaming) return "text-green-600";
-    if (streamingError) return "text-red-600";
-    return "text-gray-600";
   };
 
   return (
@@ -145,19 +81,28 @@ export default function SimpleAmbulanceStreamingPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <SignalIcon className={`h-5 w-5 ${getStatusColor()}`} />
-          <span className={`text-sm font-medium ${getStatusColor()}`}>
-            {getConnectionStatus()}
+          <span className="text-sm font-medium text-gray-600">
+            {selectedRoom?.connected ? (
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                Camera Online
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-gray-400 rounded-full" />
+                {selectedRoomId ? "Camera Offline" : "No Camera Selected"}
+              </span>
+            )}
           </span>
         </div>
       </div>
 
       {/* Error Messages */}
-      {(streamingError || realtimeError) && (
+      {realtimeError && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
           <ExclamationTriangleIcon className="h-5 w-5 text-red-500 mt-0.5" />
           <div className="flex-1">
-            <p className="text-red-700">{streamingError || realtimeError}</p>
+            <p className="text-red-700">{realtimeError}</p>
           </div>
         </div>
       )}
@@ -175,129 +120,64 @@ export default function SimpleAmbulanceStreamingPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Video Stream */}
+        {/* Video Stream - HybridStreamPlayer */}
         <div className="lg:col-span-2">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Live Video Stream</h3>
-                {isStreaming && (
-                  <span className="bg-red-500 text-white px-2 py-1 rounded text-xs animate-pulse">
-                    ● LIVE
+                <h3 className="text-lg font-semibold">
+                  Ambulance Camera Stream
+                </h3>
+                {selectedRoomId && (
+                  <span className="text-xs text-gray-500 font-mono">
+                    {selectedRoomId}
                   </span>
                 )}
               </div>
             </CardHeader>
 
             <CardContent>
-              <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-contain"
-                  autoPlay
-                  playsInline
-                  controls={false}
+              {selectedRoomId ? (
+                <HybridStreamPlayer
+                  ambulanceId={ambulanceId}
+                  roomId={selectedRoomId}
+                  showAdvancedControls={true}
+                  debug={false}
                 />
-
-                {/* NEW: Show message when room is disconnected */}
-                {isStreaming && selectedRoom && !selectedRoom.connected && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
-                    <div className="text-center text-white">
-                      <ExclamationTriangleIcon className="h-16 w-16 mx-auto mb-4 text-red-400" />
-                      <p className="text-lg font-medium text-red-400">
-                        Camera Disconnected
-                      </p>
-                      <p className="text-sm opacity-75 mt-2">
-                        The camera room has gone offline
-                      </p>
-                      <p className="text-xs opacity-50 mt-1">
-                        Room: {selectedRoomId}
-                      </p>
-                      <p className="text-xs opacity-50 mt-1">
-                        Last seen:{" "}
-                        {selectedRoom.last_seen
-                          ? new Date(selectedRoom.last_seen).toLocaleString()
-                          : "Never"}
-                      </p>
-                    </div>
+              ) : (
+                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
+                  <div className="text-center text-gray-500">
+                    <VideoCameraIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg font-medium">No Room Selected</p>
+                    <p className="text-sm opacity-75">
+                      Select a camera room from the list to start streaming
+                    </p>
                   </div>
-                )}
-
-                {/* Show waiting for data message (only if room is connected) */}
-                {isStreaming &&
-                  isWaitingForData &&
-                  (!selectedRoom || selectedRoom.connected) && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
-                      <div className="text-center text-white">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-400 mx-auto mb-4"></div>
-                        <p className="text-lg font-medium">
-                          Waiting for video data...
-                        </p>
-                        <p className="text-sm opacity-75 mt-2">
-                          Camera is connected but no video stream yet
-                        </p>
-                        <p className="text-xs opacity-50 mt-1">
-                          Please check if the camera is transmitting
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                {!isStreaming && !isConnecting && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
-                    <div className="text-center text-white">
-                      <VideoCameraIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                      {selectedRoomId ? (
-                        <>
-                          <p className="text-lg font-medium">
-                            Initializing Camera
-                          </p>
-                          <p className="text-sm opacity-75 mb-2">
-                            Room: {selectedRoomId}
-                          </p>
-                          <p className="text-sm opacity-75">
-                            Auto-streaming will begin shortly...
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-lg font-medium">
-                            Select a Camera Room
-                          </p>
-                          <p className="text-sm opacity-75">
-                            Choose a camera room to start auto-streaming
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {isConnecting && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
-                    <div className="text-center text-white">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
-                      <p className="text-lg font-medium">
-                        Connecting to camera...
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Auto-streaming Status Info */}
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-center gap-2 text-sm text-blue-700">
-                  <SignalIcon className="h-4 w-4" />
-                  <span>
-                    {isStreaming && selectedRoomId
-                      ? `Auto-streaming from ${selectedRoomId}`
-                      : selectedRoomId
-                      ? "Connecting to camera..."
-                      : "Select a camera room to begin auto-streaming"}
-                  </span>
                 </div>
-              </div>
+              )}
+
+              {/* Info Banner */}
+              {selectedRoomId && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="text-sm text-blue-700">
+                    <p className="font-medium mb-1">💡 Hybrid Stream Player</p>
+                    <ul className="text-xs space-y-1 ml-4 list-disc">
+                      <li>
+                        <strong>Live Mode:</strong> Real-time WebRTC streaming
+                        (low latency)
+                      </li>
+                      <li>
+                        <strong>Playback Mode:</strong> Click pause or scrub
+                        timeline to review recording
+                      </li>
+                      <li>
+                        <strong>Go Live:</strong> Click "Go Live" button to
+                        return to real-time stream
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -381,12 +261,6 @@ export default function SimpleAmbulanceStreamingPage() {
             </CardHeader>
             <CardContent className="text-sm space-y-2">
               <div className="flex justify-between">
-                <span className="text-gray-500">Stream Status:</span>
-                <span className={getStatusColor()}>
-                  {getConnectionStatus()}
-                </span>
-              </div>
-              <div className="flex justify-between">
                 <span className="text-gray-500">Real-time Data:</span>
                 <span
                   className={
@@ -400,6 +274,18 @@ export default function SimpleAmbulanceStreamingPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Selected Room:</span>
                   <span className="text-gray-900">{selectedRoomId}</span>
+                </div>
+              )}
+              {selectedRoom && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Camera Status:</span>
+                  <span
+                    className={
+                      selectedRoom.connected ? "text-green-600" : "text-red-600"
+                    }
+                  >
+                    {selectedRoom.connected ? "Online" : "Offline"}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between">

@@ -21,23 +21,23 @@ class TestPIMClassifierConfig:
         """Test that config has all required attributes"""
         config = PIMClassifierConfig()
 
-        assert config.OVERALL_ACCURACY == 85.97
-        assert config.PEAK_ACCURACY == 89.72
+        assert config.OVERALL_ACCURACY == 82.88  # Updated for 10-class model
+        assert config.PEAK_ACCURACY == 89.16  # Updated for 10-class model
         assert config.EXPECTED_JOINTS == 33
         assert config.EXPECTED_COORDINATES == 3
         assert config.MIN_FRAMES == 30
         assert config.MAX_FRAMES == 300
 
     def test_class_metrics(self):
-        """Test that all 9 movement classes are defined"""
+        """Test that all 10 movement classes are defined"""
         config = PIMClassifierConfig()
 
-        assert len(config.CLASS_METRICS) == 9
+        assert len(config.CLASS_METRICS) == 10  # Updated from 9 to 10 classes
         assert "tremor" in config.CLASS_METRICS
         assert "myoclonus" in config.CLASS_METRICS
 
         # Check tremor has high accuracy
-        assert config.CLASS_METRICS["tremor"]["accuracy"] == 100.0
+        assert config.CLASS_METRICS["tremor"]["accuracy"] == 92.98  # Updated actual accuracy
         assert config.CLASS_METRICS["tremor"]["tier"] == "excellent"
 
     def test_confidence_thresholds(self):
@@ -207,7 +207,7 @@ class TestPIMClassifierService:
 
         assert tier == "excellent"
         assert "High confidence" in rec
-        assert "100.0%" in rec  # Model accuracy for tremor
+        assert "93.0%" in rec  # Updated: Model accuracy for tremor is 92.98%
 
     def test_determine_tier_good(self, service):
         """Test tier determination for good prediction"""
@@ -217,11 +217,12 @@ class TestPIMClassifierService:
         assert "physician review" in rec.lower()
 
     def test_determine_tier_needs_review_low_accuracy(self, service):
-        """Test tier determination for low accuracy class"""
+        """Test tier determination for good tier class with adequate confidence"""
+        # Myoclonus is now "good" tier with 77.59% accuracy
         tier, rec = service._determine_tier_and_recommendation("myoclonus", 0.80)
 
-        assert tier == "needs_review"
-        assert "37.5%" in rec  # Model accuracy for myoclonus
+        assert tier == "good"  # Updated: myoclonus is now "good" tier
+        assert "77.6%" in rec  # Updated: Model accuracy for myoclonus is 77.59%
 
     def test_determine_tier_needs_review_low_confidence(self, service):
         """Test tier determination for low confidence"""
@@ -331,7 +332,7 @@ class TestPIMClassifierService:
         assert info["model_name"] == "UNIK Transformer"
         assert "version" in info
         assert "classes" in info
-        assert len(info["classes"]) == 9
+        assert len(info["classes"]) == 10  # Updated from 9 to 10 classes
 
     def test_get_health_status(self, service):
         """Test getting health status"""

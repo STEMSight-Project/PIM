@@ -1,399 +1,542 @@
 """
 HLS Recording Service for Ambulance Camera Streams
-Manages server-side recording of WebRTC streams to HLS format
+Direct FFmpeg Pipeline for WebRTC to HLS conversion
+
+Database Schema (ambulance_session_recordings):
+- id: UUID (auto-generated primary key)
+- session_id: UUID (foreign key to ambulance_streaming_sessions)
+- camera_id: TEXT (camera identifier, e.g., "AMB-002-CAM-01")
+- recording_path: TEXT (local recording directory path)
+- storage_url: TEXT (Supabase Storage public URL)
+- file_size: BIGINT (total file size in bytes)
+- duration: INTEGER (recording duration in seconds)
+- session_start: TIMESTAMP (when recording started)
+- session_end: TIMESTAMP (when recording ended)
+- status: TEXT ("recording" | "completed")
+- created_at: TIMESTAMP (auto-generated)
+- updated_at: TIMESTAMP (auto-updated)
 """
 
 import asyncio
 import logging
-import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from uuid import UUID
 
 from aiortc import MediaStreamTrack
-from aiortc.contrib.media import MediaRecorder
-from core.common import supabase, logger
-from supabase_settings.create_client import SUPABASE_ADMIN
 
-# Configure logging
+from core.common import logger, supabase
+from supabase_settings.create_client import SUPABASE_ADMIN
+from services.streaming.hls_segment_service import hls_segment_service
+
 LOGGER = logging.getLogger(__name__)
 
 # Recording configuration
 RECORDINGS_BASE_PATH = Path("recordings")
-HLS_SEGMENT_DURATION = 2  # 2-second segments
-HLS_LIST_SIZE = 0  # Keep all segments (0 = unlimited)
+HLS_SEGMENT_DURATION = 30  # 30-second segments (reduced server load)
 
 
 class SessionRecorder:
-    """Manages HLS recording for a single session"""
+    """Manages HLS recording for a single camera room using direct FFmpeg pipeline"""
 
-    def __init__(self, session_id: str, ambulance_number: str):
+    def __init__(self, session_id: str, room_id: str, ambulance_number: str):
         self.session_id = session_id
+        self.room_id = room_id
         self.ambulance_number = ambulance_number
-        self.recording_path = RECORDINGS_BASE_PATH / f"session-{session_id}"
-        self.temp_video_path = self.recording_path / "recording.mp4"
+
+        # Recording paths
+        self.recording_path = RECORDINGS_BASE_PATH / f"room-{room_id}"
         self.playlist_path = self.recording_path / "playlist.m3u8"
-        self.recorder: Optional[MediaRecorder] = None
-        self.hls_process: Optional[subprocess.Popen] = None
+        self.mp4_path = self.recording_path / "recording.mp4"
+
+        # FFmpeg process
+        self.ffmpeg_process: Optional[asyncio.subprocess.Process] = None
+        self.recording_task: Optional[asyncio.Task] = None
+
+        # State
         self.is_recording = False
         self.start_time: Optional[datetime] = None
         self.video_track: Optional[MediaStreamTrack] = None
 
+        # Frame tracking
+        self.frame_count = 0
+
         # Create recording directory
         self.recording_path.mkdir(parents=True, exist_ok=True)
 
-    async def start_recording(self, video_track: MediaStreamTrack):
-        """
-        Start HLS recording from a WebRTC video track
+    def get_duration(self) -> int:
+        """Get recording duration in seconds"""
+        if not self.start_time:
+            return 0
+        return int((datetime.utcnow() - self.start_time).total_seconds())
 
-        Args:
-            video_track: WebRTC video track to record
-        """
+    def get_segment_count(self) -> int:
+        """Get number of HLS segments created"""
+        if not self.recording_path.exists():
+            return 0
+        return len(list(self.recording_path.glob("segment-*.ts")))
+
+    def is_hls_ready(self) -> bool:
+        """Check if HLS playlist is ready for playback"""
+        return self.playlist_path.exists() and self.get_segment_count() >= 3
+
+    def get_playlist_url(self) -> str:
+        """Get HLS playlist URL"""
+        return f"/videos/hls/{self.room_id}/playlist.m3u8"
+
+    async def start_recording(self, video_track: MediaStreamTrack):
+        """Start recording from WebRTC video track"""
         try:
+            print(f"\n🔥🔥🔥 START_RECORDING CALLED FOR ROOM {self.room_id} 🔥🔥🔥\n")
+            LOGGER.info(f"🔥 [RECORDING] START_RECORDING CALLED - room {self.room_id}")
+
             self.start_time = datetime.utcnow()
             self.video_track = video_track
 
-            # Step 1: Use aiortc MediaRecorder to save WebRTC stream to MP4
-            self.recorder = MediaRecorder(str(self.temp_video_path))
-            self.recorder.addTrack(video_track)
-            await self.recorder.start()
+            LOGGER.info(
+                f"🎬 [RECORDING] Starting FFmpeg pipeline for room {self.room_id}"
+            )
 
-            # Step 2: Start background task to convert MP4 to HLS segments
-            asyncio.create_task(self._convert_to_hls())
+            # Start FFmpeg process
+            await self._start_ffmpeg_process()
 
+            # Start frame processing task
             self.is_recording = True
+            self.recording_task = asyncio.create_task(self._process_frames())
 
-            # Create recording entry in database
-            await self._create_recording_entry()
+            # Start HLS segment monitoring
+            await hls_segment_service.start_monitoring_room(
+                self.room_id, self.recording_path
+            )
+
+            LOGGER.info(f"✅ [RECORDING] Recording started for room {self.room_id}")
 
         except Exception as e:
-            LOGGER.error(f"Failed to start recording: {e}")
+            LOGGER.error(f"Failed to start recording: {e}", exc_info=True)
+            await self._cleanup_on_error()
             raise
 
-    async def _convert_to_hls(self):
-        """Background task to convert recording to HLS in real-time"""
+    async def _start_ffmpeg_process(self):
+        """Start FFmpeg subprocess with raw video input"""
         try:
-            # Wait a bit for some video data to be written
-            await asyncio.sleep(5)
-
-            # FFmpeg command to convert MP4 to HLS in real-time
             ffmpeg_cmd = [
                 "ffmpeg",
-                "-loglevel",
-                "warning",
-                "-y",  # Overwrite output files
+                "-f",
+                "rawvideo",
+                "-pixel_format",
+                "yuv420p",
+                "-video_size",
+                "640x480",
+                "-framerate",
+                "30",
                 "-i",
-                str(self.temp_video_path),
+                "pipe:0",
+                # HLS output
                 "-c:v",
-                "copy",  # Copy video codec (no re-encoding)
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-tune",
+                "zerolatency",
+                "-b:v",
+                "1M",
+                "-g",
+                "60",
                 "-f",
                 "hls",
                 "-hls_time",
                 str(HLS_SEGMENT_DURATION),
                 "-hls_list_size",
-                str(HLS_LIST_SIZE),
+                "0",
                 "-hls_flags",
                 "append_list+omit_endlist",
                 "-hls_segment_filename",
                 str(self.recording_path / "segment-%03d.ts"),
                 str(self.playlist_path),
+                # MP4 output
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-movflags",
+                "+faststart",
+                "-f",
+                "mp4",
+                "-y",
+                str(self.mp4_path),
             ]
 
-            self.hls_process = subprocess.Popen(
+            LOGGER.info(f"🎬 Starting FFmpeg process...")
+
+            # Use subprocess.Popen (works on all platforms, no asyncio event loop issues)
+            self.ffmpeg_process = subprocess.Popen(
                 ffmpeg_cmd,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
 
-            # Keep process running
-            stdout, stderr = self.hls_process.communicate()
-            if stderr:
-                LOGGER.debug(f"FFmpeg HLS output: {stderr.decode()}")
+            LOGGER.info(f"✅ FFmpeg process started (PID: {self.ffmpeg_process.pid})")
+
+            # Monitor stderr in background (non-blocking)
+            asyncio.create_task(self._monitor_ffmpeg_stderr())
+
+        except FileNotFoundError:
+            LOGGER.error("❌ FFmpeg not found! Install FFmpeg")
+            raise
+        except Exception as e:
+            LOGGER.error(f"❌ Failed to start FFmpeg: {e}", exc_info=True)
+            raise
+
+    async def _monitor_ffmpeg_stderr(self):
+        """Monitor FFmpeg stderr for errors (read from synchronous subprocess)"""
+        try:
+            if not self.ffmpeg_process or not self.ffmpeg_process.stderr:
+                return
+
+            loop = asyncio.get_event_loop()
+
+            # Read stderr in background thread
+            while self.is_recording:
+                try:
+                    # Read line in executor to avoid blocking
+                    line = await loop.run_in_executor(
+                        None, self.ffmpeg_process.stderr.readline
+                    )
+
+                    if not line:
+                        break
+
+                    line_str = line.decode().strip()
+
+                    if "error" in line_str.lower():
+                        LOGGER.error(f"FFmpeg ERROR: {line_str}")
+                    elif "warning" in line_str.lower():
+                        LOGGER.warning(f"FFmpeg WARNING: {line_str}")
+
+                except Exception as e:
+                    LOGGER.debug(f"stderr read error: {e}")
+                    break
 
         except Exception as e:
-            LOGGER.error(f"HLS conversion error: {e}")
+            LOGGER.error(f"Error monitoring FFmpeg stderr: {e}")
+
+    async def _process_frames(self):
+        """Read frames from WebRTC and write to FFmpeg"""
+        try:
+            LOGGER.info(f"🎥 Starting frame processing for room {self.room_id}")
+
+            while self.is_recording:
+                try:
+                    # Receive frame from WebRTC
+                    frame = await self.video_track.recv()
+
+                    # Convert to YUV420p
+                    yuv_frame = frame.to_ndarray(format="yuv420p")
+
+                    # Write to FFmpeg stdin (synchronous write, non-blocking)
+                    if self.ffmpeg_process and self.ffmpeg_process.stdin:
+                        try:
+                            self.ffmpeg_process.stdin.write(yuv_frame.tobytes())
+                            # Flush to ensure data is sent
+                            self.ffmpeg_process.stdin.flush()
+                        except BrokenPipeError:
+                            LOGGER.error(
+                                "FFmpeg pipe broken - process may have crashed"
+                            )
+                            break
+
+                        self.frame_count += 1
+
+                        # Log every 10 seconds
+                        if self.frame_count % 300 == 0:
+                            duration = int(
+                                (datetime.utcnow() - self.start_time).total_seconds()
+                            )
+                            LOGGER.info(
+                                f"📹 Processed {self.frame_count} frames ({duration}s)"
+                            )
+
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    LOGGER.error(f"Error processing frame: {e}")
+                    await asyncio.sleep(0.01)
+
+            LOGGER.info(f"🛑 Frame processing stopped ({self.frame_count} frames)")
+
+        except Exception as e:
+            LOGGER.error(f"Frame processing failed: {e}", exc_info=True)
 
     async def stop_recording(self):
-        """Stop HLS recording and finalize playlist"""
+        """Stop recording and finalize"""
         if not self.is_recording:
-            LOGGER.warning(f"Recording not active for session {self.session_id}")
             return
 
         try:
-            # Stop MediaRecorder
-            if self.recorder:
-                await self.recorder.stop()
-                self.recorder = None
+            LOGGER.info(f"🛑 Stopping recording for room {self.room_id}...")
 
-            # Stop HLS conversion process
-            if self.hls_process:
-                try:
-                    self.hls_process.terminate()
-                    self.hls_process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    LOGGER.warning("HLS process didn't stop gracefully, killing")
-                    self.hls_process.kill()
-                    self.hls_process.wait()
-
+            # Stop recording
             self.is_recording = False
 
-            # Run final HLS conversion to finalize playlist
-            await self._finalize_hls_playlist()
+            # Cancel frame task
+            if self.recording_task:
+                self.recording_task.cancel()
+                try:
+                    await self.recording_task
+                except asyncio.CancelledError:
+                    pass
 
-            # Update recording entry in database
-            await self._finalize_recording_entry()
+            # Close FFmpeg stdin
+            if self.ffmpeg_process and self.ffmpeg_process.stdin:
+                try:
+                    self.ffmpeg_process.stdin.close()
+                    LOGGER.info(f"✅ Closed FFmpeg stdin")
+                except Exception as e:
+                    LOGGER.warning(f"Error closing FFmpeg stdin: {e}")
+
+            # Wait for FFmpeg to finish (synchronous wait with timeout)
+            if self.ffmpeg_process:
+                try:
+                    # Wait in background thread to not block asyncio
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, self.ffmpeg_process.wait
+                    )
+                    LOGGER.info(
+                        f"✅ FFmpeg finished (code: {self.ffmpeg_process.returncode})"
+                    )
+                except Exception as e:
+                    LOGGER.warning(f"Error waiting for FFmpeg: {e}")
+                    try:
+                        self.ffmpeg_process.terminate()
+                        self.ffmpeg_process.wait(timeout=5)
+                    except:
+                        self.ffmpeg_process.kill()
+
+            # Stop segment monitoring
+            await hls_segment_service.stop_monitoring_room(self.room_id)
+
+            # Upload to Supabase (this will also create database entry)
+            storage_url = await self._upload_to_supabase_storage()
+
+            # Clean up HLS files after successful upload
+            if storage_url:
+                await self._cleanup_hls_files()
+                LOGGER.info(f"✅ HLS files cleaned up for room {self.room_id}")
+
+            LOGGER.info(f"🎬 Recording stopped for room {self.room_id}")
 
         except Exception as e:
-            LOGGER.error(f"Error stopping recording: {e}")
-            raise
+            LOGGER.error(f"Error stopping recording: {e}", exc_info=True)
 
-    async def _finalize_hls_playlist(self):
-        """Run final FFmpeg pass to complete HLS playlist"""
+    async def _cleanup_on_error(self):
+        """Clean up on error"""
+        self.is_recording = False
+
+        if self.recording_task:
+            self.recording_task.cancel()
+
+        if self.ffmpeg_process:
+            try:
+                self.ffmpeg_process.kill()
+                await self.ffmpeg_process.wait()
+            except:
+                pass
+
+    async def _cleanup_hls_files(self):
+        """Clean up HLS segments and playlist after successful upload"""
         try:
-            ffmpeg_cmd = [
-                "ffmpeg",
-                "-loglevel",
-                "warning",
-                "-y",
-                "-i",
-                str(self.temp_video_path),
-                "-c:v",
-                "copy",
-                "-f",
-                "hls",
-                "-hls_time",
-                str(HLS_SEGMENT_DURATION),
-                "-hls_list_size",
-                "0",  # Include all segments
-                "-hls_segment_filename",
-                str(self.recording_path / "segment-%03d.ts"),
-                str(self.playlist_path),
-            ]
+            import shutil
 
-            process = subprocess.run(
-                ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30
+            if not self.recording_path.exists():
+                LOGGER.warning(f"Recording path not found: {self.recording_path}")
+                return
+
+            files_deleted = 0
+            total_size_freed = 0
+
+            # Delete HLS segments (.ts files)
+            for segment_file in self.recording_path.glob("segment-*.ts"):
+                try:
+                    size = segment_file.stat().st_size
+                    segment_file.unlink()
+                    files_deleted += 1
+                    total_size_freed += size
+                except Exception as e:
+                    LOGGER.warning(f"Failed to delete segment {segment_file.name}: {e}")
+
+            # Delete HLS playlist (playlist.m3u8)
+            if self.playlist_path.exists():
+                try:
+                    self.playlist_path.unlink()
+                    files_deleted += 1
+                except Exception as e:
+                    LOGGER.warning(f"Failed to delete playlist: {e}")
+
+            # Delete MP4 file (already uploaded to Supabase)
+            if self.mp4_path.exists():
+                try:
+                    size = self.mp4_path.stat().st_size
+                    self.mp4_path.unlink()
+                    files_deleted += 1
+                    total_size_freed += size
+                    LOGGER.info(
+                        f"🗑️ Deleted local MP4 file ({size / (1024*1024):.2f} MB)"
+                    )
+                except Exception as e:
+                    LOGGER.warning(f"Failed to delete MP4: {e}")
+
+            # Delete recording directory if empty
+            try:
+                if self.recording_path.exists() and not any(
+                    self.recording_path.iterdir()
+                ):
+                    self.recording_path.rmdir()
+                    LOGGER.info(f"🗑️ Removed empty recording directory")
+            except Exception as e:
+                LOGGER.warning(f"Failed to remove directory: {e}")
+
+            size_freed_mb = total_size_freed / (1024 * 1024)
+            LOGGER.info(
+                f"🧹 Cleaned up {files_deleted} files, freed {size_freed_mb:.2f} MB for room {self.room_id}"
             )
 
-            if process.returncode != 0:
-                LOGGER.error(f"HLS finalization failed: {process.stderr.decode()}")
+        except Exception as e:
+            LOGGER.error(f"Failed to cleanup HLS files: {e}", exc_info=True)
+
+    async def _upload_to_supabase_storage(self) -> Optional[str]:
+        """Upload MP4 to Supabase Storage and create database entry"""
+        try:
+            if not self.mp4_path.exists():
+                LOGGER.error(f"MP4 file not found: {self.mp4_path}")
+                return None
+
+            file_size_bytes = self.mp4_path.stat().st_size
+            file_size_mb = file_size_bytes / (1024 * 1024)
+            duration = int((datetime.utcnow() - self.start_time).total_seconds())
+
+            LOGGER.info(f"📤 Uploading {file_size_mb:.2f} MB to Supabase...")
+
+            with open(self.mp4_path, "rb") as f:
+                # Use session-based storage path: recordings/{session_id}/{room_id}.mp4
+                storage_path = f"recordings/{self.session_id}/{self.room_id}.mp4"
+
+                LOGGER.info(f"📁 Storage path: {storage_path}")
+
+                result = SUPABASE_ADMIN.storage.from_("ambulance-recordings").upload(
+                    storage_path,
+                    f,
+                    file_options={
+                        "content-type": "video/mp4",
+                        "upsert": "true",  # Overwrite if exists
+                    },
+                )
+
+            public_url = SUPABASE_ADMIN.storage.from_(
+                "ambulance-recordings"
+            ).get_public_url(storage_path)
+
+            LOGGER.info(f"✅ Upload complete: {public_url}")
+
+            # Create database entry to track the recording
+            await self._create_recording_database_entry(
+                storage_url=public_url,
+                storage_path=storage_path,
+                file_size=file_size_bytes,
+                duration=duration,
+            )
+
+            return public_url
 
         except Exception as e:
-            LOGGER.error(f"Error finalizing HLS playlist: {e}")
+            LOGGER.error(f"❌ Failed to upload to Supabase: {e}", exc_info=True)
+            return None
 
-    async def write_frame(self, frame_data: bytes):
-        """
-        Deprecated: Frames are now captured via MediaRecorder
-        """
-        pass  # No longer needed with MediaRecorder approach
-
-    async def _create_recording_entry(self):
-        """Create recording entry in database"""
+    async def _create_recording_database_entry(
+        self, storage_url: str, storage_path: str, file_size: int, duration: int
+    ):
+        """Create database entry in ambulance_session_recordings table"""
         try:
+            # Match actual database schema from table
             recording_data = {
                 "session_id": self.session_id,
-                "hls_playlist_url": f"/recordings/session-{self.session_id}/playlist.m3u8",
+                "camera_id": self.room_id,  # Room ID is the camera identifier
                 "recording_path": str(self.recording_path),
-                "session_start": self.start_time.isoformat(),
-                "status": "recording",
+                "storage_url": storage_url,
+                "file_size": file_size,
+                "duration": duration,
+                "session_start": (
+                    self.start_time.isoformat() if self.start_time else None
+                ),
+                "session_end": datetime.utcnow().isoformat(),
+                "status": "completed",
             }
 
             result = (
-                supabase.table("ambulance_session_recordings")
+                SUPABASE_ADMIN.table("ambulance_session_recordings")
                 .insert(recording_data)
                 .execute()
             )
 
             if result.data:
                 LOGGER.info(
-                    f"Recording entry created in database: {result.data[0]['id']}"
+                    f"✅ Database entry created: {result.data[0].get('id', 'unknown')}"
+                )
+                LOGGER.info(
+                    f"📊 Recording tracked - Camera: {self.room_id}, Duration: {duration}s, Size: {file_size / (1024*1024):.2f} MB"
                 )
             else:
-                LOGGER.warning("No data returned from recording insert")
+                LOGGER.warning(f"⚠️ Database insert returned no data")
 
         except Exception as e:
-            LOGGER.error(f"Failed to create recording entry: {e}")
-
-    async def _finalize_recording_entry(self):
-        """Update recording entry with final information and upload to Supabase Storage"""
-        try:
-            # Calculate duration
-            if self.start_time:
-                duration = int((datetime.utcnow() - self.start_time).total_seconds())
-            else:
-                duration = 0
-
-            # Get file size from MP4 file
-            if self.temp_video_path.exists():
-                total_size = self.temp_video_path.stat().st_size
-            else:
-                # Fallback: sum HLS segments if MP4 doesn't exist
-                total_size = sum(
-                    f.stat().st_size for f in self.recording_path.glob("segment-*.ts")
-                )
-
-            # Upload to Supabase Storage
-            storage_url = await self._upload_to_supabase_storage()
-
-            # Clean up all local files after successful upload
-            if storage_url:
-                await self._cleanup_local_files()
-
-            # Update database
-            update_data = {
-                "session_end": datetime.utcnow().isoformat(),
-                "duration": duration,
-                "file_size": total_size,
-                "status": "completed",
-            }
-
-            # Add storage URL if upload succeeded
-            if storage_url:
-                update_data["storage_url"] = storage_url
-
-            result = (
-                supabase.table("ambulance_session_recordings")
-                .update(update_data)
-                .eq("session_id", self.session_id)
-                .execute()
-            )
-
-        except Exception as e:
-            LOGGER.error(f"Failed to finalize recording entry: {e}")
-
-    async def _upload_to_supabase_storage(self) -> Optional[str]:
-        """
-        Upload MP4 recording to Supabase Storage using admin/service_role client.
-
-        Strategy:
-        - During live session: HLS segments stored locally for DVR playback
-        - After session ends: Only upload the complete MP4 file to Supabase
-        - HLS segments can be deleted locally after upload (save disk space)
-        """
-        try:
-            # Upload the MP4 recording file (single file, easier to manage)
-            if not self.temp_video_path.exists():
-                LOGGER.error(f"MP4 file not found: {self.temp_video_path}")
-                return None
-
-            with open(self.temp_video_path, "rb") as f:
-                storage_path = f"recordings/session-{self.session_id}/recording.mp4"
-                result = SUPABASE_ADMIN.storage.from_("ambulance-recordings").upload(
-                    storage_path, f, file_options={"content-type": "video/mp4"}
-                )
-
-            # Get public URL for the MP4 file
-            public_url = SUPABASE_ADMIN.storage.from_(
-                "ambulance-recordings"
-            ).get_public_url(f"recordings/session-{self.session_id}/recording.mp4")
-
-            return public_url
-
-        except Exception as e:
-            LOGGER.error(f"Failed to upload to Supabase Storage: {e}")
-            return None
-
-    async def _cleanup_local_files(self):
-        """
-        Delete all local recording files after successful upload to Supabase.
-        Removes HLS segments, playlist, MP4 file, and the entire session directory.
-        """
-        try:
-            deleted_count = 0
-
-            # Delete HLS segments
-            for segment_file in self.recording_path.glob("segment-*.ts"):
-                segment_file.unlink()
-                deleted_count += 1
-
-            # Delete playlist
-            if self.playlist_path.exists():
-                self.playlist_path.unlink()
-                deleted_count += 1
-
-            # Delete MP4 file
-            if self.temp_video_path.exists():
-                self.temp_video_path.unlink()
-                deleted_count += 1
-
-            # Delete any other files in the session directory
-            for file in self.recording_path.iterdir():
-                if file.is_file():
-                    file.unlink()
-                    deleted_count += 1
-
-            # Remove the session directory
-            if self.recording_path.exists():
-                self.recording_path.rmdir()
-
-        except Exception as e:
-            LOGGER.error(f"Error cleaning up local files: {e}")
-
-    def get_playlist_url(self) -> str:
-        """Get the HLS playlist URL"""
-        return f"/recordings/session-{self.session_id}/playlist.m3u8"
-
-    def get_duration(self) -> int:
-        """Get current recording duration in seconds"""
-        if not self.start_time:
-            return 0
-        return int((datetime.utcnow() - self.start_time).total_seconds())
+            LOGGER.error(f"❌ Failed to create database entry: {e}", exc_info=True)
 
 
 class RecordingManager:
-    """Manages all active session recordings"""
+    """Manages all active camera room recordings"""
 
     def __init__(self):
         self.active_recorders: dict[str, SessionRecorder] = {}
-
-        # Ensure recordings directory exists
         RECORDINGS_BASE_PATH.mkdir(parents=True, exist_ok=True)
 
     async def start_session_recording(
-        self, session_id: str, ambulance_number: str, video_track: MediaStreamTrack
+        self,
+        session_id: str,
+        room_id: str,
+        ambulance_number: str,
+        video_track: MediaStreamTrack,
     ) -> SessionRecorder:
-        """
-        Start recording for a session
+        """Start recording for a camera room"""
+        if room_id in self.active_recorders:
+            LOGGER.warning(f"Recording already active for room {room_id}")
+            return self.active_recorders[room_id]
 
-        Args:
-            session_id: Session UUID
-            ambulance_number: Ambulance number for logging
-            video_track: WebRTC video track to record
-
-        Returns:
-            SessionRecorder instance
-        """
-        if session_id in self.active_recorders:
-            LOGGER.warning(f"Recording already active for session {session_id}")
-            return self.active_recorders[session_id]
-
-        recorder = SessionRecorder(session_id, ambulance_number)
+        recorder = SessionRecorder(session_id, room_id, ambulance_number)
         await recorder.start_recording(video_track)
 
-        self.active_recorders[session_id] = recorder
-
+        self.active_recorders[room_id] = recorder
         return recorder
 
-    async def stop_session_recording(self, session_id: str):
-        """Stop recording for a session"""
-        recorder = self.active_recorders.get(session_id)
+    async def stop_session_recording(self, room_id: str):
+        """Stop recording for a camera room"""
+        recorder = self.active_recorders.get(room_id)
         if not recorder:
-            LOGGER.warning(f"No active recording for session {session_id}")
+            LOGGER.warning(f"No active recording for room {room_id}")
             return
 
         await recorder.stop_recording()
-        del self.active_recorders[session_id]
+        del self.active_recorders[room_id]
 
-    def get_recorder(self, session_id: str) -> Optional[SessionRecorder]:
-        """Get active recorder for a session"""
-        return self.active_recorders.get(session_id)
+    def get_recorder(self, room_id: str) -> Optional[SessionRecorder]:
+        """Get active recorder"""
+        return self.active_recorders.get(room_id)
 
     async def stop_all_recordings(self):
-        """Stop all active recordings (cleanup on shutdown)"""
-        for session_id in list(self.active_recorders.keys()):
-            await self.stop_session_recording(session_id)
+        """Stop all recordings"""
+        for room_id in list(self.active_recorders.keys()):
+            await self.stop_session_recording(room_id)
 
 
-# Global recording manager instance
+# Global instance
 recording_manager = RecordingManager()

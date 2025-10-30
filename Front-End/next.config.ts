@@ -14,6 +14,22 @@ const nextConfig: NextConfig = {
     // Remove console logs in production
     removeConsole: process.env.NODE_ENV === "production",
   },
+  // Proxy API requests to backend
+  async rewrites() {
+    const backendUrl =
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${backendUrl}/:path*`,
+      },
+      {
+        source: "/videos/:path*",
+        destination: `${backendUrl}/videos/:path*`,
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

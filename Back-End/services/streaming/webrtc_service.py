@@ -17,11 +17,164 @@ if TYPE_CHECKING:
     from services.streaming.room_service import Room
 
 
+class ReconnectionManager:
+    """Professional reconnection manager with 10-second timeout and force close."""
+
+    RECONNECTION_TIMEOUT = 10  # seconds
+
+    def __init__(self):
+        self.reconnection_tasks: Dict[str, asyncio.Task] = {}
+        self.reconnection_start_times: Dict[str, datetime] = {}
+
+    async def start_reconnection(self, room_id: str, webrtc_service) -> None:
+        """Start reconnection monitoring for a room."""
+        if room_id in self.reconnection_tasks:
+            logger.debug(f"[RECONNECT] Already monitoring room {room_id}")
+            return
+
+        logger.warning(
+            f"⏱️ [RECONNECT] Starting 10-second reconnection window for room {room_id}"
+        )
+
+        start_time = datetime.utcnow()
+        self.reconnection_start_times[room_id] = start_time
+
+        task = asyncio.create_task(
+            self._monitor_reconnection(room_id, start_time, webrtc_service)
+        )
+        self.reconnection_tasks[room_id] = task
+
+    async def _monitor_reconnection(
+        self, room_id: str, start_time: datetime, webrtc_service
+    ) -> None:
+        """Monitor for reconnection with timeout."""
+        try:
+            attempt = 0
+
+            while True:
+                attempt += 1
+                elapsed = (datetime.utcnow() - start_time).total_seconds()
+
+                # Check timeout
+                if elapsed >= self.RECONNECTION_TIMEOUT:
+                    logger.error(
+                        f"❌ [RECONNECT] Room {room_id} failed to reconnect within "
+                        f"{self.RECONNECTION_TIMEOUT}s after {attempt} attempts. Force closing stream."
+                    )
+                    await self._force_close_stream(room_id, webrtc_service)
+                    break
+
+                # Check if reconnected
+                room = room_manager.get_room(room_id)
+                if room and len(room.streamer_pcs) > 0:
+                    for pc in room.streamer_pcs:
+                        if pc.connectionState == "connected":
+                            logger.info(
+                                f"✅ [RECONNECT] Room {room_id} successfully reconnected after "
+                                f"{elapsed:.1f}s ({attempt} attempts)"
+                            )
+                            await self.cancel_reconnection(room_id)
+                            return
+
+                # Log progress
+                remaining = self.RECONNECTION_TIMEOUT - elapsed
+                logger.debug(
+                    f"[RECONNECT] Room {room_id}: {remaining:.1f}s remaining (attempt {attempt})"
+                )
+
+                await asyncio.sleep(1)
+
+        except asyncio.CancelledError:
+            logger.info(
+                f"[RECONNECT] Monitoring cancelled for room {room_id} (reconnected successfully)"
+            )
+        except Exception as e:
+            logger.error(f"[RECONNECT] Error monitoring room {room_id}: {e}")
+            await self._force_close_stream(room_id, webrtc_service)
+
+    async def cancel_reconnection(self, room_id: str) -> None:
+        """Cancel reconnection monitoring for a room."""
+        if room_id in self.reconnection_tasks:
+            task = self.reconnection_tasks[room_id]
+
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            del self.reconnection_tasks[room_id]
+            del self.reconnection_start_times[room_id]
+
+            logger.info(f"[RECONNECT] Cancelled monitoring for room {room_id}")
+
+    async def _force_close_stream(self, room_id: str, webrtc_service) -> None:
+        """Force close stream after failed reconnection."""
+        try:
+            logger.warning(f"🔒 [FORCE-CLOSE] Force closing stream for room {room_id}")
+
+            room = room_manager.get_room(room_id)
+            if room:
+                # Close all peer connections
+                for pc in list(room.pcs):
+                    try:
+                        pc.close()
+                    except Exception as e:
+                        logger.error(
+                            f"[FORCE-CLOSE] Error closing peer connection: {e}"
+                        )
+
+                # Clear room state
+                room.pcs.clear()
+                room.streamer_pcs.clear()
+                room.viewer_pcs.clear()
+                room.relayed_track = None
+                room.video_track = None
+
+            # Update database via camera disconnection handler
+            await webrtc_service._handle_camera_disconnection(room_id)
+
+            # Clean up reconnection tracking
+            self.reconnection_tasks.pop(room_id, None)
+            self.reconnection_start_times.pop(room_id, None)
+
+            logger.info(
+                f"✅ [FORCE-CLOSE] Successfully force closed stream for room {room_id}"
+            )
+
+        except Exception as e:
+            logger.error(f"[FORCE-CLOSE] Error closing room {room_id}: {e}")
+
+    def get_status(self) -> dict:
+        """Get reconnection status for all rooms."""
+        current_time = datetime.utcnow()
+        return {
+            room_id: {
+                "elapsed_seconds": (current_time - start_time).total_seconds(),
+                "remaining_seconds": max(
+                    0,
+                    self.RECONNECTION_TIMEOUT
+                    - (current_time - start_time).total_seconds(),
+                ),
+            }
+            for room_id, start_time in self.reconnection_start_times.items()
+        }
+
+    async def cleanup(self) -> None:
+        """Clean up all reconnection tasks."""
+        for room_id in list(self.reconnection_tasks.keys()):
+            await self.cancel_reconnection(room_id)
+
+
 class WebRTCService:
     """Service for managing WebRTC peer connections and media streaming."""
 
     def __init__(self):
         self.relay = MediaRelay()
+
+        # Reconnection manager
+        self.reconnection_manager = ReconnectionManager()
 
         # Camera activity monitoring (DEPRECATED - now handled by room-based monitoring)
         # Keeping for backward compatibility but will be phased out
@@ -36,9 +189,16 @@ class WebRTCService:
 
     def _start_monitoring(self):
         """Start background monitoring task."""
-        if self.monitoring_task is None or self.monitoring_task.done():
-            self.monitoring_task = asyncio.create_task(self._monitor_cameras())
-            logger.info("Started camera monitoring task")
+        try:
+            # Only start monitoring if there's a running event loop
+            if self.monitoring_task is None or self.monitoring_task.done():
+                self.monitoring_task = asyncio.create_task(self._monitor_cameras())
+                logger.info("Started camera monitoring task")
+        except RuntimeError:
+            # No event loop running yet (e.g., during import in tests)
+            logger.debug(
+                "Event loop not running - monitoring will start when event loop is available"
+            )
 
     async def _monitor_cameras(self):
         """Background task to monitor camera activity and update database status."""
@@ -242,17 +402,25 @@ class WebRTCService:
             # Set up event handlers
             @pc.on("connectionstatechange")
             async def on_connectionstatechange():
-                logger.info(
-                    "Streamer connection state for room %s: %s",
-                    room_id,
-                    pc.connectionState,
-                )
-                if pc.connectionState == "closed":
+                """Handle streamer connection state changes with 10-second reconnection."""
+                state = pc.connectionState
+                logger.info(f"🔌 Streamer connection state for room {room_id}: {state}")
+
+                if state == "connected":
+                    logger.info(
+                        f"✅ Streamer connected successfully for room {room_id}"
+                    )
+                    # Cancel reconnection monitoring if active
+                    await self.reconnection_manager.cancel_reconnection(room_id)
+
+                elif state in ["disconnected", "failed"]:
+                    logger.warning(f"⚠️ Streamer {state} for room {room_id}")
+                    # Start 10-second reconnection window
+                    await self.reconnection_manager.start_reconnection(room_id, self)
+
+                elif state == "closed":
+                    logger.info(f"🔒 Streamer connection closed for room {room_id}")
                     room.remove_peer_connection(pc)
-                    # Handle camera disconnection
-                    await self._handle_camera_disconnection(room_id)
-                elif pc.connectionState == "failed":
-                    await room.handle_disconnection()
                     await self._handle_camera_disconnection(room_id)
 
             @pc.on("track")
@@ -534,8 +702,15 @@ class WebRTCService:
             },
         }
 
+    def get_reconnection_status(self) -> dict:
+        """Get reconnection status for all rooms."""
+        return self.reconnection_manager.get_status()
+
     async def cleanup(self):
         """Clean up monitoring resources."""
+        # Clean up reconnection tasks
+        await self.reconnection_manager.cleanup()
+
         if self.monitoring_task and not self.monitoring_task.done():
             self.monitoring_task.cancel()
             try:

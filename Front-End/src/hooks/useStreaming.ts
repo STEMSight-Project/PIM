@@ -203,33 +203,62 @@ export function useStreaming(): UseStreamingReturn {
         !currentAmbulanceIdRef.current ||
         !currentCameraIdRef.current
       ) {
+        console.log("Reconnection cancelled - stream stopped or no camera");
         return;
       }
 
       try {
-        console.log(`Executing reconnection attempt ${nextAttempt}`);
+        console.log(
+          `🔄 Executing reconnection attempt ${nextAttempt}/${maxReconnectionAttempts}`
+        );
         setError(`Reconnecting... (${nextAttempt}/${maxReconnectionAttempts})`);
+        setUserFriendlyStatus(`Reconnection attempt ${nextAttempt}...`);
 
-        // Clean up existing connection
+        // Clean up existing connection properly
         if (peerConnectionRef.current) {
-          peerConnectionRef.current.close();
+          console.log("Closing existing peer connection...");
+          try {
+            peerConnectionRef.current.close();
+          } catch (closeErr) {
+            console.warn("Error closing peer connection:", closeErr);
+          }
+          peerConnectionRef.current = null;
         }
 
+        // Small delay to ensure cleanup completes
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Create new connection
+        console.log("Creating new peer connection for reconnection...");
         const pc = await createPeerConnection(currentCameraIdRef.current!);
         peerConnectionRef.current = pc;
 
-        console.log(`Reconnection attempt ${nextAttempt} successful`);
+        console.log(`✅ Reconnection attempt ${nextAttempt} successful`);
+        setError(null);
+        setUserFriendlyStatus("Reconnected successfully");
       } catch (err) {
-        console.error(`Reconnection attempt ${nextAttempt} failed:`, err);
+        console.error(`❌ Reconnection attempt ${nextAttempt} failed:`, err);
+        const errorMessage = err instanceof Error ? err.message : String(err);
 
         // Schedule next attempt if we haven't reached the limit
         if (nextAttempt < maxReconnectionAttempts) {
+          console.log(
+            `Will retry reconnection (${
+              nextAttempt + 1
+            }/${maxReconnectionAttempts})`
+          );
+          setError(`Reconnection failed: ${errorMessage}. Retrying...`);
           handleAutoReconnection();
         } else {
+          console.error(
+            `Maximum reconnection attempts (${maxReconnectionAttempts}) reached`
+          );
           setError(
             `Failed to reconnect after ${maxReconnectionAttempts} attempts. Please restart the stream manually.`
           );
           setIsReconnecting(false);
+          setCanManualRetry(true);
+          setUserFriendlyStatus("Connection failed. Manual restart required.");
         }
       }
     }, delay);
@@ -359,33 +388,48 @@ export function useStreaming(): UseStreamingReturn {
             setError(null);
             setUserFriendlyStatus("Live stream connected");
             resetReconnectionState();
-            // Note: Don't update session status - we're just a viewer, RPi manages the session
+
+            // Clear any pending video data timeout
+            if (videoDataTimeoutRef.current) {
+              clearTimeout(videoDataTimeoutRef.current);
+              videoDataTimeoutRef.current = null;
+            }
             break;
           case "connecting":
             setIsConnecting(true);
             setUserFriendlyStatus("Establishing connection...");
             break;
           case "disconnected":
+            console.warn(
+              "⚠️ Connection disconnected - will attempt reconnection"
+            );
             setIsConnected(false);
             setIsConnecting(false);
-            // Note: Don't update session status - viewer disconnection doesn't affect RPi session
+            // Only auto-reconnect if user didn't manually stop
             if (!isUserStoppedRef.current) {
               handleAutoReconnection();
             }
             break;
           case "failed":
+            console.error("❌ Connection failed - will attempt reconnection");
             setIsConnected(false);
             setIsConnecting(false);
-            // Note: Don't update session status - viewer connection failure doesn't affect RPi session
+            // Only auto-reconnect if user didn't manually stop
             if (!isUserStoppedRef.current) {
               handleAutoReconnection();
             }
             break;
           case "closed":
+            console.log("🔒 Connection closed");
             setIsConnected(false);
             setIsConnecting(false);
             setConnectionQuality(null);
-            // Note: Don't update session status - viewer disconnection doesn't end RPi session
+
+            // Clear video data timeout
+            if (videoDataTimeoutRef.current) {
+              clearTimeout(videoDataTimeoutRef.current);
+              videoDataTimeoutRef.current = null;
+            }
             break;
         }
       };
@@ -400,15 +444,28 @@ export function useStreaming(): UseStreamingReturn {
         switch (pc.iceConnectionState) {
           case "connected":
           case "completed":
+            console.log("✅ ICE connection established");
             monitorConnectionQuality(pc);
+            setError(null); // Clear any previous errors
+            break;
+          case "checking":
+            console.log("🔍 ICE connection checking...");
+            setUserFriendlyStatus("Checking network connection...");
             break;
           case "failed":
+            console.error("❌ ICE connection failed");
             setError(
               "Network connection failed - please check your internet connection"
             );
+            // Don't immediately reconnect on ICE failure - give it time to recover
             break;
           case "disconnected":
+            console.warn("⚠️ ICE connection disconnected");
             setError("Network connection lost - trying to reconnect...");
+            // ICE disconnected can be temporary, don't panic
+            break;
+          case "closed":
+            console.log("🔒 ICE connection closed");
             break;
         }
       };
@@ -510,9 +567,24 @@ export function useStreaming(): UseStreamingReturn {
 
   const startStreaming = useCallback(
     async (ambulanceId: string, roomId?: string): Promise<void> => {
+      // ✅ Guard: Prevent duplicate connections
       if (isConnecting || isConnected) {
-        console.warn("Streaming already in progress");
+        console.warn(
+          "⚠️ Streaming already in progress - ignoring duplicate request"
+        );
         return;
+      }
+
+      // ✅ Guard: Check for existing peer connection
+      if (
+        peerConnectionRef.current &&
+        peerConnectionRef.current.connectionState !== "closed"
+      ) {
+        console.warn(
+          "⚠️ Existing peer connection detected - cleaning up before starting"
+        );
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
       }
 
       if (!ambulanceId) {
@@ -691,12 +763,48 @@ export function useStreaming(): UseStreamingReturn {
     }
   }, []);
 
-  // Cleanup on unmount
+  // Cleanup on unmount - CRITICAL for preventing duplicate viewer connections
   useEffect(() => {
     return () => {
-      stopStreaming();
+      console.log("🧹 useStreaming unmounting - cleaning up connections");
+
+      // Set user stopped flag
+      isUserStoppedRef.current = true;
+
+      // Clear all timeouts
+      if (reconnectionTimeoutRef.current) {
+        clearTimeout(reconnectionTimeoutRef.current);
+        reconnectionTimeoutRef.current = null;
+      }
+
+      if (videoDataTimeoutRef.current) {
+        clearTimeout(videoDataTimeoutRef.current);
+        videoDataTimeoutRef.current = null;
+      }
+
+      // Close peer connection
+      if (peerConnectionRef.current) {
+        console.log("Closing peer connection on unmount");
+        try {
+          peerConnectionRef.current.close();
+        } catch (err) {
+          console.error("Error closing peer connection on unmount:", err);
+        }
+        peerConnectionRef.current = null;
+      }
+
+      // Clear video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
+      // Clear refs
+      currentAmbulanceIdRef.current = null;
+      currentCameraIdRef.current = null;
+
+      console.log("✅ Cleanup completed");
     };
-  }, [stopStreaming]);
+  }, []); // Empty deps - only run on mount/unmount
 
   return {
     isConnected,

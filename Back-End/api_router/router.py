@@ -6,6 +6,9 @@ from api_router.doctor import router as doctor_router
 from api_router.doctor import public_router as public_doctor_router
 from api_router.medical_history import router as medical_history_router
 from api_router.video import router as video_router
+from api_router.video import (
+    public_hls_router as public_hls_router,
+)  # Public HLS endpoints
 from api_router.ambulance_streaming import router as ambulance_streaming_router
 from api_router.streaming import router as streaming_router
 from api_router.ambulance import router as ambulance_router
@@ -35,6 +38,9 @@ api_router.include_router(
     public_doctor_router, prefix="/doctors", tags=["Doctors (Public)"]
 )
 api_router.include_router(video_router, prefix="/videos", tags=["Videos"])
+api_router.include_router(
+    public_hls_router, prefix="/videos", tags=["Videos (Public HLS)"]
+)  # Public HLS endpoints
 api_router.include_router(
     ambulance_streaming_router,
     prefix="/ambulance-streaming",

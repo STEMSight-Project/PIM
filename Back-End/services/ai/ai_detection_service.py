@@ -6,7 +6,7 @@ Handles database operations for AI movement detection results
 from typing import Dict, List, Optional
 from datetime import datetime
 import logging
-from ...core.common import SUPABASE_ADMIN as supabase
+from core.common import SUPABASE_ADMIN as supabase
 
 logger = logging.getLogger(__name__)
 

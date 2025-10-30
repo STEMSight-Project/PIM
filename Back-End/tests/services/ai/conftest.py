@@ -120,3 +120,34 @@ def sample_detection_record():
         "detected_at": "2025-01-13T10:00:00",
         "metadata": {},
     }
+
+
+@pytest.fixture
+def device():
+    """PyTorch device (CPU or CUDA)"""
+    import torch
+
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+@pytest.fixture
+def expected_accuracy():
+    """Expected overall model accuracy"""
+    return 82.88  # Current 10-class model accuracy
+
+
+@pytest.fixture
+def per_class_accuracy():
+    """Per-class accuracy metrics for 10-class model"""
+    return {
+        "ballistic": 80.70,
+        "chorea": 78.95,
+        "decerebrate": 79.31,
+        "decorticate": 89.66,
+        "dystonia": 84.48,
+        "fencer_posture": 81.03,
+        "myoclonus": 77.59,
+        "normal": 74.58,
+        "tremor": 92.98,
+        "versive_head": 91.38,
+    }
