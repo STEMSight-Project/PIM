@@ -398,7 +398,16 @@ class Room:
                 logger.info(
                     f"✅ Room {self.room_id} now has streamer connection, updating status to connected"
                 )
-                asyncio.create_task(self._update_room_connected())
+                # ✅ IMPROVED: Make database update more reliable with explicit wait
+                # Create task and store reference to ensure it's not garbage collected
+                self._db_update_task = asyncio.create_task(
+                    self._update_room_connected()
+                )
+
+                # Log that update has been initiated
+                logger.info(
+                    f"[DB UPDATE] Initiated connected=True for room {self.room_id}"
+                )
 
                 # Schedule recording to start after video track is received
                 if self.session_id:
@@ -511,22 +520,34 @@ class Room:
         """Update room status to connected when first STREAMER connection is added."""
         try:
             if self.room_db_id:
+                logger.info(
+                    "[DB UPDATE] Starting update for room %s (db_id: %s) to connected=True",
+                    self.room_id,
+                    self.room_db_id,
+                )
+
                 await self._db_service.update_camera_room_status(
                     self.room_db_id, connected=True
                 )
+
                 logger.info(
-                    "Updated room %s status to connected in database (streamer connected)",
+                    "✅ [DB UPDATE] Successfully updated room %s status to connected in database",
+                    self.room_id,
+                )
+            else:
+                logger.warning(
+                    "[DB UPDATE] Room %s has no room_db_id, cannot update database",
                     self.room_id,
                 )
         except (OSError, ConnectionError, RuntimeError) as e:
             logger.error(
-                "Database error updating room %s status to connected: %s",
+                "[DB UPDATE] Database error updating room %s status to connected: %s",
                 self.room_id,
                 str(e),
             )
         except Exception as e:
             logger.error(
-                "Unexpected error updating room %s status to connected: %s",
+                "[DB UPDATE] Unexpected error updating room %s status to connected: %s",
                 self.room_id,
                 str(e),
             )
@@ -749,8 +770,14 @@ class RoomManager:
                 is_active=True, limit=100
             )
 
+            logger.debug(
+                "[SESSION MONITOR] Checking %d active session(s) for camera activity",
+                len(active_sessions),
+            )
+
             for session in active_sessions:
                 session_id = session["id"]
+                ambulance_id = session.get("ambulance_id", "unknown")
 
                 # Check if session has any active cameras
                 has_active = await db_service.has_active_cameras(session_id)
@@ -761,8 +788,9 @@ class RoomManager:
                         self.session_inactivity_timers[session_id].cancel()
                         del self.session_inactivity_timers[session_id]
                         logger.info(
-                            "Session %s has active cameras - timeout timer cancelled",
-                            session_id,
+                            "Session %s (AMB %s) has active cameras - timeout timer cancelled",
+                            session_id[:8],
+                            ambulance_id,
                         )
                 else:
                     # Session has NO active cameras
@@ -773,8 +801,9 @@ class RoomManager:
                         )
                         self.session_inactivity_timers[session_id] = timeout_task
                         logger.warning(
-                            "Session %s has no active cameras - started %d minute timeout timer",
-                            session_id,
+                            "Session %s (AMB %s) has no active cameras - started %d minute timeout timer",
+                            session_id[:8],
+                            ambulance_id,
                             self.SESSION_TIMEOUT_MINUTES,
                         )
 

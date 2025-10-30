@@ -92,9 +92,7 @@ export function useHLSSegmentEvents(
   const connect = () => {
     if (!roomId) {
       if (debug) {
-        console.log(
           "[useHLSSegmentEvents] No room ID provided, skipping connection"
-        );
       }
       return;
     }
@@ -105,7 +103,6 @@ export function useHLSSegmentEvents(
     const sseUrl = `${API_BASE_URL}/api/videos/hls/segments/${roomId}/events`;
 
     if (debug) {
-      console.log("[useHLSSegmentEvents] Connecting to SSE:", sseUrl);
     }
 
     try {
@@ -118,7 +115,6 @@ export function useHLSSegmentEvents(
       // Event: SSE connection opened
       eventSource.onopen = () => {
         if (debug) {
-          console.log("[useHLSSegmentEvents] SSE connection opened");
         }
         setIsConnected(true);
         setStatus("Connected");
@@ -131,7 +127,6 @@ export function useHLSSegmentEvents(
           const data: SegmentEvent = JSON.parse(event.data);
 
           if (debug) {
-            console.log("[useHLSSegmentEvents] Event received:", data);
           }
 
           switch (data.type) {
@@ -149,12 +144,9 @@ export function useHLSSegmentEvents(
               setSegmentCount((prev) => prev + 1);
               setStatus(
                 `New segment ${data.segment_number || "unknown"} available`
-              );
-
+              )
               if (debug) {
-                console.log(
                   `[useHLSSegmentEvents] New segment: ${data.segment_name} (${data.file_size} bytes)`
-                );
               }
 
               // Callback
@@ -165,7 +157,6 @@ export function useHLSSegmentEvents(
               // Auto-reload HLS player
               if (autoReload && hls && hls.url) {
                 if (debug) {
-                  console.log("[useHLSSegmentEvents] Reloading HLS player...");
                 }
 
                 // Reload the playlist to include new segment
@@ -182,7 +173,6 @@ export function useHLSSegmentEvents(
             case "heartbeat":
               // Keep-alive ping
               if (debug) {
-                console.log("[useHLSSegmentEvents] Heartbeat received");
               }
               break;
 
@@ -193,7 +183,6 @@ export function useHLSSegmentEvents(
               setStatus(`Error: ${errorMsg}`);
 
               if (debug) {
-                console.error("[useHLSSegmentEvents] Server error:", errorMsg);
               }
 
               if (onError) {
@@ -203,21 +192,16 @@ export function useHLSSegmentEvents(
 
             default:
               if (debug) {
-                console.warn(
-                  "[useHLSSegmentEvents] Unknown event type:",
-                  data.type
-                );
+                  console.warn("[useHLSSegmentEvents] Unknown event type:", data.type);
               }
           }
         } catch (err) {
-          console.error("[useHLSSegmentEvents] Error parsing SSE event:", err);
           setError("Failed to parse SSE event");
         }
       };
 
       // Event: SSE error
       eventSource.onerror = (err) => {
-        console.error("[useHLSSegmentEvents] SSE connection error:", err);
 
         setIsConnected(false);
         setStatus("Connection error");
@@ -234,13 +218,11 @@ export function useHLSSegmentEvents(
         // Attempt reconnection after 5 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
           if (debug) {
-            console.log("[useHLSSegmentEvents] Attempting to reconnect...");
           }
           connect();
         }, 5000);
       };
     } catch (err) {
-      console.error("[useHLSSegmentEvents] Failed to create EventSource:", err);
       setError("Failed to connect to SSE");
       setStatus("Connection failed");
     }
@@ -259,7 +241,6 @@ export function useHLSSegmentEvents(
     // Close EventSource
     if (eventSourceRef.current) {
       if (debug) {
-        console.log("[useHLSSegmentEvents] Closing SSE connection");
       }
 
       eventSourceRef.current.close();
@@ -274,7 +255,6 @@ export function useHLSSegmentEvents(
    */
   const reconnect = () => {
     if (debug) {
-      console.log("[useHLSSegmentEvents] Manual reconnect triggered");
     }
     connect();
   };

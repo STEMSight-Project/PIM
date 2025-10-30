@@ -81,7 +81,11 @@ export const ambulanceStreamingService = {
       params.append("session_type", filters.session_type);
     if (filters?.is_active !== undefined)
       params.append("is_active", filters.is_active.toString());
-    if (filters?.limit) params.append("limit", filters.limit.toString());
+    if (filters?.limit) {
+      params.append("limit", filters.limit.toString());
+    } else {
+      params.append("limit", "100"); // Default limit
+    }
 
     const queryString = params.toString();
     const endpoint = queryString

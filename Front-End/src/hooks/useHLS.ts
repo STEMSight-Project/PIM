@@ -321,7 +321,12 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
           console.log("[useHLS] Status update:", status);
         }
       },
-      statusPollingInterval
+      statusPollingInterval,
+      () => {
+        if (debug) {
+          console.log("[useHLS] Stopped polling recording status");
+        }
+      }
     );
 
     pollCleanupRef.current = cleanup;

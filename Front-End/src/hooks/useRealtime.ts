@@ -20,6 +20,8 @@ interface RealtimeOptions {
 
 interface UseRealtimeAmbulanceSessionsOptions extends RealtimeOptions {
   ambulanceId?: string;
+  sessionId?: string;
+  isActive?: boolean; // Filter by active/inactive sessions
 }
 
 export interface UseRealtimeAmbulanceOptions {
@@ -30,6 +32,28 @@ export interface UseRealtimeAmbulanceOptions {
 /**
  * Hook for subscribing to real-time ambulance sessions with embedded rooms
  * Listens to both session and room changes to keep data synchronized
+ * 
+ * @param options.ambulanceId - Filter sessions by specific ambulance ID
+ * @param options.sessionId - Filter to get a specific session by ID
+ * @param options.isActive - Filter by active status (true/false/undefined for all)
+ * @param options.enabled - Enable/disable real-time updates (default: true)
+ * 
+ * @example
+ * // Get all active sessions
+ * const { sessions } = useRealtimeAmbulanceSessions({ isActive: true });
+ * 
+ * @example
+ * // Get active sessions for specific ambulance
+ * const { sessions } = useRealtimeAmbulanceSessions({ 
+ *   ambulanceId: "AMB-001", 
+ *   isActive: true 
+ * });
+ * 
+ * @example
+ * // Get specific session by ID
+ * const { sessions } = useRealtimeAmbulanceSessions({ 
+ *   sessionId: "session-uuid-123" 
+ * });
  */
 export function useRealtimeAmbulanceSessions(
   options: UseRealtimeAmbulanceSessionsOptions = {}
@@ -44,7 +68,7 @@ export function useRealtimeAmbulanceSessions(
   const sessionEventSourceRef = useRef<EventSource | null>(null);
   const roomEventSourceRef = useRef<EventSource | null>(null);
 
-  const { enabled = true, ambulanceId } = options;
+  const { enabled = true, ambulanceId, sessionId, isActive } = options;
 
   const handleSessionMessage = useCallback((event: MessageEvent) => {
     try {
@@ -75,24 +99,45 @@ export function useRealtimeAmbulanceSessions(
             case "INSERT":
             case "DELETE":
               {
+                // Apply filters to new session data
+                let shouldInclude = true;
+                
+                if (ambulanceId && sessionData.ambulance_id !== ambulanceId) {
+                  shouldInclude = false;
+                }
+                
+                if (sessionId && sessionData.id !== sessionId) {
+                  shouldInclude = false;
+                }
+                
+                if (isActive !== undefined && sessionData.is_active !== isActive) {
+                  shouldInclude = false;
+                }
+
                 const index = newSessions.findIndex(
                   (s) => s.id === sessionData.id
                 );
-                if (index >= 0) {
-                  // Preserve existing rooms when updating session
-                  newSessions[index] = {
-                    ...sessionData,
-                    camera_rooms: newSessions[index].camera_rooms || [],
-                  };
-                } else {
-                  newSessions.push({ ...sessionData, camera_rooms: [] });
+
+                if (shouldInclude) {
+                  if (index >= 0) {
+                    // Preserve existing rooms when updating session
+                    newSessions[index] = {
+                      ...sessionData,
+                      camera_rooms: newSessions[index].camera_rooms || [],
+                    };
+                  } else {
+                    newSessions.push({ ...sessionData, camera_rooms: [] });
+                  }
+                } else if (index >= 0) {
+                  // Remove session if it no longer matches filters
+                  newSessions.splice(index, 1);
                 }
               }
               break;
             default:
               break;
           }
-
+          console.log("Updated sessions:", newSessions);
           return newSessions;
         });
       }
@@ -105,7 +150,7 @@ export function useRealtimeAmbulanceSessions(
   const handleRoomMessage = useCallback((event: MessageEvent) => {
     try {
       const data = JSON.parse(event.data);
-
+      console.log("Room event data:", data);
       setError(null);
 
       const eventData = typeof data === "string" ? JSON.parse(data) : data;
@@ -127,7 +172,7 @@ export function useRealtimeAmbulanceSessions(
 
         // Update the session that contains this room
         setSessions((prev) => {
-          return prev.map((session) => {
+          const sessions = prev.map((session) => {
             if (session.id === roomData.session_id) {
               const currentRooms = session.camera_rooms || [];
 
@@ -168,6 +213,8 @@ export function useRealtimeAmbulanceSessions(
             }
             return session;
           });
+          console.log("Updated sessions after room event:", sessions);
+          return sessions;
         });
       }
     } catch (err) {
@@ -182,8 +229,22 @@ export function useRealtimeAmbulanceSessions(
     try {
       setIsLoading(true);
 
-      // Fetch sessions first
-      const filters = ambulanceId ? { ambulance_id: ambulanceId } : {};
+      // Build filters based on options
+      const filters: Record<string, any> = {};
+      
+      if (ambulanceId) {
+        filters.ambulance_id = ambulanceId;
+      }
+      
+      if (sessionId) {
+        filters.session_id = sessionId;
+      }
+      
+      if (isActive !== undefined) {
+        filters.is_active = isActive;
+      }
+
+      // Fetch sessions with filters
       const sessionsResponse =
         await ambulanceStreamingService.getAmbulanceSessions(filters);
 
@@ -219,7 +280,7 @@ export function useRealtimeAmbulanceSessions(
     } finally {
       setIsLoading(false);
     }
-  }, [enabled, ambulanceId]);
+  }, [enabled, ambulanceId, sessionId, isActive]);
 
   const connect = useCallback(async () => {
     if (!enabled) return;
@@ -263,7 +324,7 @@ export function useRealtimeAmbulanceSessions(
       setError(err instanceof Error ? err.message : "Failed to connect");
       setIsConnected(false);
     }
-  }, [enabled, handleSessionMessage, handleRoomMessage, fetchInitialSessions]);
+  }, [enabled, fetchInitialSessions]);
 
   const disconnect = useCallback(() => {
     if (sessionEventSourceRef.current) {
@@ -287,7 +348,7 @@ export function useRealtimeAmbulanceSessions(
     return () => {
       disconnect();
     };
-  }, [enabled]);
+  }, [enabled, ambulanceId, sessionId, isActive]);
 
   return {
     sessions,

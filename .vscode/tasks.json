@@ -43,7 +43,7 @@
       "label": "Start Back-End (FastAPI)",
       "type": "shell",
       "command": "python",
-      "args": ["-m", "uvicorn", "main:app", "--reload"],
+      "args": ["-m", "uvicorn", "main:app", "--reload", "--log-level", "info"],
       "options": {
         "cwd": "${workspaceFolder}/Back-End"
       },

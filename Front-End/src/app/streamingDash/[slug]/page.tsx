@@ -3,48 +3,66 @@
 import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
 import { useRealtimeAmbulanceSessions } from "@/hooks/useRealtime";
-import type { CameraRoom } from "@/types";
+import type { AmbulanceSession, CameraRoom } from "@/types";
 import {
   ArrowLeftIcon,
-  ExclamationTriangleIcon,
+  SignalIcon,
+  TruckIcon,
   VideoCameraIcon,
+  WifiIcon,
+  XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
-export default function SimpleAmbulanceStreamingPage() {
+export default function AmbulanceStreamingPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const ambulanceId = params.slug as string;
   const roomIdFromUrl = searchParams.get("room");
-
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(
     roomIdFromUrl
   );
 
-  // Real-time sessions and rooms data
+  // Real-time sessions data - filter for active sessions only
   const {
-    sessions: realtimeSessions,
+    sessions: allSessions,
     isConnected: realtimeConnected,
+    isLoading,
     error: realtimeError,
   } = useRealtimeAmbulanceSessions({
     enabled: true,
-    ambulanceId: ambulanceId,
+
+    isActive: true, // Only get active sessions for this ambulance
   });
 
   // Extract rooms for this ambulance
   const availableRooms = useMemo(() => {
-    const rooms = realtimeSessions
-      .filter((session) => session.ambulance_id === ambulanceId)
-      .flatMap((session) => session.camera_rooms || []);
-
+    const rooms = allSessions.flatMap(
+      (session: AmbulanceSession) => session.camera_rooms || []
+    );
+    console.log("availableRooms:", rooms);
     return rooms;
-  }, [realtimeSessions, ambulanceId]);
+  }, [allSessions]);
+
+  // Compute stats for this ambulance
+  const ambulanceStats = useMemo(() => {
+    const liveRooms = availableRooms.filter(
+      (room: CameraRoom) => room.connected === true
+    );
+    return {
+      totalRooms: availableRooms.length,
+      liveRooms: liveRooms.length,
+      totalSessions: allSessions.length,
+    };
+  }, [availableRooms, allSessions]);
 
   // Monitor selected room's connection status
   const selectedRoom = useMemo(() => {
-    return availableRooms.find((room) => room.room_id === selectedRoomId);
+    return availableRooms.find(
+      (room: CameraRoom) => room.room_id === selectedRoomId
+    );
   }, [availableRooms, selectedRoomId]);
 
   const handleRoomSelect = (roomId: string) => {
@@ -55,251 +73,398 @@ export default function SimpleAmbulanceStreamingPage() {
     window.history.replaceState({}, "", url.toString());
   };
 
-  return (
-    <div className="container mx-auto p-6">
-      {/* Simple Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Button
-          onClick={() => router.push("/streamingDash")}
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-2"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back to Dashboard
-        </Button>
-
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <VideoCameraIcon className="h-8 w-8 text-blue-600" />
-            Ambulance Camera Viewer
-          </h1>
-          <p className="text-gray-600 mt-1">
-            {availableRooms.filter((r) => r.connected).length}/
-            {availableRooms.length} rooms online
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-600">
-            {selectedRoom?.connected ? (
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                Camera Online
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-gray-400 rounded-full" />
-                {selectedRoomId ? "Camera Offline" : "No Camera Selected"}
-              </span>
-            )}
-          </span>
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="relative mx-auto w-16 h-16 mb-8">
+            <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
+            <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
+          </div>
+          <h3 className="text-xl font-semibold text-slate-800 mb-2">
+            Loading Camera Feed
+          </h3>
+          <p className="text-slate-600">Connecting to ambulance...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Error Messages */}
-      {realtimeError && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-          <ExclamationTriangleIcon className="h-5 w-5 text-red-500 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-red-700">{realtimeError}</p>
-          </div>
-        </div>
-      )}
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="container mx-auto p-6 max-w-7xl">
+        {/* Modern Header with Glassmorphism */}
+        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg border border-white/20 p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={() => router.push("/streamingDash")}
+                variant="outline"
+                className="flex items-center gap-2 hover:bg-blue-50 transition-colors"
+              >
+                <ArrowLeftIcon className="h-4 w-4" />
+                Back
+              </Button>
 
-      {/* Real-time connection warning */}
-      {!realtimeConnected && (
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
-          <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-yellow-700">
-              Real-time connection issues detected. Camera data may not be live.
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Video Stream - HybridStreamPlayer */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">
-                  Ambulance Camera Stream
-                </h3>
-                {selectedRoomId && (
-                  <span className="text-xs text-gray-500 font-mono">
-                    {selectedRoomId}
-                  </span>
-                )}
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
+                  <TruckIcon className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900">
+                    {ambulanceId.substring(0, 7).toUpperCase()}
+                  </h1>
+                  <p className="text-sm text-slate-600">
+                    {ambulanceStats.liveRooms}/{ambulanceStats.totalRooms}{" "}
+                    cameras online
+                  </p>
+                </div>
               </div>
-            </CardHeader>
+            </div>
 
-            <CardContent>
-              {selectedRoomId ? (
-                <HybridStreamPlayer
-                  ambulanceId={ambulanceId}
-                  roomId={selectedRoomId}
-                  showAdvancedControls={true}
-                  debug={false}
-                />
-              ) : (
-                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center text-gray-500">
-                    <VideoCameraIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium">No Room Selected</p>
-                    <p className="text-sm opacity-75">
-                      Select a camera room from the list to start streaming
-                    </p>
-                  </div>
+            {/* Status Badges */}
+            <div className="flex items-center gap-3">
+              {/* Real-time Connection Badge */}
+              <div
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm ${
+                  realtimeConnected
+                    ? "bg-green-100 text-green-700 border border-green-200"
+                    : "bg-red-100 text-red-700 border border-red-200"
+                }`}
+              >
+                <WifiIcon className="h-4 w-4" />
+                {realtimeConnected ? "Connected" : "Disconnected"}
+              </div>
+
+              {/* Camera Status Badge */}
+              {selectedRoom && (
+                <div
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm ${
+                    selectedRoom.connected
+                      ? "bg-blue-100 text-blue-700 border border-blue-200"
+                      : "bg-gray-100 text-gray-700 border border-gray-200"
+                  }`}
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      selectedRoom.connected
+                        ? "bg-blue-600 animate-pulse"
+                        : "bg-gray-400"
+                    }`}
+                  />
+                  {selectedRoom.connected ? "Camera Live" : "Camera Offline"}
                 </div>
               )}
-
-              {/* Info Banner */}
-              {selectedRoomId && (
-                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="text-sm text-blue-700">
-                    <p className="font-medium mb-1">💡 Hybrid Stream Player</p>
-                    <ul className="text-xs space-y-1 ml-4 list-disc">
-                      <li>
-                        <strong>Live Mode:</strong> Real-time WebRTC streaming
-                        (low latency)
-                      </li>
-                      <li>
-                        <strong>Playback Mode:</strong> Click pause or scrub
-                        timeline to review recording
-                      </li>
-                      <li>
-                        <strong>Go Live:</strong> Click "Go Live" button to
-                        return to real-time stream
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
-        {/* Camera Rooms List */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <h3 className="text-lg font-semibold">Available Camera Rooms</h3>
-            </CardHeader>
-            <CardContent>
-              {availableRooms.length === 0 ? (
-                <p className="text-gray-500 text-sm">
-                  No camera rooms available.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {availableRooms.map((room: CameraRoom) => (
-                    <div
-                      key={room.id}
-                      className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                        selectedRoomId === room.room_id
-                          ? "border-blue-300 bg-blue-50 shadow-sm"
-                          : "border-gray-200 bg-gray-50 hover:bg-gray-100"
-                      }`}
-                      onClick={() => handleRoomSelect(room.room_id)}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-2">
-                          <VideoCameraIcon className="h-5 w-5 text-gray-500" />
-                          <span className="text-sm font-medium">
-                            {room.room_id || "Room"}
-                          </span>
-                          {selectedRoomId === room.room_id && (
-                            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                              Selected
-                            </span>
-                          )}
-                        </div>
+        {/* Error Alerts */}
+        {realtimeError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 shadow-sm">
+            <XCircleIcon className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-red-800 mb-1">Connection Error</p>
+              <p className="text-sm text-red-700">{realtimeError}</p>
+            </div>
+          </div>
+        )}
 
-                        <div className="flex items-center space-x-2">
-                          <div
-                            className={`h-3 w-3 rounded-full ${
-                              room.connected
-                                ? "bg-green-500 animate-pulse"
-                                : "bg-gray-400"
-                            }`}
-                          />
-                          <span
-                            className={`text-xs px-2 py-1 rounded ${
-                              room.connected
-                                ? "bg-green-100 text-green-800"
-                                : "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            {room.connected ? "Online" : "Offline"}
-                          </span>
-                        </div>
-                      </div>
+        {!realtimeConnected && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 shadow-sm">
+            <SignalIcon className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-amber-800 mb-1">
+                Real-time Updates Paused
+              </p>
+              <p className="text-sm text-amber-700">
+                Reconnecting to live data stream...
+              </p>
+            </div>
+          </div>
+        )}
 
-                      <div className="text-xs text-gray-600">
-                        {room.camera_id && <p>Camera: {room.camera_id}</p>}
-                        <p>
-                          Last Seen:{" "}
-                          {room.last_seen
-                            ? new Date(room.last_seen).toLocaleString()
-                            : "Never"}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Video Stream - HybridStreamPlayer */}
+          <div className="lg:col-span-2">
+            <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <VideoCameraIcon className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        Live Camera Feed
+                      </h3>
+                      {selectedRoomId && (
+                        <p className="text-xs text-slate-500 font-mono mt-0.5">
+                          {selectedRoomId}
                         </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedRoom?.connected && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white rounded-full text-xs font-bold">
+                      <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                      LIVE
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-0">
+                {selectedRoomId ? (
+                  <HybridStreamPlayer
+                    ambulanceId={ambulanceId}
+                    roomId={selectedRoomId}
+                    showAdvancedControls={true}
+                    debug={false}
+                  />
+                ) : (
+                  <div className="aspect-video bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                    <div className="text-center text-slate-600 p-8">
+                      <div className="w-20 h-20 mx-auto mb-6 bg-slate-300/50 rounded-full flex items-center justify-center">
+                        <VideoCameraIcon className="h-10 w-10 text-slate-400" />
+                      </div>
+                      <p className="text-xl font-semibold mb-2">
+                        No Camera Selected
+                      </p>
+                      <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                        Select a camera from the list to start viewing live
+                        stream or playback recordings
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info Banner */}
+                {selectedRoomId && (
+                  <div className="m-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
+                        <SignalIcon className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div className="text-sm text-blue-900">
+                        <p className="font-semibold mb-2">
+                          Hybrid Stream Player
+                        </p>
+                        <ul className="text-xs space-y-1.5 text-blue-700">
+                          <li className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-1.5 flex-shrink-0" />
+                            <span>
+                              <strong>Live Mode:</strong> Real-time WebRTC
+                              streaming with ultra-low latency
+                            </span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-1.5 flex-shrink-0" />
+                            <span>
+                              <strong>Playback Mode:</strong> Click pause or
+                              drag timeline to review recordings
+                            </span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-1.5 flex-shrink-0" />
+                            <span>
+                              <strong>Go Live:</strong> Jump back to real-time
+                              with one click
+                            </span>
+                          </li>
+                        </ul>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-          {/* Simple Connection Info */}
-          <Card>
-            <CardHeader>
-              <h3 className="text-lg font-semibold">Connection Status</h3>
-            </CardHeader>
-            <CardContent className="text-sm space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Real-time Data:</span>
-                <span
-                  className={
-                    realtimeConnected ? "text-green-600" : "text-red-600"
-                  }
-                >
-                  {realtimeConnected ? "Connected" : "Disconnected"}
-                </span>
-              </div>
-              {selectedRoomId && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Selected Room:</span>
-                  <span className="text-gray-900">{selectedRoomId}</span>
+          {/* Camera Rooms List - Modern Design */}
+          <div className="space-y-6">
+            <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Camera Rooms
+                  </h3>
+                  <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                    {ambulanceStats.liveRooms} Live
+                  </div>
                 </div>
-              )}
-              {selectedRoom && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Camera Status:</span>
-                  <span
-                    className={
-                      selectedRoom.connected ? "text-green-600" : "text-red-600"
-                    }
-                  >
-                    {selectedRoom.connected ? "Online" : "Offline"}
-                  </span>
+              </CardHeader>
+              <CardContent className="p-4">
+                {availableRooms.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
+                      <VideoCameraIcon className="h-8 w-8 text-slate-400" />
+                    </div>
+                    <p className="text-slate-600 font-medium mb-1">
+                      No Cameras Available
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Waiting for cameras to connect...
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {availableRooms.map((room: CameraRoom) => {
+                      const isSelected = selectedRoomId === room.room_id;
+                      const isLive =
+                        room.connected && !room.connection_ended_at;
+
+                      return (
+                        <button
+                          key={room.id}
+                          className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-50 shadow-md"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+                          }`}
+                          onClick={() => handleRoomSelect(room.room_id)}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`p-2 rounded-lg ${
+                                  isLive ? "bg-red-100" : "bg-slate-100"
+                                }`}
+                              >
+                                <VideoCameraIcon
+                                  className={`h-5 w-5 ${
+                                    isLive ? "text-red-600" : "text-slate-500"
+                                  }`}
+                                />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {room.camera_name || "Camera"}
+                                </p>
+                                <p className="text-xs text-slate-500 font-mono">
+                                  {room.room_id.split("-").pop()}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2">
+                              {isLive && (
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-red-500 text-white rounded-md text-xs font-bold">
+                                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                                  LIVE
+                                </div>
+                              )}
+                              {isSelected && (
+                                <div className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs font-semibold">
+                                  Active
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs">
+                            <span
+                              className={`px-2 py-1 rounded-md font-medium ${
+                                isLive
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {isLive ? "● Online" : "○ Offline"}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Connection Status Card - Modern Design */}
+            <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  System Status
+                </h3>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="space-y-3">
+                  {/* Real-time Connection */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <WifiIcon
+                        className={`h-5 w-5 ${
+                          realtimeConnected ? "text-green-600" : "text-red-600"
+                        }`}
+                      />
+                      <span className="text-sm font-medium text-slate-700">
+                        Real-time Data
+                      </span>
+                    </div>
+                    <span
+                      className={`text-sm font-semibold ${
+                        realtimeConnected ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      {realtimeConnected ? "Connected" : "Disconnected"}
+                    </span>
+                  </div>
+
+                  {/* Active Sessions */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <SignalIcon className="h-5 w-5 text-blue-600" />
+                      <span className="text-sm font-medium text-slate-700">
+                        Active Sessions
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {ambulanceStats.totalSessions}
+                    </span>
+                  </div>
+
+                  {/* Camera Statistics */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <VideoCameraIcon className="h-5 w-5 text-purple-600" />
+                      <span className="text-sm font-medium text-slate-700">
+                        Cameras Online
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {ambulanceStats.liveRooms}/{ambulanceStats.totalRooms}
+                    </span>
+                  </div>
+
+                  {/* Selected Camera Info */}
+                  {selectedRoom && (
+                    <>
+                      <div className="border-t border-slate-200 my-3"></div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                          Selected Camera
+                        </p>
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <p className="text-sm font-mono text-blue-900 mb-1">
+                            {selectedRoom.room_id}
+                          </p>
+                          <p className="text-xs text-blue-700">
+                            Status:{" "}
+                            <span className="font-semibold">
+                              {selectedRoom.connected ? "Live" : "Offline"}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-gray-500">Available Rooms:</span>
-                <span>{availableRooms.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Online Rooms:</span>
-                <span className="text-green-600">
-                  {availableRooms.filter((r) => r.connected).length}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

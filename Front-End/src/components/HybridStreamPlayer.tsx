@@ -17,7 +17,6 @@
 
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useHLS } from "@/hooks/useHLS";
 import { useStreaming } from "@/hooks/useStreaming";
@@ -30,6 +29,7 @@ import {
   PlayIcon,
   SignalIcon,
 } from "@heroicons/react/24/outline";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 interface HybridStreamPlayerProps {
   /** Ambulance ID for live streaming */
@@ -191,19 +191,35 @@ export function HybridStreamPlayer({
 
     const updateLiveEdge = async () => {
       try {
-        // Use room-based status endpoint
-        const response = await fetch(`/api/videos/hls/${roomId}/status`);
+        // Use room-based status endpoint - updated to match backend API
+        const response = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+          }/ambulance-streaming/camera-rooms/${roomId}/recording-status`
+        );
+
+        if (!response.ok) {
+          console.warn(
+            `[HybridPlayer] Recording status fetch failed: ${response.status}`
+          );
+          return;
+        }
+
         const data = await response.json();
 
-        if (data && data.is_active) {
-          // For active recordings, use duration
-          const newDuration = data.duration || 0;
-          setLiveEdgeDuration(newDuration);
+        if (data && data.data) {
+          const statusData = data.data;
 
-          if (debug) {
-            console.log(
-              `[HybridPlayer] Live edge: ${newDuration}s, Current: ${currentTime}s`
-            );
+          // For active recordings, use duration
+          if (statusData.is_active && statusData.duration) {
+            const newDuration = statusData.duration || 0;
+            setLiveEdgeDuration(newDuration);
+
+            if (debug) {
+              console.log(
+                `[HybridPlayer] Live edge: ${newDuration}s, Current: ${currentTime}s, Recording: ${statusData.recording_file}`
+              );
+            }
           }
         }
       } catch (error) {
@@ -486,7 +502,7 @@ export function HybridStreamPlayer({
         {/* Loading Overlay (modern spinner) */}
         {(isLiveConnecting ||
           isHLSLoading ||
-          (viewMode === "live" && isWaitingForData)) && (
+          (viewMode === "live" && isWaitingForData && !isLiveConnected)) && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-20">
             <div className="text-center text-white">
               <div className="relative w-16 h-16 mx-auto mb-4">
@@ -508,7 +524,7 @@ export function HybridStreamPlayer({
         )}
 
         {/* Error Overlay (refined design) */}
-        {(liveError || hlsError) && (
+        {liveError && hlsError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm z-20">
             <div className="text-center text-white p-8 max-w-md">
               <div className="w-20 h-20 mx-auto mb-5 bg-red-500/20 rounded-full flex items-center justify-center border-2 border-red-500/30">

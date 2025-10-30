@@ -351,7 +351,7 @@ export default function SimpleStreamingDashboard() {
                             <div className="text-sm font-medium text-slate-700 mb-3">
                               Camera Rooms ({ambulance.totalRooms.length})
                             </div>
-                            {ambulance.totalRooms.slice(0, 3).map((room) => (
+                            {ambulance.totalRooms.map((room) => (
                               <div
                                 key={room.id}
                                 onClick={() =>

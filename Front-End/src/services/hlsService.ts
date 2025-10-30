@@ -42,30 +42,30 @@ class HLSService {
 
   /**
    * Get the full URL for an HLS playlist
+   * Updated to use ambulance streaming room-based endpoints
    */
   getPlaylistUrl(roomId: string): string {
-    return `${this.baseUrl}/videos/hls/${roomId}/playlist.m3u8`;
+    return `${this.baseUrl}/ambulance-streaming/camera-rooms/${roomId}/hls/playlist.m3u8`;
   }
 
   /**
    * Get the full URL for an HLS segment
+   * Updated to use ambulance streaming room-based endpoints
    */
-  getSegmentUrl(sessionId: string, segmentName: string): string {
-    return `${this.baseUrl}/videos/hls/${sessionId}/${segmentName}`;
+  getSegmentUrl(roomId: string, segmentName: string): string {
+    return `${this.baseUrl}/ambulance-streaming/camera-rooms/${roomId}/hls/${segmentName}`;
   }
 
   /**
    * Get recording status
    *
-   * @param sessionId - The session ID to check
+   * @param roomId - The room ID to check (e.g., AMB-001-ROOM-001)
    * @returns Recording status information
    */
-  async getRecordingStatus(
-    sessionId: string
-  ): Promise<HLSRecordingStatus | null> {
+  async getRecordingStatus(roomId: string): Promise<HLSRecordingStatus | null> {
     try {
       const response = await api.get<HLSRecordingStatus>(
-        `/videos/hls/${sessionId}/status`
+        `/ambulance-streaming/camera-rooms/${roomId}/recording-status`
       );
 
       if (response.error) {
@@ -178,10 +178,7 @@ class HLSService {
    * @returns Cleanup function to stop polling
    */
   pollRecordingStatus(
-    sessionId: string,
-    callback: (status: HLSRecordingStatus | null) => void,
-    intervalMs: number = 15000
-  ): () => void {
+sessionId: string, callback: (status: HLSRecordingStatus | null) => void, intervalMs: number = 15000, p0: () => void  ): () => void {
     let isPolling = true;
     let lastSegmentCount: number | undefined = undefined;
 
