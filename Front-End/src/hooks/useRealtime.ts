@@ -32,27 +32,27 @@ export interface UseRealtimeAmbulanceOptions {
 /**
  * Hook for subscribing to real-time ambulance sessions with embedded rooms
  * Listens to both session and room changes to keep data synchronized
- * 
+ *
  * @param options.ambulanceId - Filter sessions by specific ambulance ID
  * @param options.sessionId - Filter to get a specific session by ID
  * @param options.isActive - Filter by active status (true/false/undefined for all)
  * @param options.enabled - Enable/disable real-time updates (default: true)
- * 
+ *
  * @example
  * // Get all active sessions
  * const { sessions } = useRealtimeAmbulanceSessions({ isActive: true });
- * 
+ *
  * @example
  * // Get active sessions for specific ambulance
- * const { sessions } = useRealtimeAmbulanceSessions({ 
- *   ambulanceId: "AMB-001", 
- *   isActive: true 
+ * const { sessions } = useRealtimeAmbulanceSessions({
+ *   ambulanceId: "AMB-001",
+ *   isActive: true
  * });
- * 
+ *
  * @example
  * // Get specific session by ID
- * const { sessions } = useRealtimeAmbulanceSessions({ 
- *   sessionId: "session-uuid-123" 
+ * const { sessions } = useRealtimeAmbulanceSessions({
+ *   sessionId: "session-uuid-123"
  * });
  */
 export function useRealtimeAmbulanceSessions(
@@ -101,16 +101,19 @@ export function useRealtimeAmbulanceSessions(
               {
                 // Apply filters to new session data
                 let shouldInclude = true;
-                
+
                 if (ambulanceId && sessionData.ambulance_id !== ambulanceId) {
                   shouldInclude = false;
                 }
-                
+
                 if (sessionId && sessionData.id !== sessionId) {
                   shouldInclude = false;
                 }
-                
-                if (isActive !== undefined && sessionData.is_active !== isActive) {
+
+                if (
+                  isActive !== undefined &&
+                  sessionData.is_active !== isActive
+                ) {
                   shouldInclude = false;
                 }
 
@@ -231,15 +234,15 @@ export function useRealtimeAmbulanceSessions(
 
       // Build filters based on options
       const filters: Record<string, any> = {};
-      
+
       if (ambulanceId) {
         filters.ambulance_id = ambulanceId;
       }
-      
+
       if (sessionId) {
         filters.session_id = sessionId;
       }
-      
+
       if (isActive !== undefined) {
         filters.is_active = isActive;
       }
