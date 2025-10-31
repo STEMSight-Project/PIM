@@ -37,7 +37,10 @@ describe("useHLS", () => {
       on: jest.fn(),
       destroy: jest.fn(),
       startLoad: jest.fn(),
+      stopLoad: jest.fn(),
       recoverMediaError: jest.fn(),
+      loadLevel: -1, // Default to auto quality
+      media: null,
     };
 
     // Mock Hls constructor to return mockHlsInstance
@@ -116,10 +119,12 @@ describe("useHLS", () => {
       };
 
       let statusCallback: (status: any) => void;
-      mockHlsService.pollRecordingStatus = jest.fn((roomId, callback) => {
-        statusCallback = callback;
-        return () => {};
-      });
+      mockHlsService.pollRecordingStatus = jest.fn(
+        (roomId, callback, intervalMs) => {
+          statusCallback = callback;
+          return () => {};
+        }
+      ) as any;
 
       const { result } = renderHook(() =>
         useHLS({ roomId: "AMB-001-ROOM-001" })
@@ -237,6 +242,28 @@ describe("useHLS", () => {
 
       await waitFor(() => {
         expect(mockHlsInstance.loadSource).toHaveBeenCalled();
+      });
+    });
+
+    it("should properly reload playlist with stopLoad and startLoad", async () => {
+      const { result } = renderHook(() =>
+        useHLS({ roomId: "AMB-001-ROOM-001" })
+      );
+
+      (result.current.videoRef as any).current = mockVideoElement;
+      mockVideoElement.currentTime = 30;
+
+      // Mock HLS instance being initialized
+      (result.current as any).hls = mockHlsInstance;
+
+      await act(async () => {
+        result.current.reload();
+      });
+
+      await waitFor(() => {
+        // Verify proper reload sequence
+        expect(mockHlsInstance.stopLoad).toHaveBeenCalled();
+        expect(mockHlsInstance.startLoad).toHaveBeenCalled();
       });
     });
   });

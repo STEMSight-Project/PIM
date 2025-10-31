@@ -146,7 +146,9 @@ export function useHLSSegmentEvents(
                 `New segment ${data.segment_number || "unknown"} available`
               );
               if (debug) {
-                `[useHLSSegmentEvents] New segment: ${data.segment_name} (${data.file_size} bytes)`;
+                console.log(
+                  `[useHLSSegmentEvents] New segment: ${data.segment_name} (${data.file_size} bytes)`
+                );
               }
 
               // Callback
@@ -154,18 +156,70 @@ export function useHLSSegmentEvents(
                 onSegmentAdded(data);
               }
 
-              // Auto-reload HLS player
-              if (autoReload && hls && hls.url) {
+              // Auto-reload HLS player playlist (smooth, non-disruptive)
+              if (autoReload && hls && hls.media) {
+                const video = hls.media;
+                const currentTime = video.currentTime;
+                const duration = video.duration || 0;
+                const isPlaying = !video.paused;
+
+                // Check if we're near the live edge (within 15 seconds)
+                const timeBehindLive = duration - currentTime;
+                const isNearLive = timeBehindLive < 15;
+
                 if (debug) {
+                  console.log(
+                    `[useHLSSegmentEvents] Auto-reload check - Time: ${currentTime.toFixed(
+                      2
+                    )}s, Duration: ${duration.toFixed(
+                      2
+                    )}s, Behind: ${timeBehindLive.toFixed(
+                      2
+                    )}s, Near Live: ${isNearLive}`
+                  );
                 }
 
-                // Reload the playlist to include new segment
-                const currentTime = hls.media?.currentTime || 0;
-                hls.loadSource(hls.url);
+                // ALWAYS reload playlist when new segment arrives
+                // This ensures the player knows about new segments
+                if (debug) {
+                  console.log(
+                    "[useHLSSegmentEvents] Forcing playlist reload for new segment..."
+                  );
+                }
 
-                // Try to restore playback position
-                if (hls.media) {
-                  hls.media.currentTime = currentTime;
+                try {
+                  // Force playlist reload by resetting level and restarting load
+                  // This is the CORRECT way to refresh playlist in HLS.js
+                  hls.loadLevel = -1; // Reset to auto quality selection
+
+                  // Stop and restart loading to fetch updated playlist
+                  hls.stopLoad();
+                  hls.startLoad(currentTime); // Start from current position
+
+                  if (debug) {
+                    console.log(
+                      "[useHLSSegmentEvents] Playlist reload triggered successfully"
+                    );
+                  }
+
+                  // Ensure video continues playing if it was playing
+                  if (isPlaying && video.paused) {
+                    video.play().catch((err) => {
+                      if (debug) {
+                        console.warn(
+                          "[useHLSSegmentEvents] Failed to resume playback:",
+                          err
+                        );
+                      }
+                    });
+                  }
+                } catch (err) {
+                  if (debug) {
+                    console.error(
+                      "[useHLSSegmentEvents] Error refreshing playlist:",
+                      err
+                    );
+                  }
                 }
               }
               break;
