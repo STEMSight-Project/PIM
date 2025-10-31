@@ -92,7 +92,7 @@ export function useHLSSegmentEvents(
   const connect = () => {
     if (!roomId) {
       if (debug) {
-          "[useHLSSegmentEvents] No room ID provided, skipping connection"
+        ("[useHLSSegmentEvents] No room ID provided, skipping connection");
       }
       return;
     }
@@ -100,7 +100,7 @@ export function useHLSSegmentEvents(
     // Clean up existing connection
     disconnect();
 
-    const sseUrl = `${API_BASE_URL}/api/videos/hls/segments/${roomId}/events`;
+    const sseUrl = `${API_BASE_URL}/videos/hls/segments/${roomId}/events`;
 
     if (debug) {
     }
@@ -144,9 +144,9 @@ export function useHLSSegmentEvents(
               setSegmentCount((prev) => prev + 1);
               setStatus(
                 `New segment ${data.segment_number || "unknown"} available`
-              )
+              );
               if (debug) {
-                  `[useHLSSegmentEvents] New segment: ${data.segment_name} (${data.file_size} bytes)`
+                `[useHLSSegmentEvents] New segment: ${data.segment_name} (${data.file_size} bytes)`;
               }
 
               // Callback
@@ -192,7 +192,10 @@ export function useHLSSegmentEvents(
 
             default:
               if (debug) {
-                  console.warn("[useHLSSegmentEvents] Unknown event type:", data.type);
+                console.warn(
+                  "[useHLSSegmentEvents] Unknown event type:",
+                  data.type
+                );
               }
           }
         } catch (err) {
@@ -202,7 +205,6 @@ export function useHLSSegmentEvents(
 
       // Event: SSE error
       eventSource.onerror = (err) => {
-
         setIsConnected(false);
         setStatus("Connection error");
         setError("SSE connection failed");

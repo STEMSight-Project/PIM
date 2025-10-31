@@ -19,6 +19,7 @@
 
 import { Button } from "@/components/ui/Button";
 import { useHLS } from "@/hooks/useHLS";
+import { useHLSSegmentEvents } from "@/hooks/useHLSSegmentEvents";
 import { useStreaming } from "@/hooks/useStreaming";
 import { cn } from "@/utils/cn";
 import {
@@ -89,6 +90,7 @@ export function HybridStreamPlayer({
 
   const {
     videoRef: hlsVideoRef,
+    hls,
     isLoading: isHLSLoading,
     isHLSReady,
     play: playHLS,
@@ -101,6 +103,35 @@ export function HybridStreamPlayer({
     autoPlay: false,
     lowLatencyMode: false,
     debug,
+  });
+
+  // ============================================================================
+  // HOOKS - HLS SEGMENT EVENTS (Real-time segment updates)
+  // ============================================================================
+
+  const {
+    isConnected: segmentEventsConnected,
+    error: segmentEventsError,
+    lastSegment,
+    segmentCount,
+    status: segmentStatus,
+  } = useHLSSegmentEvents({
+    roomId: viewMode === "playback" ? roomId : null, // Only connect in playback mode
+    hls,
+    autoReload: true, // Automatically reload HLS when new segments arrive
+    debug,
+    onSegmentAdded: (event) => {
+      if (debug) {
+        console.log(
+          `[HybridPlayer] New segment added: ${event.segment_name} (${event.file_size} bytes)`
+        );
+      }
+      // Update live edge duration when new segment arrives
+      if (hlsVideoRef.current) {
+        const newDuration = hlsVideoRef.current.duration || 0;
+        setLiveEdgeDuration(newDuration);
+      }
+    },
   });
 
   // ============================================================================
@@ -191,11 +222,11 @@ export function HybridStreamPlayer({
 
     const updateLiveEdge = async () => {
       try {
-        // Use room-based status endpoint - updated to match backend API
+        // Use correct backend API endpoint: /videos/hls/{room_id}/status
         const response = await fetch(
           `${
             process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-          }/ambulance-streaming/camera-rooms/${roomId}/recording-status`
+          }/videos/hls/${roomId}/status`
         );
 
         if (!response.ok) {
@@ -207,17 +238,28 @@ export function HybridStreamPlayer({
 
         const data = await response.json();
 
-        if (data && data.data) {
-          const statusData = data.data;
-
+        // Backend returns status directly (not wrapped in {data: ...})
+        if (data) {
           // For active recordings, use duration
-          if (statusData.is_active && statusData.duration) {
-            const newDuration = statusData.duration || 0;
+          if (data.is_active && data.duration) {
+            const newDuration = data.duration || 0;
             setLiveEdgeDuration(newDuration);
 
             if (debug) {
               console.log(
-                `[HybridPlayer] Live edge: ${newDuration}s, Current: ${currentTime}s, Recording: ${statusData.recording_file}`
+                `[HybridPlayer] Live edge: ${newDuration}s, Current: ${currentTime}s, Status: ${data.status}`
+              );
+            }
+          }
+          // For completed recordings, use segment count * segment duration estimate
+          else if (!data.is_active && data.segment_count) {
+            // Estimate duration (assuming 30-second segments)
+            const estimatedDuration = data.segment_count * 30;
+            setLiveEdgeDuration(estimatedDuration);
+
+            if (debug) {
+              console.log(
+                `[HybridPlayer] Completed recording: ${data.segment_count} segments, ~${estimatedDuration}s`
               );
             }
           }

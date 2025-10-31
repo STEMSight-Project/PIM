@@ -13,7 +13,7 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export default function AmbulanceStreamingPage() {
   const params = useParams();
@@ -25,7 +25,18 @@ export default function AmbulanceStreamingPage() {
     roomIdFromUrl
   );
 
-  // Real-time sessions data - filter for active sessions only
+  /**
+   * Data Flow:
+   * 1. Get ambulanceId from URL params (e.g., /streamingDash/AMB-001)
+   * 2. Get optional roomId from URL query (e.g., ?room=AMB-001-ROOM-001)
+   * 3. Fetch ALL sessions for this ambulance (active or inactive)
+   * 4. Extract ALL rooms from sessions (online or offline)
+   * 5. Auto-select room from URL when it becomes available
+   * 6. Real-time updates handle connected/disconnected status changes
+   */
+
+  // Real-time sessions data - get ALL sessions for this ambulance (active or not)
+  // We need all sessions to see all rooms, regardless of connection status
   const {
     sessions: allSessions,
     isConnected: realtimeConnected,
@@ -33,16 +44,15 @@ export default function AmbulanceStreamingPage() {
     error: realtimeError,
   } = useRealtimeAmbulanceSessions({
     enabled: true,
-
-    isActive: true, // Only get active sessions for this ambulance
+    ambulanceId: ambulanceId, // Filter by ambulance ID from URL
+    // Don't filter by isActive - we want to see all rooms even if session ended
   });
 
-  // Extract rooms for this ambulance
+  // Extract ALL rooms for this ambulance (online or offline)
   const availableRooms = useMemo(() => {
     const rooms = allSessions.flatMap(
       (session: AmbulanceSession) => session.camera_rooms || []
     );
-    console.log("availableRooms:", rooms);
     return rooms;
   }, [allSessions]);
 
@@ -57,6 +67,18 @@ export default function AmbulanceStreamingPage() {
       totalSessions: allSessions.length,
     };
   }, [availableRooms, allSessions]);
+
+  // Auto-select room from URL when it becomes available
+  useEffect(() => {
+    if (roomIdFromUrl && availableRooms.length > 0) {
+      const roomExists = availableRooms.some(
+        (room: CameraRoom) => room.room_id === roomIdFromUrl
+      );
+      if (roomExists && selectedRoomId !== roomIdFromUrl) {
+        setSelectedRoomId(roomIdFromUrl);
+      }
+    }
+  }, [roomIdFromUrl, availableRooms, selectedRoomId]);
 
   // Monitor selected room's connection status
   const selectedRoom = useMemo(() => {
