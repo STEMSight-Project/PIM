@@ -128,9 +128,16 @@ async def connect_streamer(room_id: str, body: SDPBody):
         room = await StreamingDatabaseService.get_camera_room_by_id(room_id)
 
         if not room:
+            logger.error(f"❌ Room not found in database: {room_id}")
             raise HTTPException(status_code=404, detail=f"Room {room_id} not found")
 
         camera_id = room["camera_id"]
+        session_id_from_db = room["session_id"]
+
+        # 🔥 DEBUG: Log room-to-session mapping
+        logger.info(
+            f"🔍 [STREAMER] room_id={room_id} → camera_room_id={room['id']} → session_id={session_id_from_db}"
+        )
 
         # Update room status to connected
         await StreamingDatabaseService.update_camera_room_status(room["id"], True)
@@ -141,6 +148,18 @@ async def connect_streamer(room_id: str, body: SDPBody):
             webrtc_room = room_manager.create_room(
                 room_id, session_id=room["session_id"]
             )
+
+        # 🔥 FIX: Register camera room for monitoring (tracks session_id)
+        webrtc_service.register_camera_room(
+            room_id=room_id,
+            camera_room_id=room["id"],  # Database ID
+            session_id=room["session_id"],  # Link to session
+        )
+        logger.info(
+            "Registered camera room %s for monitoring (session: %s)",
+            room["id"],
+            room["session_id"],
+        )
 
         # Use WebRTC service to handle the connection
         answer = await webrtc_service.create_streamer_connection(room_id, body)

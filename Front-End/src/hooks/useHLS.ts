@@ -96,11 +96,13 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
     }
 
     const video = videoRef.current;
-    const playlistUrl = hlsService.getPlaylistUrl(roomId);
+    // Add cache-busting timestamp to prevent loading old playlist data
+    const timestamp = Date.now();
+    const playlistUrl = `${hlsService.getPlaylistUrl(roomId)}?t=${timestamp}`;
 
     if (debug) {
       console.log("[useHLS] Initializing player for room:", roomId);
-      console.log("[useHLS] Playlist URL:", playlistUrl);
+      console.log("[useHLS] Playlist URL (with cache-bust):", playlistUrl);
     }
 
     // Clean up existing instance
@@ -121,6 +123,16 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
         lowLatencyMode,
         maxBufferLength,
         debug,
+        // Disable HLS.js internal caching to force fresh playlist fetches
+        xhrSetup: function (xhr: XMLHttpRequest, url: string) {
+          // Add cache-busting headers
+          xhr.setRequestHeader(
+            "Cache-Control",
+            "no-cache, no-store, must-revalidate"
+          );
+          xhr.setRequestHeader("Pragma", "no-cache");
+          xhr.setRequestHeader("Expires", "0");
+        },
       });
 
       hlsRef.current = hls;

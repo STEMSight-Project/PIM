@@ -286,6 +286,10 @@ class Room:
         self.video_track = None
         self.relayed_track = None  # Store relayed track for new viewers
 
+        # ✅ NEW: Track if we've received actual video data before marking as connected
+        self._first_frame_received = False
+        self._waiting_for_first_frame = False
+
     async def close(self):
         """Close all peer connections and clean up resources."""
         try:
@@ -365,6 +369,15 @@ class Room:
         # Update legacy attribute for backward compatibility
         self.last_data_timestamp = time.time()
 
+        # ✅ NEW: Mark that first frame has been received and update room status
+        if not self._first_frame_received:
+            self._first_frame_received = True
+            logger.info(
+                f"🎬 [FIRST FRAME] Room {self.room_id} received first video frame, updating status to connected"
+            )
+            # Update room status to connected NOW that we have actual data
+            asyncio.create_task(self._update_room_connected_on_first_frame())
+
     def add_peer_connection(self, pc: RTCPeerConnection, is_streamer: bool = False):
         """Add a peer connection to this room.
 
@@ -393,21 +406,22 @@ class Room:
             )
             self.log_connection_state()
 
-            # Only update room status to connected when STREAMER joins
+            # ✅ IMPROVED: Only start waiting for first frame when STREAMER joins
+            # Database update to connected will happen when first frame arrives
+            # BUT: If we've already received first frame (reconnection), don't wait again
             if was_streamer_empty:
-                logger.info(
-                    f"✅ Room {self.room_id} now has streamer connection, updating status to connected"
-                )
-                # ✅ IMPROVED: Make database update more reliable with explicit wait
-                # Create task and store reference to ensure it's not garbage collected
-                self._db_update_task = asyncio.create_task(
-                    self._update_room_connected()
-                )
-
-                # Log that update has been initiated
-                logger.info(
-                    f"[DB UPDATE] Initiated connected=True for room {self.room_id}"
-                )
+                if not self._first_frame_received:
+                    logger.info(
+                        f"⏳ [WAITING] Room {self.room_id} has streamer connection, waiting for first video frame before marking as connected"
+                    )
+                    self._waiting_for_first_frame = True
+                else:
+                    # Reconnection case - we already received frames before
+                    logger.info(
+                        f"✅ [RECONNECTION] Room {self.room_id} streamer reconnected (first frame was already received, marking as connected immediately)"
+                    )
+                    # Update database immediately for reconnections
+                    asyncio.create_task(self._update_room_connected())
 
                 # Schedule recording to start after video track is received
                 if self.session_id:
@@ -552,6 +566,49 @@ class Room:
                 str(e),
             )
 
+    async def _update_room_connected_on_first_frame(self):
+        """Update room status to connected when first video frame is received.
+
+        This is called from update_stream_activity() when the first frame arrives,
+        ensuring the camera is actually working before marking as connected.
+        """
+        try:
+            if self.room_db_id:
+                logger.info(
+                    "✅ [FIRST FRAME DB] Updating room %s (db_id: %s) to connected=True after receiving video data",
+                    self.room_id,
+                    self.room_db_id,
+                )
+
+                await self._db_service.update_camera_room_status(
+                    self.room_db_id, connected=True
+                )
+
+                logger.info(
+                    "✅ [FIRST FRAME DB] Successfully updated room %s status to connected in database (verified working camera)",
+                    self.room_id,
+                )
+
+                # Reset waiting flag
+                self._waiting_for_first_frame = False
+            else:
+                logger.warning(
+                    "[FIRST FRAME DB] Room %s has no room_db_id, cannot update database",
+                    self.room_id,
+                )
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error(
+                "[FIRST FRAME DB] Database error updating room %s status to connected: %s",
+                self.room_id,
+                str(e),
+            )
+        except Exception as e:
+            logger.error(
+                "[FIRST FRAME DB] Unexpected error updating room %s status to connected: %s",
+                self.room_id,
+                str(e),
+            )
+
     def get_connection_info(self) -> dict:
         """Get detailed connection information for monitoring."""
         time_since_data = (
@@ -564,6 +621,8 @@ class Room:
             "viewer_connections": len(self.viewer_pcs),
             "is_active": self.is_active,
             "has_streamers": len(self.streamer_pcs) > 0,
+            "first_frame_received": self._first_frame_received,
+            "waiting_for_first_frame": self._waiting_for_first_frame,
             "last_data_timestamp": self.last_data_timestamp,
             "seconds_since_data": int(time_since_data),
             "timeout_seconds": self.STREAM_TIMEOUT_SECONDS,
@@ -582,13 +641,18 @@ class Room:
             else "not monitoring"
         )
 
+        frame_status = "✅ received" if self._first_frame_received else "⏳ waiting"
+        if self._waiting_for_first_frame:
+            frame_status = "⏳ waiting (streamer connected)"
+
         logger.info(
-            "Room %s connection state: total=%d, streamers=%d, viewers=%d, active=%s, data_age=%ds, activity=%s",
+            "Room %s connection state: total=%d, streamers=%d, viewers=%d, active=%s, first_frame=%s, data_age=%ds, activity=%s",
             self.room_id,
             len(self.pcs),
             len(self.streamer_pcs),
             len(self.viewer_pcs),
             self.is_active,
+            frame_status,
             int(time_since_data),
             monitoring_status,
         )

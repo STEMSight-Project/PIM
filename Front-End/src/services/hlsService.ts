@@ -188,10 +188,7 @@ class HLSService {
    * @returns Cleanup function to stop polling
    */
   pollRecordingStatus(
-    roomId: string,
-    callback: (status: HLSRecordingStatus | null) => void,
-    intervalMs: number = 15000
-  ): () => void {
+roomId: string, callback: (status: HLSRecordingStatus | null) => void, intervalMs: number = 15000, p0: () => void  ): () => void {
     let isPolling = true;
     let lastSegmentCount: number | undefined = undefined;
 

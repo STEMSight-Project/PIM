@@ -73,6 +73,7 @@ export function useStreaming(): UseStreamingReturn {
   const reconnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUserStoppedRef = useRef(false);
   const videoDataTimeoutRef = useRef<NodeJS.Timeout | null>(null); // NEW: Timeout for video data
+  const videoEventCleanupRef = useRef<(() => void) | null>(null); // NEW: Cleanup function for video event listeners
 
   const clearError = useCallback(() => {
     setError(null);
@@ -135,6 +136,53 @@ export function useStreaming(): UseStreamingReturn {
         setCurrentSession(null);
         return null;
       }
+    },
+    []
+  );
+
+  /**
+   * Wait for a camera room to become connected (i.e., streamer has sent first frame)
+   * This prevents race condition where viewer tries to connect before track is ready
+   */
+  const waitForRoomConnected = useCallback(
+    async (
+      roomId: string,
+      sessionId: string,
+      timeoutMs: number = 15000
+    ): Promise<{ room_id: string; connected: boolean } | null> => {
+      const startTime = Date.now();
+      const pollInterval = 500; // Check every 500ms
+
+      console.log(
+        `⏳ Waiting for room ${roomId} to become connected (timeout: ${timeoutMs}ms)...`
+      );
+
+      while (Date.now() - startTime < timeoutMs) {
+        try {
+          // Get all rooms for this session and find the target room
+          const roomsResponse = await ambulanceStreamingService.getCameraRooms({
+            session_id: sessionId,
+          });
+
+          if (roomsResponse.data && roomsResponse.data.length > 0) {
+            const room = roomsResponse.data.find((r) => r.room_id === roomId);
+            if (room && room.connected) {
+              console.log(`✅ Room ${roomId} is now connected!`);
+              return room;
+            }
+          }
+
+          // Wait before next poll
+          await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        } catch (error) {
+          console.error("Error polling room status:", error);
+          // Continue polling despite errors
+          await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        }
+      }
+
+      console.warn(`⚠️ Timeout waiting for room ${roomId} to become connected`);
+      return null;
     },
     []
   );
@@ -329,15 +377,81 @@ export function useStreaming(): UseStreamingReturn {
 
       // Set up event handlers
       pc.ontrack = (event) => {
-        console.log("Received remote stream");
+        console.log("🎬 [ONTRACK] Received track event from streamer");
+        console.log("🎬 [ONTRACK] Track kind:", event.track.kind);
+        console.log("🎬 [ONTRACK] Track ID:", event.track.id);
+        console.log("🎬 [ONTRACK] Track label:", event.track.label);
+        console.log("🎬 [ONTRACK] Track readyState:", event.track.readyState);
+        console.log("🎬 [ONTRACK] Track muted:", event.track.muted);
+        console.log("🎬 [ONTRACK] Number of streams:", event.streams.length);
+
+        if (event.streams.length > 0) {
+          console.log(
+            "🎬 [ONTRACK] Stream ID:",
+            event.streams[0].id,
+            "Active:",
+            event.streams[0].active
+          );
+          console.log(
+            "🎬 [ONTRACK] Stream tracks:",
+            event.streams[0].getTracks().length
+          );
+        }
+
         if (videoRef.current && event.streams[0]) {
+          console.log("✅ [VIDEO] Attaching stream to video element");
+
+          // 🔥 CRITICAL: Clean up previous event listeners to prevent accumulation
+          if (videoEventCleanupRef.current) {
+            console.log("🧹 [VIDEO] Cleaning up previous event listeners");
+            videoEventCleanupRef.current();
+            videoEventCleanupRef.current = null;
+          }
+
+          // 🔥 CRITICAL: Reset video element state before attaching new stream
+          if (videoRef.current.srcObject) {
+            console.log("🔄 [VIDEO] Removing previous srcObject");
+            videoRef.current.srcObject = null;
+          }
+
           videoRef.current.srcObject = event.streams[0];
-          videoRef.current.play().catch((err) => {
-            console.error("Video autoplay failed:", err);
-          });
+
+          // 🔥 CRITICAL: Set video properties for proper playback
+          videoRef.current.muted = true; // Mute to allow autoplay
+          videoRef.current.playsInline = true; // For mobile devices
+          videoRef.current.autoplay = true; // Enable autoplay
+
+          // Log video element state
+          console.log(
+            "📺 [VIDEO] Video readyState before play:",
+            videoRef.current.readyState
+          );
+          console.log(
+            "📺 [VIDEO] Video networkState:",
+            videoRef.current.networkState
+          );
+          console.log("📺 [VIDEO] Video paused:", videoRef.current.paused);
+
+          // 🔥 CRITICAL: Force play even if track is initially muted
+          const tryPlay = async () => {
+            try {
+              await videoRef.current!.play();
+              console.log("✅ [VIDEO] Video play() succeeded");
+            } catch (err) {
+              console.error("❌ [VIDEO] Video autoplay failed:", err);
+              console.log(
+                "⚠️ [VIDEO] User interaction required - video will play when user clicks"
+              );
+              // Set a flag or show UI to prompt user to click
+              setUserFriendlyStatus("Click anywhere to start video");
+            }
+          };
+
+          tryPlay();
 
           // NEW: Set up video data timeout monitoring
           setIsWaitingForData(true);
+          console.log("⏳ [VIDEO] Waiting for video data...");
 
           // Clear any existing timeout
           if (videoDataTimeoutRef.current) {
@@ -347,24 +461,63 @@ export function useStreaming(): UseStreamingReturn {
           // Set 2-second timeout for receiving video data
           videoDataTimeoutRef.current = setTimeout(() => {
             // Check if video is actually playing (has received data)
-            if (
-              videoRef.current &&
-              (videoRef.current.readyState < 2 || videoRef.current.paused)
-            ) {
-              console.warn("No video data received within 2 seconds");
-              setIsWaitingForData(true);
-              setUserFriendlyStatus("Waiting for video data from camera...");
+            if (videoRef.current) {
+              console.warn(
+                "⚠️ [VIDEO-TIMEOUT] No video data received within 2 seconds"
+              );
+              console.warn(
+                "⚠️ [VIDEO-TIMEOUT] readyState:",
+                videoRef.current.readyState
+              );
+              console.warn(
+                "⚠️ [VIDEO-TIMEOUT] paused:",
+                videoRef.current.paused
+              );
+              console.warn(
+                "⚠️ [VIDEO-TIMEOUT] currentTime:",
+                videoRef.current.currentTime
+              );
+
+              if (videoRef.current.readyState < 2 || videoRef.current.paused) {
+                setIsWaitingForData(true);
+                setUserFriendlyStatus("Waiting for video data from camera...");
+              }
             }
           }, 2000);
 
           // Monitor video metadata to detect when data is actually flowing
           const handleVideoData = () => {
+            console.log(
+              "🎉 [VIDEO-DATA] Video data received! Event:",
+              event.type
+            );
+            console.log(
+              "🎉 [VIDEO-DATA] readyState:",
+              videoRef.current?.readyState
+            );
+            console.log(
+              "🎉 [VIDEO-DATA] currentTime:",
+              videoRef.current?.currentTime
+            );
+
             if (videoDataTimeoutRef.current) {
               clearTimeout(videoDataTimeoutRef.current);
               videoDataTimeoutRef.current = null;
             }
             setIsWaitingForData(false);
             setUserFriendlyStatus("Receiving live video stream");
+            console.log("✅ [VIDEO-DATA] Successfully receiving live stream");
+
+            // 🔥 CRITICAL: Ensure video is playing when data arrives
+            if (videoRef.current && videoRef.current.paused) {
+              console.log(
+                "🔄 [VIDEO-DATA] Video paused, attempting to play..."
+              );
+              videoRef.current.play().catch((err) => {
+                console.error("❌ [VIDEO-DATA] Play failed:", err);
+              });
+            }
+
             videoRef.current?.removeEventListener(
               "loadeddata",
               handleVideoData
@@ -372,16 +525,155 @@ export function useStreaming(): UseStreamingReturn {
             videoRef.current?.removeEventListener("playing", handleVideoData);
           };
 
+          // Add all possible video events for debugging
+          const debugVideoEvents = [
+            "loadstart",
+            "loadedmetadata",
+            "loadeddata",
+            "canplay",
+            "canplaythrough",
+            "playing",
+            "play",
+            "pause",
+            "ended",
+            "error",
+            "stalled",
+            "suspend",
+            "waiting",
+          ];
+
+          // 🔥 CRITICAL: Store event listeners for cleanup
+          const eventListeners: Array<{ event: string; handler: () => void }> =
+            [];
+
+          debugVideoEvents.forEach((eventName) => {
+            const handler = () => {
+              console.log(`📺 [VIDEO-EVENT] ${eventName}`);
+              if (eventName === "error" && videoRef.current?.error) {
+                console.error(
+                  "📺 [VIDEO-ERROR]",
+                  videoRef.current.error.message
+                );
+              }
+
+              // 🔥 CRITICAL: Try to play when video can play
+              if (
+                (eventName === "canplay" || eventName === "canplaythrough") &&
+                videoRef.current &&
+                videoRef.current.paused
+              ) {
+                console.log(
+                  `🔄 [${eventName.toUpperCase()}] Video ready, attempting to play...`
+                );
+                videoRef.current.play().catch((err) => {
+                  console.error(
+                    `❌ [${eventName.toUpperCase()}] Play failed:`,
+                    err
+                  );
+                });
+              }
+            };
+
+            videoRef.current?.addEventListener(eventName, handler);
+            eventListeners.push({ event: eventName, handler });
+          });
+
           videoRef.current.addEventListener("loadeddata", handleVideoData);
           videoRef.current.addEventListener("playing", handleVideoData);
+          eventListeners.push({
+            event: "loadeddata",
+            handler: handleVideoData,
+          });
+          eventListeners.push({ event: "playing", handler: handleVideoData });
+
+          // 🔥 CRITICAL: Store cleanup function
+          videoEventCleanupRef.current = () => {
+            eventListeners.forEach(({ event, handler }) => {
+              videoRef.current?.removeEventListener(event, handler);
+            });
+            console.log("🧹 [VIDEO] Removed all event listeners");
+          };
+
+          // Also listen to track events
+          event.track.onmute = () => {
+            console.warn("🔇 [TRACK] Track muted");
+          };
+          event.track.onunmute = () => {
+            console.log("🔊 [TRACK] Track unmuted");
+            // 🔥 CRITICAL: Retry playing video when track unmutes
+            if (videoRef.current && videoRef.current.paused) {
+              console.log("🔄 [TRACK] Track unmuted, retrying video play...");
+              videoRef.current.play().catch((err) => {
+                console.error("❌ [TRACK] Retry play failed:", err);
+              });
+            }
+          };
+          event.track.onended = () => {
+            console.warn("🛑 [TRACK] Track ended");
+          };
+        } else {
+          console.error("❌ [ONTRACK] No video element or stream available");
         }
       };
 
       pc.onconnectionstatechange = () => {
-        console.log("Connection state:", pc.connectionState);
+        const timestamp = new Date().toISOString();
+        console.log(
+          `🔌 [CONNECTION-STATE] ${timestamp} - State:`,
+          pc.connectionState
+        );
+        console.log("🔌 [CONNECTION-STATE] ICE state:", pc.iceConnectionState);
+        console.log(
+          "🔌 [CONNECTION-STATE] Signaling state:",
+          pc.signalingState
+        );
+
+        // Log transceiver state
+        const transceivers = pc.getTransceivers();
+        console.log("🔌 [CONNECTION-STATE] Transceivers:", transceivers.length);
+        transceivers.forEach((t, idx) => {
+          console.log(`  - Transceiver ${idx}:`, {
+            direction: t.direction,
+            currentDirection: t.currentDirection,
+            mid: t.mid,
+            receiver: {
+              track: t.receiver.track
+                ? {
+                    id: t.receiver.track.id,
+                    kind: t.receiver.track.kind,
+                    readyState: t.receiver.track.readyState,
+                    muted: t.receiver.track.muted,
+                  }
+                : null,
+            },
+          });
+        });
 
         switch (pc.connectionState) {
           case "connected":
+            console.log("✅ [CONNECTED] WebRTC connection established!");
+            console.log(
+              "✅ [CONNECTED] Checking for tracks in transceivers..."
+            );
+
+            // Check if we have tracks
+            let hasVideoTrack = false;
+            transceivers.forEach((t) => {
+              if (t.receiver.track && t.receiver.track.kind === "video") {
+                hasVideoTrack = true;
+                console.log(
+                  "✅ [CONNECTED] Found video track:",
+                  t.receiver.track.id
+                );
+              }
+            });
+
+            if (!hasVideoTrack) {
+              console.warn(
+                "⚠️ [CONNECTED] No video tracks found despite connection!"
+              );
+            }
+
             setIsConnected(true);
             setIsConnecting(false);
             setIsReconnecting(false);
@@ -396,12 +688,18 @@ export function useStreaming(): UseStreamingReturn {
             }
             break;
           case "connecting":
+            console.log("🔄 [CONNECTING] Establishing WebRTC connection...");
             setIsConnecting(true);
             setUserFriendlyStatus("Establishing connection...");
             break;
           case "disconnected":
             console.warn(
-              "⚠️ Connection disconnected - will attempt reconnection"
+              "⚠️ [DISCONNECTED] Connection disconnected - will attempt reconnection"
+            );
+            console.warn("⚠️ [DISCONNECTED] ICE state:", pc.iceConnectionState);
+            console.warn(
+              "⚠️ [DISCONNECTED] Signaling state:",
+              pc.signalingState
             );
             setIsConnected(false);
             setIsConnecting(false);
@@ -411,7 +709,11 @@ export function useStreaming(): UseStreamingReturn {
             }
             break;
           case "failed":
-            console.error("❌ Connection failed - will attempt reconnection");
+            console.error(
+              "❌ [FAILED] Connection failed - will attempt reconnection"
+            );
+            console.error("❌ [FAILED] ICE state:", pc.iceConnectionState);
+            console.error("❌ [FAILED] Signaling state:", pc.signalingState);
             setIsConnected(false);
             setIsConnecting(false);
             // Only auto-reconnect if user didn't manually stop
@@ -420,7 +722,7 @@ export function useStreaming(): UseStreamingReturn {
             }
             break;
           case "closed":
-            console.log("🔒 Connection closed");
+            console.log("🔒 [CLOSED] Connection closed");
             setIsConnected(false);
             setIsConnecting(false);
             setConnectionQuality(null);
@@ -471,14 +773,27 @@ export function useStreaming(): UseStreamingReturn {
       };
 
       // Add transceivers for receiving media
-      pc.addTransceiver("video", { direction: "recvonly" });
-      pc.addTransceiver("audio", { direction: "recvonly" });
+      console.log("🎥 [SETUP] Adding transceivers for video and audio...");
+      const videoTransceiver = pc.addTransceiver("video", {
+        direction: "recvonly",
+      });
+      const audioTransceiver = pc.addTransceiver("audio", {
+        direction: "recvonly",
+      });
+      console.log("🎥 [SETUP] Video transceiver added:", videoTransceiver.mid);
+      console.log("🎥 [SETUP] Audio transceiver added:", audioTransceiver.mid);
 
       // Create offer
+      console.log("📝 [SDP] Creating offer...");
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      console.log("Created offer:", offer.type);
+      console.log("📝 [SDP] Offer created:", offer.type);
+      console.log("📝 [SDP] Local description set");
+      console.log(
+        "📝 [SDP] Offer SDP (first 200 chars):",
+        offer.sdp?.substring(0, 200)
+      );
 
       // Wait for ICE gathering to complete
       await new Promise<void>((resolve, reject) => {
@@ -512,6 +827,7 @@ export function useStreaming(): UseStreamingReturn {
       // Send offer to server and get answer using ambulance camera streaming
       // Note: roomId is passed as camera_id parameter to the API
       try {
+        console.log(`📡 [API] Sending offer to server for room: ${roomId}...`);
         const response = await ambulanceStreamingService.connectCameraViewer(
           roomId, // room_id is used as camera_id parameter
           {
@@ -520,7 +836,17 @@ export function useStreaming(): UseStreamingReturn {
           }
         );
 
+        console.log("📡 [API] Server response received");
+        console.log("📡 [API] Response has data:", !!response.data);
+        console.log("📡 [API] Response has SDP:", !!response.data?.sdp);
+        console.log("📡 [API] Response type:", response.data?.type);
+
         if (response.data && response.data.sdp && response.data.type) {
+          console.log(
+            "📝 [SDP] Answer SDP (first 200 chars):",
+            response.data.sdp.substring(0, 200)
+          );
+
           // Validate that the type is a valid RTCSdpType
           const validTypes: RTCSdpType[] = [
             "answer",
@@ -534,6 +860,9 @@ export function useStreaming(): UseStreamingReturn {
             throw new Error(`Invalid SDP type received: ${response.data.type}`);
           }
 
+          console.log(
+            "📝 [SDP] Setting remote description (answer from server)..."
+          );
           await pc.setRemoteDescription(
             new RTCSessionDescription({
               sdp: response.data.sdp,
@@ -541,15 +870,19 @@ export function useStreaming(): UseStreamingReturn {
             })
           );
           console.log(
-            "Remote description set successfully for ambulance camera"
+            "✅ [SDP] Remote description set successfully for ambulance camera"
+          );
+          console.log(
+            "✅ [SDP] Signaling complete, waiting for ICE and media..."
           );
         } else {
           const errorMessage =
             response.error || "No SDP answer received from server";
+          console.error("❌ [API] Server response invalid:", errorMessage);
           throw new Error(errorMessage);
         }
       } catch (err) {
-        console.error("Failed to set remote description:", err);
+        console.error("❌ [API] Failed to set remote description:", err);
         pc.close();
         throw err;
       }
@@ -567,10 +900,17 @@ export function useStreaming(): UseStreamingReturn {
 
   const startStreaming = useCallback(
     async (ambulanceId: string, roomId?: string): Promise<void> => {
+      console.log("🚀 [START] ========================================");
+      console.log("🚀 [START] Starting streaming process...");
+      console.log("🚀 [START] Ambulance ID:", ambulanceId);
+      console.log("🚀 [START] Room ID:", roomId || "(will be determined)");
+      console.log("🚀 [START] Is Connecting:", isConnecting);
+      console.log("🚀 [START] Is Connected:", isConnected);
+
       // ✅ Guard: Prevent duplicate connections
       if (isConnecting || isConnected) {
         console.warn(
-          "⚠️ Streaming already in progress - ignoring duplicate request"
+          "⚠️ [START] Streaming already in progress - ignoring duplicate request"
         );
         return;
       }
@@ -581,7 +921,11 @@ export function useStreaming(): UseStreamingReturn {
         peerConnectionRef.current.connectionState !== "closed"
       ) {
         console.warn(
-          "⚠️ Existing peer connection detected - cleaning up before starting"
+          "⚠️ [START] Existing peer connection detected - cleaning up before starting"
+        );
+        console.warn(
+          "⚠️ [START] Old connection state:",
+          peerConnectionRef.current.connectionState
         );
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
@@ -600,31 +944,89 @@ export function useStreaming(): UseStreamingReturn {
         currentAmbulanceIdRef.current = ambulanceId;
         resetReconnectionState();
 
+        console.log("🔍 [SESSION] Looking for active session...");
         // Look for existing active session (started by RPi device)
         const session = await findActiveSession(ambulanceId);
         if (!session) {
+          console.error("❌ [SESSION] No active session found");
           throw new Error(
             "No active ambulance session found. Please ensure the ambulance camera device is connected and streaming."
           );
         }
 
+        console.log("✅ [SESSION] Found active session:", session.id);
+        console.log("✅ [SESSION] Session started at:", session.started_at);
+        console.log("✅ [SESSION] Session type:", session.session_type);
+
         // Get camera rooms for this ambulance session
         let targetRoomId = roomId;
         if (!targetRoomId) {
+          console.log("🔍 [ROOM] Getting camera rooms for session...");
           const roomsResponse = await ambulanceStreamingService.getCameraRooms({
             session_id: session.id,
           });
+
+          console.log(
+            "🔍 [ROOM] Found",
+            roomsResponse.data?.length || 0,
+            "room(s)"
+          );
+
           if (roomsResponse.data && roomsResponse.data.length > 0) {
+            // Log all rooms
+            roomsResponse.data.forEach((room, idx) => {
+              console.log(`  - Room ${idx + 1}:`, {
+                room_id: room.room_id,
+                connected: room.connected,
+                camera_id: room.camera_id,
+              });
+            });
+
             // Use the first connected room, or first room if none connected
             const connectedRoom = roomsResponse.data.find((r) => r.connected);
             targetRoomId = (connectedRoom || roomsResponse.data[0]).room_id;
+
+            console.log(
+              "🎯 [ROOM] Selected room:",
+              targetRoomId,
+              connectedRoom ? "(connected)" : "(not connected yet)"
+            );
+
+            // ✅ NEW: If room is not connected yet, wait for it to become ready
+            if (!connectedRoom) {
+              console.log(
+                "⏳ [ROOM] Room not connected yet, waiting for stream to be ready..."
+              );
+              setUserFriendlyStatus(
+                "Camera is connecting, waiting for stream to be ready..."
+              );
+              const waitedRoom = await waitForRoomConnected(
+                targetRoomId,
+                session.id,
+                15000
+              ); // Wait up to 15 seconds
+              if (!waitedRoom) {
+                console.warn(
+                  "⚠️ [ROOM] Room did not become connected within timeout, attempting connection anyway"
+                );
+              } else {
+                console.log(
+                  "✅ [ROOM] Room is now connected:",
+                  waitedRoom.connected
+                );
+              }
+            } else {
+              console.log("✅ [ROOM] Room is already connected, proceeding");
+            }
           } else {
+            console.error("❌ [ROOM] No camera rooms found");
             throw new Error("No camera rooms found for this ambulance session");
           }
         }
 
         // Store the room_id (which IS the camera identifier in our API)
         currentCameraIdRef.current = targetRoomId;
+        console.log("📝 [ROOM] Stored camera ID:", targetRoomId);
 
         // Clean up any existing connection
         if (peerConnectionRef.current) {
@@ -635,16 +1037,18 @@ export function useStreaming(): UseStreamingReturn {
           throw new Error("Room ID is required for streaming");
         }
 
+        console.log(
+          "🔌 [WEBRTC] Creating peer connection for room:",
+          targetRoomId
+        );
         // Create peer connection using room_id (which is the camera_id parameter in API)
         const pc = await createPeerConnection(targetRoomId);
         peerConnectionRef.current = pc;
 
-        console.log(
-          "Ambulance streaming connection established with session:",
-          session.id,
-          "room_id:",
-          targetRoomId
-        );
+        console.log("✅ [COMPLETE] Ambulance streaming connection established");
+        console.log("✅ [COMPLETE] Session ID:", session.id);
+        console.log("✅ [COMPLETE] Room ID:", targetRoomId);
+        console.log("✅ [COMPLETE] ========================================");
         setUserFriendlyStatus("Connected to ambulance camera successfully!");
       } catch (err) {
         let message = "Failed to start streaming";
@@ -708,6 +1112,13 @@ export function useStreaming(): UseStreamingReturn {
       videoDataTimeoutRef.current = null;
     }
     setIsWaitingForData(false);
+
+    // 🔥 CRITICAL: Clean up video event listeners
+    if (videoEventCleanupRef.current) {
+      console.log("🧹 [STOP] Cleaning up video event listeners");
+      videoEventCleanupRef.current();
+      videoEventCleanupRef.current = null;
+    }
 
     // Don't end the session - it's managed by RPi device
     // Just disconnect the viewer and clear local state
@@ -782,6 +1193,13 @@ export function useStreaming(): UseStreamingReturn {
         videoDataTimeoutRef.current = null;
       }
 
+      // 🔥 CRITICAL: Clean up video event listeners
+      if (videoEventCleanupRef.current) {
+        console.log("🧹 [UNMOUNT] Cleaning up video event listeners");
+        videoEventCleanupRef.current();
+        videoEventCleanupRef.current = null;
+      }
+
       // Close peer connection
       if (peerConnectionRef.current) {
         console.log("Closing peer connection on unmount");
@@ -797,6 +1215,11 @@ export function useStreaming(): UseStreamingReturn {
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
+
+      // 🔥 CRITICAL: Reset state to allow reconnection after remount
+      setIsConnecting(false);
+      setIsConnected(false);
+      setIsReconnecting(false);
 
       // Clear refs
       currentAmbulanceIdRef.current = null;

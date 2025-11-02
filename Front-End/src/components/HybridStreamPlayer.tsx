@@ -68,6 +68,7 @@ export function HybridStreamPlayer({
   const [duration, setDuration] = useState(0);
   const [timeBehindLive, setTimeBehindLive] = useState(0);
   const [liveEdgeDuration, setLiveEdgeDuration] = useState(0); // Total recording duration
+  const [manualStartRequired, setManualStartRequired] = useState(true); // 🔥 NEW: Require manual start
 
   // ============================================================================
   // HOOKS - LIVE STREAMING (WebRTC)
@@ -103,6 +104,7 @@ export function HybridStreamPlayer({
     autoPlay: false,
     lowLatencyMode: false,
     debug,
+    statusPollingInterval: 10000, // 🔥 FIX: Poll every 10s (matches segment duration)
   });
 
   // ============================================================================
@@ -155,8 +157,17 @@ export function HybridStreamPlayer({
   // ============================================================================
 
   useEffect(() => {
-    if (viewMode === "live" && !isLiveConnected && !isLiveConnecting) {
-      if (debug) console.log("[HybridPlayer] Auto-starting live stream");
+    // 🔥 DISABLED: Manual start for testing
+    // Start live stream when in live mode and not already connected/connecting
+    if (
+      viewMode === "live" &&
+      !isLiveConnected &&
+      !isLiveConnecting &&
+      !manualStartRequired // Only auto-start if manual start not required
+    ) {
+      if (debug) {
+        console.log("[HybridPlayer] Auto-starting live stream");
+      }
       startStreaming(ambulanceId, roomId);
     }
   }, [
@@ -165,6 +176,7 @@ export function HybridStreamPlayer({
     roomId,
     isLiveConnected,
     isLiveConnecting,
+    manualStartRequired,
     startStreaming,
     debug,
   ]);
@@ -214,72 +226,37 @@ export function HybridStreamPlayer({
   }, [hlsVideoRef, viewMode, duration, debug]);
 
   // ============================================================================
-  // EFFECTS - POLL DVR INFO (Update live edge during playback)
+  // EFFECTS - UPDATE LIVE EDGE FROM RECORDING STATUS (useHLS already polls)
   // ============================================================================
 
   useEffect(() => {
-    if (!roomId || viewMode !== "playback") return;
+    // 🔥 FIX: Use recordingStatus from useHLS hook instead of polling again
+    if (!recordingStatus || viewMode !== "playback") return;
 
-    const updateLiveEdge = async () => {
-      try {
-        // Use correct backend API endpoint: /videos/hls/{room_id}/status
-        const response = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-          }/videos/hls/${roomId}/status`
-        );
+    // For active recordings, use duration
+    if (recordingStatus.is_active && recordingStatus.duration) {
+      const newDuration = recordingStatus.duration || 0;
+      setLiveEdgeDuration(newDuration);
 
-        if (!response.ok) {
-          console.warn(
-            `[HybridPlayer] Recording status fetch failed: ${response.status}`
-          );
-          return;
-        }
-
-        const data = await response.json();
-
-        // Backend returns status directly (not wrapped in {data: ...})
-        if (data) {
-          // For active recordings, use duration
-          if (data.is_active && data.duration) {
-            const newDuration = data.duration || 0;
-            setLiveEdgeDuration(newDuration);
-
-            if (debug) {
-              console.log(
-                `[HybridPlayer] Live edge: ${newDuration}s, Current: ${currentTime}s, Status: ${data.status}`
-              );
-            }
-          }
-          // For completed recordings, use segment count * segment duration estimate
-          else if (!data.is_active && data.segment_count) {
-            // Estimate duration (assuming 30-second segments)
-            const estimatedDuration = data.segment_count * 30;
-            setLiveEdgeDuration(estimatedDuration);
-
-            if (debug) {
-              console.log(
-                `[HybridPlayer] Completed recording: ${data.segment_count} segments, ~${estimatedDuration}s`
-              );
-            }
-          }
-        }
-      } catch (error) {
-        console.error(
-          "[HybridPlayer] Failed to fetch recording status:",
-          error
+      if (debug) {
+        console.log(
+          `[HybridPlayer] Live edge updated: ${newDuration}s (from useHLS)`
         );
       }
-    };
+    }
+    // For completed recordings, use segment count * segment duration estimate
+    else if (!recordingStatus.is_active && recordingStatus.segment_count) {
+      // Estimate duration (segments are 10 seconds each based on your HLS config)
+      const estimatedDuration = recordingStatus.segment_count * 10;
+      setLiveEdgeDuration(estimatedDuration);
 
-    // Initial fetch
-    updateLiveEdge();
-
-    // Poll every 5 seconds
-    const interval = setInterval(updateLiveEdge, 5000);
-
-    return () => clearInterval(interval);
-  }, [roomId, viewMode, currentTime, debug]);
+      if (debug) {
+        console.log(
+          `[HybridPlayer] Completed recording: ${recordingStatus.segment_count} segments, ~${estimatedDuration}s`
+        );
+      }
+    }
+  }, [recordingStatus, viewMode, debug]);
 
   // ============================================================================
   // EFFECTS - CALCULATE TIME BEHIND LIVE
@@ -331,6 +308,13 @@ export function HybridStreamPlayer({
       pauseHLS();
     }
   }, [hlsVideoRef, pauseHLS, debug]);
+
+  // 🔥 NEW: Manual start handler
+  const handleManualStart = useCallback(() => {
+    if (debug) console.log("[HybridPlayer] Manual start triggered");
+    setManualStartRequired(false);
+    startStreaming(ambulanceId, roomId);
+  }, [ambulanceId, roomId, startStreaming, debug]);
 
   // ============================================================================
   // ACTIONS - PLAYBACK CONTROLS
@@ -564,6 +548,31 @@ export function HybridStreamPlayer({
             </div>
           </div>
         )}
+
+        {/* 🔥 NEW: Manual Start Button Overlay */}
+        {viewMode === "live" &&
+          manualStartRequired &&
+          !isLiveConnected &&
+          !isLiveConnecting && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm z-20">
+              <div className="text-center text-white p-8">
+                <div className="w-24 h-24 mx-auto mb-6 bg-red-500/20 rounded-full flex items-center justify-center border-4 border-red-500/30">
+                  <SignalIcon className="w-12 h-12 text-red-400 animate-pulse" />
+                </div>
+                <p className="text-2xl font-bold mb-2">Ready to Stream</p>
+                <p className="text-gray-400 mb-6 max-w-sm">
+                  Click the button below to start watching the live video feed
+                </p>
+                <Button
+                  onClick={handleManualStart}
+                  className="bg-red-600 hover:bg-red-700 text-white px-8 py-4 text-lg font-bold shadow-2xl transition-all hover:scale-105"
+                >
+                  <SignalIcon className="w-6 h-6 mr-2" />
+                  Start Live Stream
+                </Button>
+              </div>
+            </div>
+          )}
 
         {/* Error Overlay (refined design) */}
         {liveError && hlsError && (

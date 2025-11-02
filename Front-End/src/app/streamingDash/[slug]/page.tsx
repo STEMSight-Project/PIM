@@ -241,6 +241,7 @@ export default function AmbulanceStreamingPage() {
               <CardContent className="p-0">
                 {selectedRoomId ? (
                   <HybridStreamPlayer
+                    key={`${ambulanceId}-${selectedRoomId}`}
                     ambulanceId={ambulanceId}
                     roomId={selectedRoomId}
                     showAdvancedControls={true}
