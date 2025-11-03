@@ -64,6 +64,7 @@ export default function SimpleStreamingDashboard() {
     error: realtimeError,
   } = useRealtimeAmbulanceSessions({
     enabled: isAuthenticated,
+    isActive: true
   });
 
   useEffect(() => {

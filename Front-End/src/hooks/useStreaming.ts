@@ -1,8 +1,66 @@
 "use client";
 
+// ============================================================================
+// useStreaming - Live WebRTC Camera Viewer Hook
+// ============================================================================
+/**
+ * Hook for viewing live ambulance camera feeds via WebRTC
+ *
+ * **Purpose:** Manage WebRTC peer connections for live video streaming (viewer-side)
+ *
+ * **Use When:**
+ * - Displaying live camera feed to users
+ * - Building camera viewer components
+ * - Implementing video player with live stream
+ *
+ * **Don't Use For:**
+ * - Session management (use `useRealtimeAmbulanceSessions` from `useRealtime.ts` instead)
+ * - Admin dashboards (use `useRealtimeAmbulanceSessions` from `useRealtime.ts` instead)
+ * - HLS playback (use `useHLS` instead)
+ *
+ * **Key Features:**
+ * - WebRTC peer connection management
+ * - Automatic reconnection with exponential backoff
+ * - Connection quality monitoring
+ * - Video element ref management
+ * - User-friendly status messages
+ *
+ * @example
+ * ```tsx
+ * function LiveCameraViewer({ ambulanceId, roomId }) {
+ *   const {
+ *     videoRef,
+ *     isConnected,
+ *     error,
+ *     userFriendlyStatus,
+ *     startStreaming,
+ *     stopStreaming,
+ *   } = useStreaming();
+ *
+ *   useEffect(() => {
+ *     startStreaming(ambulanceId, roomId);
+ *     return () => stopStreaming();
+ *   }, [ambulanceId, roomId]);
+ *
+ *   return (
+ *     <div>
+ *       <video ref={videoRef} autoPlay playsInline />
+ *       <p>{userFriendlyStatus}</p>
+ *     </div>
+ *   );
+ * }
+ * ```
+ *
+ * @see {@link STREAMING_HOOKS_GUIDE.md} for detailed usage guide
+ */
+
 import { ambulanceStreamingService } from "@/services/streamingService";
 import type { AmbulanceSession } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
 
 interface UseStreamingReturn {
   // State
@@ -37,7 +95,15 @@ interface UseStreamingReturn {
   cancelReconnection: () => void;
 }
 
+// ============================================================================
+// MAIN HOOK IMPLEMENTATION
+// ============================================================================
+
 export function useStreaming(): UseStreamingReturn {
+  // ============================================================================
+  // STATE MANAGEMENT
+  // ============================================================================
+
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -65,6 +131,10 @@ export function useStreaming(): UseStreamingReturn {
   );
   const maxReconnectionAttempts = 5;
 
+  // ============================================================================
+  // REFS (for avoiding stale closures and cleanup)
+  // ============================================================================
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -75,6 +145,34 @@ export function useStreaming(): UseStreamingReturn {
   const videoDataTimeoutRef = useRef<NodeJS.Timeout | null>(null); // NEW: Timeout for video data
   const videoEventCleanupRef = useRef<(() => void) | null>(null); // NEW: Cleanup function for video event listeners
 
+  // 🔥 NEW: Ref-based state tracking to prevent stale closure issues
+  const isConnectingRef = useRef(false);
+  const isConnectedRef = useRef(false);
+
+  // ============================================================================
+  // HELPER FUNCTIONS (sync state with refs)
+  // ============================================================================
+
+  /**
+   * Set connecting state (syncs both state and ref to prevent stale closures)
+   */
+  const setConnectingState = useCallback((value: boolean) => {
+    isConnectingRef.current = value;
+    setIsConnecting(value);
+  }, []);
+
+  const setConnectedState = useCallback((value: boolean) => {
+    isConnectedRef.current = value;
+    setIsConnected(value);
+  }, []);
+
+  // ============================================================================
+  // UTILITY FUNCTIONS
+  // ============================================================================
+
+  /**
+   * Clear error state
+   */
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -93,6 +191,9 @@ export function useStreaming(): UseStreamingReturn {
     }
   }, []);
 
+  /**
+   * Update session status in database
+   */
   const updateSessionStatus = useCallback(
     async (sessionId: string, isActive: boolean) => {
       try {
@@ -110,6 +211,9 @@ export function useStreaming(): UseStreamingReturn {
     []
   );
 
+  /**
+   * Find active session for ambulance (started by RPi device)
+   */
   const findActiveSession = useCallback(
     async (ambulanceId: string): Promise<AmbulanceSession | null> => {
       try {
@@ -674,8 +778,8 @@ export function useStreaming(): UseStreamingReturn {
               );
             }
 
-            setIsConnected(true);
-            setIsConnecting(false);
+            setConnectedState(true); // 🔥 Use helper
+            setConnectingState(false); // 🔥 Use helper
             setIsReconnecting(false);
             setError(null);
             setUserFriendlyStatus("Live stream connected");
@@ -689,7 +793,7 @@ export function useStreaming(): UseStreamingReturn {
             break;
           case "connecting":
             console.log("🔄 [CONNECTING] Establishing WebRTC connection...");
-            setIsConnecting(true);
+            setConnectingState(true); // 🔥 Use helper
             setUserFriendlyStatus("Establishing connection...");
             break;
           case "disconnected":
@@ -701,8 +805,8 @@ export function useStreaming(): UseStreamingReturn {
               "⚠️ [DISCONNECTED] Signaling state:",
               pc.signalingState
             );
-            setIsConnected(false);
-            setIsConnecting(false);
+            setConnectedState(false); // 🔥 Use helper
+            setConnectingState(false); // 🔥 Use helper
             // Only auto-reconnect if user didn't manually stop
             if (!isUserStoppedRef.current) {
               handleAutoReconnection();
@@ -714,8 +818,8 @@ export function useStreaming(): UseStreamingReturn {
             );
             console.error("❌ [FAILED] ICE state:", pc.iceConnectionState);
             console.error("❌ [FAILED] Signaling state:", pc.signalingState);
-            setIsConnected(false);
-            setIsConnecting(false);
+            setConnectedState(false); // 🔥 Use helper
+            setConnectingState(false); // 🔥 Use helper
             // Only auto-reconnect if user didn't manually stop
             if (!isUserStoppedRef.current) {
               handleAutoReconnection();
@@ -723,8 +827,8 @@ export function useStreaming(): UseStreamingReturn {
             break;
           case "closed":
             console.log("🔒 [CLOSED] Connection closed");
-            setIsConnected(false);
-            setIsConnecting(false);
+            setConnectedState(false); // 🔥 Use helper
+            setConnectingState(false); // 🔥 Use helper
             setConnectionQuality(null);
 
             // Clear video data timeout
@@ -832,7 +936,7 @@ export function useStreaming(): UseStreamingReturn {
           roomId, // room_id is used as camera_id parameter
           {
             sdp: pc.localDescription!.sdp,
-            type: pc.localDescription!.type as any,
+            type: pc.localDescription!.type,
           }
         );
 
@@ -904,14 +1008,18 @@ export function useStreaming(): UseStreamingReturn {
       console.log("🚀 [START] Starting streaming process...");
       console.log("🚀 [START] Ambulance ID:", ambulanceId);
       console.log("🚀 [START] Room ID:", roomId || "(will be determined)");
-      console.log("🚀 [START] Is Connecting:", isConnecting);
-      console.log("🚀 [START] Is Connected:", isConnected);
 
-      // ✅ Guard: Prevent duplicate connections
-      if (isConnecting || isConnected) {
+      // 🔥 CRITICAL: Use refs for guard check to avoid stale closure
+      console.log("🚀 [START] Is Connecting (ref):", isConnectingRef.current);
+      console.log("🚀 [START] Is Connected (ref):", isConnectedRef.current);
+
+      // ✅ Guard: Prevent duplicate connections using refs
+      if (isConnectingRef.current || isConnectedRef.current) {
         console.warn(
           "⚠️ [START] Streaming already in progress - ignoring duplicate request"
         );
+        console.warn("⚠️ [START] isConnecting:", isConnectingRef.current);
+        console.warn("⚠️ [START] isConnected:", isConnectedRef.current);
         return;
       }
 
@@ -937,7 +1045,7 @@ export function useStreaming(): UseStreamingReturn {
       }
 
       try {
-        setIsConnecting(true);
+        setConnectingState(true); // 🔥 Use helper to sync ref + state
         setError(null);
         setUserFriendlyStatus("Looking for active ambulance camera...");
         isUserStoppedRef.current = false;
@@ -1041,6 +1149,7 @@ export function useStreaming(): UseStreamingReturn {
           "🔌 [WEBRTC] Creating peer connection for room:",
           targetRoomId
         );
+
         // Create peer connection using room_id (which is the camera_id parameter in API)
         const pc = await createPeerConnection(targetRoomId);
         peerConnectionRef.current = pc;
@@ -1081,7 +1190,7 @@ export function useStreaming(): UseStreamingReturn {
         setUserFriendlyStatus(userMessage);
         setCanManualRetry(true);
         console.error("Error starting streaming:", err);
-        setIsConnecting(false);
+        setConnectingState(false); // 🔥 Use helper
         setIsReconnecting(false);
         currentAmbulanceIdRef.current = null;
         currentCameraIdRef.current = null;
@@ -1090,13 +1199,15 @@ export function useStreaming(): UseStreamingReturn {
       }
     },
     [
-      isConnecting,
-      isConnected,
+      // 🔥 Removed isConnecting and isConnected to prevent stale closure
+      // Using refs (isConnectingRef, isConnectedRef) for guard checks instead
+      setConnectingState,
       createPeerConnection,
       resetReconnectionState,
       findActiveSession,
       currentSession,
       updateSessionStatus,
+      waitForRoomConnected,
     ]
   );
 
@@ -1133,15 +1244,15 @@ export function useStreaming(): UseStreamingReturn {
       videoRef.current.srcObject = null;
     }
 
-    setIsConnected(false);
-    setIsConnecting(false);
+    setConnectedState(false); // 🔥 Use helper
+    setConnectingState(false); // 🔥 Use helper
     setIsReconnecting(false);
     setConnectionQuality(null);
     setError(null);
     setUserFriendlyStatus("Disconnected from camera");
 
     console.log("Viewer disconnected from streaming");
-  }, [resetReconnectionState]);
+  }, [resetReconnectionState, setConnectedState, setConnectingState]);
 
   const reconnect = useCallback(async (): Promise<void> => {
     if (!currentAmbulanceIdRef.current) {
@@ -1216,18 +1327,29 @@ export function useStreaming(): UseStreamingReturn {
         videoRef.current.srcObject = null;
       }
 
-      // 🔥 CRITICAL: Reset state to allow reconnection after remount
+      // 🔥 CRITICAL: Reset state AND refs to allow reconnection after remount
+      console.log("🔄 [CLEANUP] Resetting connection state and refs");
+
+      // Reset refs first
+      isConnectingRef.current = false;
+      isConnectedRef.current = false;
+
+      // Then reset state (using direct setters is fine here, but could use helpers for consistency)
       setIsConnecting(false);
       setIsConnected(false);
       setIsReconnecting(false);
+      setIsWaitingForData(false);
+      setError(null);
+      setConnectionQuality(null);
 
       // Clear refs
       currentAmbulanceIdRef.current = null;
       currentCameraIdRef.current = null;
 
-      console.log("✅ Cleanup completed");
+      console.log("✅ Cleanup completed - hook ready for remount");
     };
-  }, []); // Empty deps - only run on mount/unmount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - cleanup runs ONLY on unmount
 
   return {
     isConnected,

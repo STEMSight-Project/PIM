@@ -33,14 +33,26 @@ export interface UseRealtimeAmbulanceOptions {
  * Hook for subscribing to real-time ambulance sessions with embedded rooms
  * Listens to both session and room changes to keep data synchronized
  *
+ * **Architecture:**
+ * 1. **Initial Load:** Fetches all cameras for each ambulance via `/ambulances/{id}/cameras`
+ *    - This includes ALL cameras installed on the ambulance (not just active streaming rooms)
+ *    - Cameras without active streams are marked as `connected: false`
+ *
+ * 2. **Real-Time Updates:** Subscribes to SSE events for:
+ *    - Session changes (INSERT/UPDATE/DELETE)
+ *    - Camera room changes (when cameras start/stop streaming)
+ *
+ * 3. **Data Sync:** Real-time events update existing camera/room states without full refetch
+ *
  * @param options.ambulanceId - Filter sessions by specific ambulance ID
  * @param options.sessionId - Filter to get a specific session by ID
  * @param options.isActive - Filter by active status (true/false/undefined for all)
  * @param options.enabled - Enable/disable real-time updates (default: true)
  *
  * @example
- * // Get all active sessions
+ * // Get all active sessions with ALL ambulance cameras
  * const { sessions } = useRealtimeAmbulanceSessions({ isActive: true });
+ * // sessions[0].camera_rooms will include all cameras, not just streaming ones
  *
  * @example
  * // Get active sessions for specific ambulance
@@ -70,34 +82,125 @@ export function useRealtimeAmbulanceSessions(
 
   const { enabled = true, ambulanceId, sessionId, isActive } = options;
 
-  const handleSessionMessage = useCallback((event: MessageEvent) => {
-    try {
-      const data = JSON.parse(event.data);
+  /**
+   * Fetch complete session information including all ambulance cameras
+   *
+   * **Purpose:** When a session is created or updated via SSE, this function
+   * fetches all the related data to provide a complete session object.
+   *
+   * **What it fetches:**
+   * 1. All cameras installed on the ambulance (via `/ambulances/{id}/cameras`)
+   * 2. Active streaming rooms for this session (via `/camera-rooms?session_id={id}`)
+   * 3. Merges camera and room data to show which cameras are streaming
+   *
+   * **Why separate function:**
+   * - SSE events only contain basic session data (id, ambulance_id, is_active, etc.)
+   * - We need to fetch related data (cameras, rooms) to build complete UI
+   * - Keeps session update logic clean and reusable
+   *
+   * @param sessionData - Basic session data from SSE event
+   * @returns Complete session with all ambulance cameras as camera_rooms
+   */
+  const fetchCompleteSessionInfo = useCallback(
+    async (sessionData: AmbulanceSession): Promise<AmbulanceSession> => {
+      try {
+        console.log(
+          `[Realtime] Fetching complete info for session ${sessionData.id}`
+        );
 
-      setError(null);
+        // Get all cameras for this ambulance
+        const camerasResponse =
+          await ambulanceStreamingService.getAmbulanceCameras(
+            sessionData.ambulance_id
+          );
 
-      // Extract actual event type from 'event' field
-      const actualEventType = data.event || data.event_type;
-      const sessionData = data.new || data.session || data.record;
+        if (camerasResponse.data && !camerasResponse.error) {
+          // Get active rooms for this session
+          const roomsResponse = await ambulanceStreamingService.getCameraRooms({
+            session_id: sessionData.id,
+          });
 
-      if (actualEventType && sessionData) {
-        const sessionEvent: AmbulanceSessionEvent = {
-          name: data.type,
-          event_type: actualEventType,
-          session: sessionData,
-          timestamp: data.timestamp || new Date().toISOString(),
+          // Map cameras to camera rooms, marking active ones
+          const cameraRooms: CameraRoom[] = camerasResponse.data.map(
+            (camera) => {
+              // Find matching active room if exists
+              const existingRoom = (roomsResponse.data || []).find(
+                (room) => room.camera_id === camera.id
+              );
+
+              if (existingRoom) {
+                return existingRoom;
+              }
+
+              // Create room structure from camera (not yet streaming)
+              return {
+                id: camera.id,
+                session_id: sessionData.id,
+                camera_id: camera.id,
+                room_id: `${sessionData.ambulance_id}-${camera.camera_id}`,
+                camera_name: camera.camera_name || "Unknown Camera",
+                connected: false,
+                connection_started_at: new Date().toISOString(),
+                ai_processing_active: false,
+                detections_count: 0,
+                created_at: camera.created_at,
+                updated_at: camera.updated_at,
+              };
+            }
+          );
+
+          return {
+            ...sessionData,
+            camera_rooms: cameraRooms,
+          };
+        }
+
+        // Fallback: if cameras fetch fails, return session with empty rooms
+        console.warn(
+          `Failed to fetch cameras for ambulance ${sessionData.ambulance_id}`
+        );
+        return {
+          ...sessionData,
+          camera_rooms: [],
         };
+      } catch (err) {
+        console.error(
+          `Error fetching complete session info for ${sessionData.id}:`,
+          err
+        );
+        return {
+          ...sessionData,
+          camera_rooms: [],
+        };
+      }
+    },
+    []
+  );
 
-        setEvents((prev) => [...prev, sessionEvent]);
+  const handleSessionMessage = useCallback(
+    async (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
 
-        // Update sessions based on event type
-        setSessions((prev) => {
-          const newSessions = [...prev];
+        setError(null);
 
+        // Extract actual event type from 'event' field
+        const actualEventType = data.event || data.event_type;
+        const sessionData = data.new || data.session || data.record;
+
+        if (actualEventType && sessionData) {
+          const sessionEvent: AmbulanceSessionEvent = {
+            name: data.type,
+            event_type: actualEventType,
+            session: sessionData,
+            timestamp: data.timestamp || new Date().toISOString(),
+          };
+
+          setEvents((prev) => [...prev, sessionEvent]);
+
+          // Update sessions based on event type
           switch (actualEventType) {
-            case "UPDATE":
             case "INSERT":
-            case "DELETE":
               {
                 // Apply filters to new session data
                 let shouldInclude = true;
@@ -117,38 +220,128 @@ export function useRealtimeAmbulanceSessions(
                   shouldInclude = false;
                 }
 
-                const index = newSessions.findIndex(
-                  (s) => s.id === sessionData.id
-                );
-
                 if (shouldInclude) {
-                  if (index >= 0) {
-                    // Preserve existing rooms when updating session
-                    newSessions[index] = {
-                      ...sessionData,
-                      camera_rooms: newSessions[index].camera_rooms || [],
-                    };
-                  } else {
-                    newSessions.push({ ...sessionData, camera_rooms: [] });
-                  }
-                } else if (index >= 0) {
-                  // Remove session if it no longer matches filters
-                  newSessions.splice(index, 1);
+                  console.log(
+                    `[Realtime] New session ${sessionData.id} inserted, fetching complete info`
+                  );
+
+                  // 🔥 NEW: Fetch complete session info with all ambulance cameras
+                  const completeSession = await fetchCompleteSessionInfo(
+                    sessionData
+                  );
+
+                  setSessions((prev) => {
+                    // Check if session already exists (race condition protection)
+                    const index = prev.findIndex(
+                      (s) => s.id === completeSession.id
+                    );
+                    if (index >= 0) {
+                      // Update existing
+                      const updated = [...prev];
+                      updated[index] = completeSession;
+                      return updated;
+                    }
+                    // Add new
+                    return [...prev, completeSession];
+                  });
                 }
               }
               break;
+
+            case "UPDATE":
+              {
+                // Apply filters to updated session data
+                let shouldInclude = true;
+
+                if (ambulanceId && sessionData.ambulance_id !== ambulanceId) {
+                  shouldInclude = false;
+                }
+
+                if (sessionId && sessionData.id !== sessionId) {
+                  shouldInclude = false;
+                }
+
+                if (
+                  isActive !== undefined &&
+                  sessionData.is_active !== isActive
+                ) {
+                  shouldInclude = false;
+                }
+
+                setSessions((prev) => {
+                  const newSessions = [...prev];
+                  const index = newSessions.findIndex(
+                    (s) => s.id === sessionData.id
+                  );
+
+                  if (shouldInclude) {
+                    if (index >= 0) {
+                      // 🔥 CRITICAL: Preserve existing rooms when updating session
+                      // Only update session fields, keep camera_rooms intact
+                      const existingRooms =
+                        newSessions[index].camera_rooms || [];
+                      console.log(
+                        `[Realtime] Updating session ${sessionData.id}, preserving ${existingRooms.length} rooms`
+                      );
+                      newSessions[index] = {
+                        ...sessionData,
+                        camera_rooms: existingRooms, // Preserve existing rooms
+                      };
+                    } else {
+                      // Session now matches filter - fetch complete info
+                      console.log(
+                        `[Realtime] Session ${sessionData.id} now matches filter, fetching complete info`
+                      );
+                      // Will be fetched asynchronously
+                      fetchCompleteSessionInfo(sessionData).then(
+                        (completeSession) => {
+                          setSessions((current) => {
+                            const idx = current.findIndex(
+                              (s) => s.id === completeSession.id
+                            );
+                            if (idx < 0) {
+                              return [...current, completeSession];
+                            }
+                            return current;
+                          });
+                        }
+                      );
+                    }
+                  } else if (index >= 0) {
+                    // Remove session if it no longer matches filters
+                    console.log(
+                      `[Realtime] Session ${sessionData.id} no longer matches filter, removing`
+                    );
+                    newSessions.splice(index, 1);
+                  }
+
+                  return newSessions;
+                });
+              }
+              break;
+
+            case "DELETE":
+              {
+                setSessions((prev) =>
+                  prev.filter((s) => s.id !== sessionData.id)
+                );
+                console.log(
+                  `[Realtime] Session ${sessionData.id} deleted, removed from list`
+                );
+              }
+              break;
+
             default:
               break;
           }
-          console.log("Updated sessions:", newSessions);
-          return newSessions;
-        });
+        }
+      } catch (err) {
+        console.error("Failed to parse ambulance session SSE event:", err);
+        setError("Failed to parse real-time event");
       }
-    } catch (err) {
-      console.error("Failed to parse ambulance session SSE event:", err);
-      setError("Failed to parse real-time event");
-    }
-  }, []);
+    },
+    [ambulanceId, sessionId, isActive, fetchCompleteSessionInfo]
+  );
 
   const handleRoomMessage = useCallback((event: MessageEvent) => {
     try {
@@ -158,14 +351,14 @@ export function useRealtimeAmbulanceSessions(
 
       const eventData = typeof data === "string" ? JSON.parse(data) : data;
       const roomData = eventData.new || eventData.room || eventData.record;
-
-      // Extract the actual event type - it's in 'event' field, not 'type'
+      console.log("Parsed room data:", roomData);
+      // Extract the actual event type
       const actualEventType =
         eventData.event || eventData.event_type || eventData.type;
 
       if (roomData && roomData.session_id) {
         const roomEvent: CameraRoomEvent = {
-          name: eventData.table || "camera_rooms",
+          name: eventData.table || "camera_streaming_rooms",
           event_type: actualEventType,
           room: roomData,
           timestamp: eventData.timestamp || new Date().toISOString(),
@@ -173,52 +366,58 @@ export function useRealtimeAmbulanceSessions(
 
         setEvents((prev) => [...prev, roomEvent]);
 
-        // Update the session that contains this room
-        setSessions((prev) => {
-          const sessions = prev.map((session) => {
+        // Handle DELETE event - remove room
+        if (actualEventType === "DELETE") {
+          setSessions((prev) =>
+            prev.map((session) => {
+              if (session.id === roomData.session_id) {
+                return {
+                  ...session,
+                  camera_rooms: (session.camera_rooms || []).filter(
+                    (r: CameraRoom) => r.camera_id !== roomData.camera_id
+                  ),
+                };
+              }
+              return session;
+            })
+          );
+          console.log(
+            `[Realtime] Room for camera ${roomData.camera_id} deleted`
+          );
+          return;
+        }
+
+        // Handle INSERT/UPDATE - just replace the room data
+        setSessions((prev) =>
+          prev.map((session) => {
             if (session.id === roomData.session_id) {
               const currentRooms = session.camera_rooms || [];
+              const existingIndex = currentRooms.findIndex(
+                (r: CameraRoom) => r.camera_id === roomData.camera_id
+              );
 
-              switch (actualEventType) {
-                case "INSERT":
-                case "UPDATE":
-                  const existingIndex = currentRooms.findIndex(
-                    (r: CameraRoom) => r.id === roomData.id
-                  );
-
-                  if (existingIndex >= 0) {
-                    // Update existing room
-                    const updatedRooms = [...currentRooms];
-                    updatedRooms[existingIndex] = {
-                      ...updatedRooms[existingIndex],
-                      ...roomData,
-                    };
-                    return { ...session, camera_rooms: updatedRooms };
-                  } else {
-                    // Add new room
-                    return {
-                      ...session,
-                      camera_rooms: [...currentRooms, roomData],
-                    };
-                  }
-
-                case "DELETE":
-                  return {
-                    ...session,
-                    camera_rooms: currentRooms.filter(
-                      (r: CameraRoom) => r.id !== roomData.id
-                    ),
-                  };
-
-                default:
-                  return session;
+              if (existingIndex >= 0) {
+                // Replace existing room with new data from backend
+                const updatedRooms = [...currentRooms];
+                updatedRooms[existingIndex] = roomData;
+                console.log(
+                  `[Realtime] Room for camera ${roomData.camera_id} updated`
+                );
+                return { ...session, camera_rooms: updatedRooms };
+              } else {
+                // Add new room
+                console.log(
+                  `[Realtime] Room for camera ${roomData.camera_id} added`
+                );
+                return {
+                  ...session,
+                  camera_rooms: [...currentRooms, roomData],
+                };
               }
             }
             return session;
-          });
-          console.log("Updated sessions after room event:", sessions);
-          return sessions;
-        });
+          })
+        );
       }
     } catch (err) {
       console.error("Failed to parse camera room SSE event:", err);
@@ -252,29 +451,86 @@ export function useRealtimeAmbulanceSessions(
         await ambulanceStreamingService.getAmbulanceSessions(filters);
 
       if (sessionsResponse.data && !sessionsResponse.error) {
-        // Fetch all camera rooms
-        const roomsResponse = await ambulanceStreamingService.getCameraRooms();
+        // 🔥 NEW: Fetch all cameras for each ambulance (not just session rooms)
+        const sessionsWithCameras = await Promise.all(
+          sessionsResponse.data.map(async (session) => {
+            try {
+              // Get all cameras for this ambulance
+              const camerasResponse =
+                await ambulanceStreamingService.getAmbulanceCameras(
+                  session.ambulance_id
+                );
 
-        if (roomsResponse.data && !roomsResponse.error) {
-          // Combine sessions with their camera rooms
-          const sessionsWithRooms = sessionsResponse.data.map((session) => ({
-            ...session,
-            camera_rooms: (roomsResponse.data || []).filter(
-              (room) => room.session_id === session.id
-            ),
-          }));
+              if (camerasResponse.data && !camerasResponse.error) {
+                // Convert AmbulanceCamera[] to CameraRoom[] format
+                // Include all cameras, marking active ones from current session
+                const roomsResponse =
+                  await ambulanceStreamingService.getCameraRooms({
+                    session_id: session.id,
+                  });
 
-          setSessions(sessionsWithRooms);
-        } else {
-          // Sessions without rooms if rooms fetch fails
-          const sessionsWithEmptyRooms = sessionsResponse.data.map(
-            (session) => ({
-              ...session,
-              camera_rooms: [],
-            })
-          );
-          setSessions(sessionsWithEmptyRooms);
-        }
+                const activeRoomIds = new Set(
+                  (roomsResponse.data || []).map((room) => room.camera_id)
+                );
+
+                const cameraRooms: CameraRoom[] = camerasResponse.data.map(
+                  (camera) => {
+                    // Find matching room data if exists
+                    const existingRoom = (roomsResponse.data || []).find(
+                      (room) => room.camera_id === camera.id
+                    );
+
+                    if (existingRoom) {
+                      return existingRoom;
+                    }
+
+                    // Create room structure from camera if no active room
+                    return {
+                      id: camera.id,
+                      session_id: session.id,
+                      camera_id: camera.id,
+                      room_id: `${session.ambulance_id}-${camera.camera_id}`,
+                      camera_name: camera.camera_name || "Unknown Camera",
+                      connected: false, // Not connected yet
+                      connection_started_at: new Date().toISOString(),
+                      ai_processing_active: false,
+                      detections_count: 0,
+                      created_at: camera.created_at,
+                      updated_at: camera.updated_at,
+                    };
+                  }
+                );
+
+                return {
+                  ...session,
+                  camera_rooms: cameraRooms,
+                };
+              }
+
+              // Fallback: if cameras fetch fails, use session rooms only
+              const roomsResponse =
+                await ambulanceStreamingService.getCameraRooms({
+                  session_id: session.id,
+                });
+
+              return {
+                ...session,
+                camera_rooms: roomsResponse.data || [],
+              };
+            } catch (err) {
+              console.error(
+                `Failed to fetch cameras for ambulance ${session.ambulance_id}:`,
+                err
+              );
+              return {
+                ...session,
+                camera_rooms: [],
+              };
+            }
+          })
+        );
+
+        setSessions(sessionsWithCameras);
       } else {
         setError(sessionsResponse.error || "Failed to load initial sessions");
       }

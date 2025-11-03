@@ -1,5 +1,16 @@
-// Re-export all hooks for easy importing
-export { useAmbulanceStreaming } from "./useAmbulanceStreaming";
+// ============================================================================
+// STREAMING HOOKS
+// ============================================================================
+// - useStreaming: Live WebRTC viewer for camera feeds
+// - useRealtimeAmbulanceSessions: Real-time SSE updates for sessions
+// ============================================================================
+
+export { useStreaming } from "./useStreaming";
+
+// ============================================================================
+// OTHER HOOKS
+// ============================================================================
+
 export { AuthProvider, useAuth } from "./useAuth";
 export { useIsClient, useLocalStorage } from "./useClientSide";
 export { Specialization, useDoctors } from "./useDoctors";
@@ -12,8 +23,11 @@ export { useRealtimeAmbulanceSessions } from "./useRealtime";
 export type { UseRealtimeAmbulanceOptions } from "./useRealtime";
 export { useRecordings } from "./useRecordings";
 export { useSessions } from "./useSessions";
-export { useStreaming } from "./useStreaming";
 export { useVideos } from "./useVideos";
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 // Re-export types
 export type {
@@ -24,7 +38,6 @@ export type {
   RecordingResponse,
   SessionWithRecordings,
 } from "@/services/videoService";
-export type { AmbulanceWithSession } from "./useAmbulanceStreaming";
 export type { Note } from "./useNotes";
 export type { PatientEvent } from "./usePatientEvents";
 export type { Video } from "./useVideos";

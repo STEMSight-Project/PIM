@@ -1,18 +1,6 @@
 /**
- * HybridStreamPlayer Component
- *
- * Unified video player supporting:
- * - Live WebRTC streaming (low latency)
- * - HLS playback (for time-shifting/DVR)
- * - Seamless switching between modes
- * - Timeline scrubbing with live edge indicator
- * - "Go Live" button to jump to current time
- *
- * Usage:
- * <HybridStreamPlayer
- *   ambulanceId="AMB-001"
- *   roomId="AMB-001-ROOM-001"
- * />
+ * HybridStreamPlayer - Live WebRTC + HLS Playback with DVR controls
+ * Supports automatic streaming start and seamless mode switching
  */
 
 "use client";
@@ -33,19 +21,10 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 interface HybridStreamPlayerProps {
-  /** Ambulance ID for live streaming */
   ambulanceId: string;
-
-  /** Camera room ID for both live streaming and HLS playback */
   roomId: string;
-
-  /** Custom CSS classes */
   className?: string;
-
-  /** Show advanced controls */
   showAdvancedControls?: boolean;
-
-  /** Debug mode */
   debug?: boolean;
 }
 
@@ -58,22 +37,15 @@ export function HybridStreamPlayer({
   showAdvancedControls = false,
   debug = false,
 }: HybridStreamPlayerProps) {
-  // ============================================================================
-  // STATE MANAGEMENT
-  // ============================================================================
-
+  // State
   const [viewMode, setViewMode] = useState<ViewMode>("live");
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [timeBehindLive, setTimeBehindLive] = useState(0);
-  const [liveEdgeDuration, setLiveEdgeDuration] = useState(0); // Total recording duration
-  const [manualStartRequired, setManualStartRequired] = useState(true); // 🔥 NEW: Require manual start
+  const [liveEdgeDuration, setLiveEdgeDuration] = useState(0);
 
-  // ============================================================================
-  // HOOKS - LIVE STREAMING (WebRTC)
-  // ============================================================================
-
+  // Live streaming hook
   const {
     videoRef: liveVideoRef,
     isConnected: isLiveConnected,
@@ -85,10 +57,7 @@ export function HybridStreamPlayer({
     isWaitingForData,
   } = useStreaming();
 
-  // ============================================================================
-  // HOOKS - HLS PLAYBACK
-  // ============================================================================
-
+  // HLS playback hook
   const {
     videoRef: hlsVideoRef,
     hls,
@@ -104,87 +73,75 @@ export function HybridStreamPlayer({
     autoPlay: false,
     lowLatencyMode: false,
     debug,
-    statusPollingInterval: 10000, // 🔥 FIX: Poll every 10s (matches segment duration)
+    statusPollingInterval: 10000,
   });
 
-  // ============================================================================
-  // HOOKS - HLS SEGMENT EVENTS (Real-time segment updates)
-  // ============================================================================
-
-  const {
-    isConnected: segmentEventsConnected,
-    error: segmentEventsError,
-    lastSegment,
-    segmentCount,
-    status: segmentStatus,
-  } = useHLSSegmentEvents({
-    roomId: viewMode === "playback" ? roomId : null, // Only connect in playback mode
+  // Real-time segment events
+  useHLSSegmentEvents({
+    roomId: viewMode === "playback" ? roomId : null,
     hls,
-    autoReload: true, // Automatically reload HLS when new segments arrive
+    autoReload: true,
     debug,
     onSegmentAdded: (event) => {
       if (debug) {
-        console.log(
-          `[HybridPlayer] New segment added: ${event.segment_name} (${event.file_size} bytes)`
-        );
+        console.log(`[HybridPlayer] New segment: ${event.segment_name}`);
       }
-      // Update live edge duration when new segment arrives
       if (hlsVideoRef.current) {
-        const newDuration = hlsVideoRef.current.duration || 0;
-        setLiveEdgeDuration(newDuration);
+        setLiveEdgeDuration(hlsVideoRef.current.duration || 0);
       }
     },
   });
 
-  // ============================================================================
-  // COMPUTED VALUES
-  // ============================================================================
-
-  // Active video ref based on mode
-  const activeVideoRef = viewMode === "live" ? liveVideoRef : hlsVideoRef;
-
-  // Check if near live edge (within 5 seconds)
+  // Computed values
   const isNearLive = useMemo(() => {
     if (viewMode === "live") return true;
     return timeBehindLive < 5;
   }, [viewMode, timeBehindLive]);
-
-  // Check if recording is available
   const hasRecording = !!roomId && !!recordingStatus;
 
-  // ============================================================================
-  // EFFECTS - AUTO-START LIVE STREAMING
-  // ============================================================================
-
+  // 🔥 CRITICAL: Auto-start live streaming with stale connection cleanup
   useEffect(() => {
-    // 🔥 DISABLED: Manual start for testing
-    // Start live stream when in live mode and not already connected/connecting
-    if (
-      viewMode === "live" &&
-      !isLiveConnected &&
-      !isLiveConnecting &&
-      !manualStartRequired // Only auto-start if manual start not required
-    ) {
-      if (debug) {
-        console.log("[HybridPlayer] Auto-starting live stream");
-      }
+    console.log("[HybridPlayer] Auto-start effect triggered", {
+      viewMode,
+      isLiveConnected,
+      isLiveConnecting,
+    });
+
+    // Clean up stale connection before starting (fixes navigation issue)
+    if (viewMode === "live" && (isLiveConnected || isLiveConnecting)) {
+      console.log("[HybridPlayer] Cleaning up stale connection");
+      stopStreaming();
+      setTimeout(() => {
+        startStreaming(ambulanceId, roomId);
+      }, 100);
+      return;
+    }
+
+    // Start fresh connection
+    if (viewMode === "live" && !isLiveConnected && !isLiveConnecting) {
+      console.log("[HybridPlayer] Starting live stream");
       startStreaming(ambulanceId, roomId);
     }
-  }, [
-    viewMode,
-    ambulanceId,
-    roomId,
-    isLiveConnected,
-    isLiveConnecting,
-    manualStartRequired,
-    startStreaming,
-    debug,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, ambulanceId, roomId]);
 
-  // ============================================================================
-  // EFFECTS - VIDEO EVENT LISTENERS (PLAYBACK MODE)
-  // ============================================================================
+  // 🔥 CRITICAL: Cleanup on unmount (empty deps = runs ONLY on unmount)
+  useEffect(() => {
+    return () => {
+      console.log("[HybridPlayer] Component unmounting - cleanup");
+      if (isLiveConnected || isLiveConnecting) {
+        stopStreaming();
+      }
+      if (hlsVideoRef.current && !hlsVideoRef.current.paused) {
+        hlsVideoRef.current.pause();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Video event listeners for playback mode
+
+  // Video event listeners for playback mode
   useEffect(() => {
     const video = hlsVideoRef.current;
     if (!video || viewMode !== "playback") return;
@@ -193,20 +150,14 @@ export function HybridStreamPlayer({
       setCurrentTime(video.currentTime);
       setDuration(video.duration || 0);
     };
-
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
-
-    // Handler for duration change (when new segments are added)
     const handleDurationChange = () => {
       const newDuration = video.duration || 0;
       if (newDuration !== duration) {
         setDuration(newDuration);
-        if (debug) {
-          console.log(
-            `[HybridPlayer] Video duration updated: ${newDuration.toFixed(2)}s`
-          );
-        }
+        if (debug)
+          console.log(`[HybridPlayer] Duration: ${newDuration.toFixed(2)}s`);
       }
     };
 
@@ -225,130 +176,68 @@ export function HybridStreamPlayer({
     };
   }, [hlsVideoRef, viewMode, duration, debug]);
 
-  // ============================================================================
-  // EFFECTS - UPDATE LIVE EDGE FROM RECORDING STATUS (useHLS already polls)
-  // ============================================================================
-
+  // Update live edge duration from recording status
   useEffect(() => {
-    // 🔥 FIX: Use recordingStatus from useHLS hook instead of polling again
     if (!recordingStatus || viewMode !== "playback") return;
 
-    // For active recordings, use duration
     if (recordingStatus.is_active && recordingStatus.duration) {
-      const newDuration = recordingStatus.duration || 0;
-      setLiveEdgeDuration(newDuration);
-
-      if (debug) {
-        console.log(
-          `[HybridPlayer] Live edge updated: ${newDuration}s (from useHLS)`
-        );
-      }
+      setLiveEdgeDuration(recordingStatus.duration || 0);
+    } else if (!recordingStatus.is_active && recordingStatus.segment_count) {
+      setLiveEdgeDuration(recordingStatus.segment_count * 10);
     }
-    // For completed recordings, use segment count * segment duration estimate
-    else if (!recordingStatus.is_active && recordingStatus.segment_count) {
-      // Estimate duration (segments are 10 seconds each based on your HLS config)
-      const estimatedDuration = recordingStatus.segment_count * 10;
-      setLiveEdgeDuration(estimatedDuration);
+  }, [recordingStatus, viewMode]);
 
-      if (debug) {
-        console.log(
-          `[HybridPlayer] Completed recording: ${recordingStatus.segment_count} segments, ~${estimatedDuration}s`
-        );
-      }
-    }
-  }, [recordingStatus, viewMode, debug]);
-
-  // ============================================================================
-  // EFFECTS - CALCULATE TIME BEHIND LIVE
-  // ============================================================================
-
+  // Calculate time behind live
   useEffect(() => {
     if (viewMode === "playback" && liveEdgeDuration > 0) {
-      const behind = liveEdgeDuration - currentTime;
-      setTimeBehindLive(Math.max(0, behind));
+      setTimeBehindLive(Math.max(0, liveEdgeDuration - currentTime));
     } else {
       setTimeBehindLive(0);
     }
   }, [viewMode, currentTime, liveEdgeDuration]);
 
-  // ============================================================================
-  // ACTIONS - MODE SWITCHING
-  // ============================================================================
+  // Mode switching actions
 
+  // Mode switching actions
   const switchToPlayback = useCallback(() => {
-    if (debug) console.log("[HybridPlayer] Switching to playback mode");
+    if (debug) console.log("[HybridPlayer] Switching to playback");
     setViewMode("playback");
-    setIsPlaying(true); // Mark as playing when switching to playback
+    setIsPlaying(true);
+    if (isLiveConnected) stopStreaming();
 
-    // Stop live stream
-    if (isLiveConnected) {
-      stopStreaming();
-    }
-
-    // Start playing HLS after mode switch
     setTimeout(() => {
-      if (hlsVideoRef.current && hlsVideoRef.current.paused) {
-        playHLS().catch((err) => {
-          console.warn(
-            "[HybridPlayer] Failed to auto-play after mode switch:",
-            err
-          );
-        });
+      if (hlsVideoRef.current?.paused) {
+        playHLS().catch((err) => console.warn("Auto-play failed:", err));
       }
     }, 100);
   }, [isLiveConnected, stopStreaming, hlsVideoRef, playHLS, debug]);
 
   const switchToLive = useCallback(() => {
-    if (debug) console.log("[HybridPlayer] Switching to live mode");
+    if (debug) console.log("[HybridPlayer] Switching to live");
     setViewMode("live");
     setTimeBehindLive(0);
-
-    // Pause HLS if playing
-    if (hlsVideoRef.current && !hlsVideoRef.current.paused) {
-      pauseHLS();
-    }
+    if (hlsVideoRef.current && !hlsVideoRef.current.paused) pauseHLS();
   }, [hlsVideoRef, pauseHLS, debug]);
 
-  // 🔥 NEW: Manual start handler
-  const handleManualStart = useCallback(() => {
-    if (debug) console.log("[HybridPlayer] Manual start triggered");
-    setManualStartRequired(false);
-    startStreaming(ambulanceId, roomId);
-  }, [ambulanceId, roomId, startStreaming, debug]);
-
-  // ============================================================================
-  // ACTIONS - PLAYBACK CONTROLS
-  // ============================================================================
-
+  // Playback controls
   const handlePlayPause = useCallback(() => {
     if (viewMode === "live") {
-      // Pause in live mode = switch to playback
       if (!hasRecording) {
         alert("Recording not available yet. Please wait a few seconds.");
         return;
       }
       switchToPlayback();
     } else {
-      // Normal play/pause in playback mode
-      if (isPlaying) {
-        pauseHLS();
-      } else {
-        playHLS();
-      }
+      isPlaying ? pauseHLS() : playHLS();
     }
   }, [viewMode, isPlaying, hasRecording, switchToPlayback, pauseHLS, playHLS]);
 
   const handleSeek = useCallback(
     (time: number) => {
       if (viewMode === "live") {
-        // Auto-switch to playback when scrubbing from live
         switchToPlayback();
-        // Need to wait for mode switch, then seek
-        setTimeout(() => {
-          seekHLS(time);
-        }, 100);
+        setTimeout(() => seekHLS(time), 100);
       } else {
-        // Already in playback mode, just seek
         seekHLS(time);
       }
     },
@@ -356,83 +245,56 @@ export function HybridStreamPlayer({
   );
 
   const handleSkipBackward = useCallback(() => {
-    const newTime = Math.max(0, currentTime - 10);
-    handleSeek(newTime);
+    handleSeek(Math.max(0, currentTime - 10));
   }, [currentTime, handleSeek]);
 
   const handleSkipForward = useCallback(() => {
-    const newTime = Math.min(duration, currentTime + 10);
-    handleSeek(newTime);
+    handleSeek(Math.min(duration, currentTime + 10));
   }, [currentTime, duration, handleSeek]);
 
-  // ============================================================================
-  // UTILITIES
-  // ============================================================================
-
+  // Utilities
   const formatTime = useCallback((seconds: number): string => {
     if (!isFinite(seconds) || seconds < 0) return "0:00";
-
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   }, []);
 
-  // ============================================================================
-  // TIMELINE INTERACTION STATE
-  // ============================================================================
-
+  // Timeline interaction state
   const [isHoveringTimeline, setIsHoveringTimeline] = useState(false);
   const [hoverTime, setHoverTime] = useState(0);
   const [hoverPosition, setHoverPosition] = useState(0);
 
-  // ============================================================================
-  // TIMELINE CLICK HANDLER (YouTube-style)
-  // ============================================================================
+  // Timeline click handler
 
+  // Timeline click handler
   const handleTimelineClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const percentage = x / rect.width;
+      const percentage = (e.clientX - rect.left) / rect.width;
       const targetDuration = viewMode === "live" ? liveEdgeDuration : duration;
       const newTime = Math.max(
         0,
         Math.min(targetDuration, percentage * targetDuration)
       );
 
-      if (debug) {
-        console.log(
-          `[HybridPlayer] Timeline clicked at ${percentage.toFixed(
-            2
-          )}% → ${newTime.toFixed(2)}s`
-        );
-      }
-
-      // If in live mode, switch to playback first
       if (viewMode === "live") {
         if (!hasRecording) {
           alert("Recording not available yet. Please wait a few seconds.");
           return;
         }
         switchToPlayback();
-        // Wait for mode switch, then seek and play
         setTimeout(() => {
           seekHLS(newTime);
           setIsPlaying(true);
         }, 150);
       } else {
-        // Already in playback mode, seek and ensure playing
         seekHLS(newTime);
         setIsPlaying(true);
-
-        // Make sure video starts playing
-        if (hlsVideoRef.current && hlsVideoRef.current.paused) {
-          playHLS().catch((err) => {
-            console.warn(
-              "[HybridPlayer] Failed to play after timeline click:",
-              err
-            );
-          });
+        if (hlsVideoRef.current?.paused) {
+          playHLS().catch((err) =>
+            console.warn("Play after seek failed:", err)
+          );
         }
       }
     },
@@ -445,35 +307,29 @@ export function HybridStreamPlayer({
       seekHLS,
       hlsVideoRef,
       playHLS,
-      debug,
     ]
   );
 
   const handleTimelineMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const percentage = Math.max(0, Math.min(1, x / rect.width));
+      const percentage = Math.max(
+        0,
+        Math.min(1, (e.clientX - rect.left) / rect.width)
+      );
       const targetDuration = viewMode === "live" ? liveEdgeDuration : duration;
-      const time = percentage * targetDuration;
-
       setHoverPosition(percentage * 100);
-      setHoverTime(time);
+      setHoverTime(percentage * targetDuration);
     },
     [viewMode, liveEdgeDuration, duration]
   );
 
-  // ============================================================================
-  // RENDER
-  // ============================================================================
-
+  // Render
   return (
     <div className={cn("hybrid-stream-player relative", className)}>
-      {/* ====================================================================
-          VIDEO CONTAINER (YouTube-style with rounded corners)
-          ==================================================================== */}
+      {/* Video Container */}
       <div className="relative bg-black rounded-xl overflow-hidden shadow-2xl">
-        {/* Live Video Element (WebRTC) */}
+        {/* Live Video (WebRTC) */}
         <video
           ref={liveVideoRef}
           className={cn(
@@ -485,7 +341,7 @@ export function HybridStreamPlayer({
           muted={false}
         />
 
-        {/* HLS Video Element (Playback) */}
+        {/* HLS Video (Playback) */}
         <video
           ref={hlsVideoRef}
           className={cn(
@@ -496,11 +352,7 @@ export function HybridStreamPlayer({
           muted={false}
         />
 
-        {/* ==================================================================
-            OVERLAYS - Modern YouTube-style badges
-            ================================================================== */}
-
-        {/* LIVE Badge (top-right, vibrant design) */}
+        {/* LIVE Badge */}
         {viewMode === "live" && isLiveConnected && (
           <div className="absolute top-3 right-3 z-10">
             <div className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-md text-sm font-bold shadow-lg backdrop-blur-sm">
@@ -513,7 +365,7 @@ export function HybridStreamPlayer({
           </div>
         )}
 
-        {/* Time Behind Live Badge (top-right, sleek design) */}
+        {/* Time Behind Live Badge */}
         {viewMode === "playback" && !isNearLive && timeBehindLive > 0 && (
           <div className="absolute top-3 right-3 z-10">
             <div className="flex items-center gap-2 bg-black/80 backdrop-blur-md text-white px-4 py-2 rounded-md text-sm font-medium shadow-lg border border-white/10">
@@ -525,7 +377,7 @@ export function HybridStreamPlayer({
           </div>
         )}
 
-        {/* Loading Overlay (modern spinner) */}
+        {/* Loading Overlay */}
         {(isLiveConnecting ||
           isHLSLoading ||
           (viewMode === "live" && isWaitingForData && !isLiveConnected)) && (
@@ -549,32 +401,7 @@ export function HybridStreamPlayer({
           </div>
         )}
 
-        {/* 🔥 NEW: Manual Start Button Overlay */}
-        {viewMode === "live" &&
-          manualStartRequired &&
-          !isLiveConnected &&
-          !isLiveConnecting && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm z-20">
-              <div className="text-center text-white p-8">
-                <div className="w-24 h-24 mx-auto mb-6 bg-red-500/20 rounded-full flex items-center justify-center border-4 border-red-500/30">
-                  <SignalIcon className="w-12 h-12 text-red-400 animate-pulse" />
-                </div>
-                <p className="text-2xl font-bold mb-2">Ready to Stream</p>
-                <p className="text-gray-400 mb-6 max-w-sm">
-                  Click the button below to start watching the live video feed
-                </p>
-                <Button
-                  onClick={handleManualStart}
-                  className="bg-red-600 hover:bg-red-700 text-white px-8 py-4 text-lg font-bold shadow-2xl transition-all hover:scale-105"
-                >
-                  <SignalIcon className="w-6 h-6 mr-2" />
-                  Start Live Stream
-                </Button>
-              </div>
-            </div>
-          )}
-
-        {/* Error Overlay (refined design) */}
+        {/* Error Overlay */}
         {liveError && hlsError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm z-20">
             <div className="text-center text-white p-8 max-w-md">
@@ -618,9 +445,7 @@ export function HybridStreamPlayer({
           </div>
         )}
 
-        {/* ==================================================================
-            BOTTOM CONTROLS BAR (YouTube-style integrated controls)
-            ================================================================== */}
+        {/* Bottom Controls Bar */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-20 pb-4 px-4 z-10">
           {/* Timeline Progress Bar (YouTube-style clickable) */}
           {hasRecording && (
