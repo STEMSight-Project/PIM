@@ -16,7 +16,7 @@ describe("hlsService", () => {
   // Suppress console.error and console.log during tests to reduce noise
   const originalError = console.error;
   const originalLog = console.log;
-  
+
   beforeAll(() => {
     console.error = jest.fn();
     console.log = jest.fn();

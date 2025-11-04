@@ -46,7 +46,9 @@ class SessionRecorder:
 
     def __init__(self, session_id: str, room_id: str, ambulance_number: str):
         self.session_id = session_id
-        self.room_id = room_id  # UUID from room.id (e.g., "8b502515-6668-4ef7-9993-4636e2bf668d")
+        self.room_id = (
+            room_id  # UUID from room.id (e.g., "8b502515-6668-4ef7-9993-4636e2bf668d")
+        )
         self.ambulance_number = ambulance_number
 
         # Recording paths - use UUID for unique folder names

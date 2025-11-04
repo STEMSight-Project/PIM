@@ -491,7 +491,9 @@ class Room:
                                 f"Stopping HLS recording for room {self.room_id} (session {self.session_id})"
                             )
                             asyncio.create_task(
-                                recording_manager.stop_session_recording(self.room_db_id)  # Use UUID
+                                recording_manager.stop_session_recording(
+                                    self.room_db_id
+                                )  # Use UUID
                             )
                         except Exception as e:
                             logger.error(

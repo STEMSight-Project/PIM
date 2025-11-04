@@ -1056,13 +1056,20 @@ export function useStreaming(): UseStreamingReturn {
         // Look for existing active session (started by RPi device)
         const sessionPromise = findActiveSession(ambulanceId);
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Session lookup timeout after 10s")), 10000)
+          setTimeout(
+            () => reject(new Error("Session lookup timeout after 10s")),
+            10000
+          )
         );
-        
-        const session = await Promise.race([sessionPromise, timeoutPromise]) as AmbulanceSession | null;
-        
+
+        const session = (await Promise.race([
+          sessionPromise,
+          timeoutPromise,
+        ])) as AmbulanceSession | null;
+
         if (!session) {
-          const errorMsg = "No active ambulance session found. Please ensure the ambulance camera device is connected and streaming.";
+          const errorMsg =
+            "No active ambulance session found. Please ensure the ambulance camera device is connected and streaming.";
           console.error("❌ [SESSION] No active session found");
           console.error("❌ [SESSION] Error message:", errorMsg);
           throw new Error(errorMsg);
@@ -1103,13 +1110,18 @@ export function useStreaming(): UseStreamingReturn {
         let selectedRoom;
         if (roomId) {
           console.log("🔍 [ROOM] Looking for specific room ID:", roomId);
-          
+
           // Check if roomId is a placeholder ID
           if (roomId.startsWith("placeholder-")) {
             // Extract camera UUID from placeholder
             const cameraId = roomId.replace("placeholder-", "");
-            console.log("🔍 [ROOM] Detected placeholder ID, looking for camera_id:", cameraId);
-            selectedRoom = roomsResponse.data.find((r) => r.camera_id === cameraId);
+            console.log(
+              "🔍 [ROOM] Detected placeholder ID, looking for camera_id:",
+              cameraId
+            );
+            selectedRoom = roomsResponse.data.find(
+              (r) => r.camera_id === cameraId
+            );
           } else {
             // Look for room by ID (UUID)
             selectedRoom = roomsResponse.data.find((r) => r.id === roomId);
@@ -1117,7 +1129,9 @@ export function useStreaming(): UseStreamingReturn {
 
           if (!selectedRoom) {
             console.error("❌ [ROOM] Specified room not found:", roomId);
-            throw new Error(`Camera room ${roomId} not found or not streaming yet`);
+            throw new Error(
+              `Camera room ${roomId} not found or not streaming yet`
+            );
           }
         } else {
           // No specific room requested - use first connected, or first available

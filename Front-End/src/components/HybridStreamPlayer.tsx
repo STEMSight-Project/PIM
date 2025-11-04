@@ -137,7 +137,9 @@ export function HybridStreamPlayer({
   // 🔥 CRITICAL: Cleanup on unmount or room change
   useEffect(() => {
     return () => {
-      console.log("[HybridPlayer] Component unmounting or room changed - cleanup");
+      console.log(
+        "[HybridPlayer] Component unmounting or room changed - cleanup"
+      );
       stopStreaming();
       if (hlsVideoRef.current) {
         hlsVideoRef.current.pause();
