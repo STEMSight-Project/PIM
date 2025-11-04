@@ -79,6 +79,7 @@ export function useRealtimeAmbulanceSessions(
   const [isLoading, setIsLoading] = useState(true);
   const sessionEventSourceRef = useRef<EventSource | null>(null);
   const roomEventSourceRef = useRef<EventSource | null>(null);
+  const roomUpdateTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const { enabled = true, ambulanceId, sessionId, isActive } = options;
 
@@ -133,11 +134,13 @@ export function useRealtimeAmbulanceSessions(
               }
 
               // Create room structure from camera (not yet streaming)
+              // Use a placeholder UUID format so it doesn't conflict with real room UUIDs
               return {
-                id: camera.id,
+                id: `placeholder-${camera.id}`, // Unique placeholder ID
                 session_id: sessionData.id,
                 camera_id: camera.id,
                 room_id: `${sessionData.ambulance_id}-${camera.camera_id}`,
+                room_name: `${sessionData.ambulance_id}-${camera.camera_id}`,
                 camera_name: camera.camera_name || "Unknown Camera",
                 connected: false,
                 connection_started_at: new Date().toISOString(),
@@ -346,12 +349,11 @@ export function useRealtimeAmbulanceSessions(
   const handleRoomMessage = useCallback((event: MessageEvent) => {
     try {
       const data = JSON.parse(event.data);
-      console.log("Room event data:", data);
       setError(null);
 
       const eventData = typeof data === "string" ? JSON.parse(data) : data;
       const roomData = eventData.new || eventData.room || eventData.record;
-      console.log("Parsed room data:", roomData);
+
       // Extract the actual event type
       const actualEventType =
         eventData.event || eventData.event_type || eventData.type;
@@ -366,8 +368,15 @@ export function useRealtimeAmbulanceSessions(
 
         setEvents((prev) => [...prev, roomEvent]);
 
-        // Handle DELETE event - remove room
+        // Handle DELETE event - remove room immediately
         if (actualEventType === "DELETE") {
+          // Clear any pending update for this room
+          const timerId = roomUpdateTimersRef.current.get(roomData.camera_id);
+          if (timerId) {
+            clearTimeout(timerId);
+            roomUpdateTimersRef.current.delete(roomData.camera_id);
+          }
+
           setSessions((prev) =>
             prev.map((session) => {
               if (session.id === roomData.session_id) {
@@ -387,37 +396,56 @@ export function useRealtimeAmbulanceSessions(
           return;
         }
 
-        // Handle INSERT/UPDATE - just replace the room data
-        setSessions((prev) =>
-          prev.map((session) => {
-            if (session.id === roomData.session_id) {
-              const currentRooms = session.camera_rooms || [];
-              const existingIndex = currentRooms.findIndex(
-                (r: CameraRoom) => r.camera_id === roomData.camera_id
-              );
-
-              if (existingIndex >= 0) {
-                // Replace existing room with new data from backend
-                const updatedRooms = [...currentRooms];
-                updatedRooms[existingIndex] = roomData;
-                console.log(
-                  `[Realtime] Room for camera ${roomData.camera_id} updated`
-                );
-                return { ...session, camera_rooms: updatedRooms };
-              } else {
-                // Add new room
-                console.log(
-                  `[Realtime] Room for camera ${roomData.camera_id} added`
-                );
-                return {
-                  ...session,
-                  camera_rooms: [...currentRooms, roomData],
-                };
-              }
-            }
-            return session;
-          })
+        // Handle INSERT/UPDATE with debouncing (300ms to batch rapid updates)
+        const existingTimer = roomUpdateTimersRef.current.get(
+          roomData.camera_id
         );
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
+        const newTimer = setTimeout(() => {
+          roomUpdateTimersRef.current.delete(roomData.camera_id);
+
+          setSessions((prev) =>
+            prev.map((session) => {
+              console.log(
+                "session.id:",
+                session.id,
+                "roomData.session_id:",
+                roomData.session_id
+              );
+              if (session.id === roomData.session_id) {
+                const currentRooms = session.camera_rooms || [];
+                const existingIndex = currentRooms.findIndex(
+                  (r: CameraRoom) => r.camera_id === roomData.camera_id
+                );
+
+                if (existingIndex >= 0) {
+                  // Replace existing room with new data from backend
+                  const updatedRooms = [...currentRooms];
+                  updatedRooms[existingIndex] = roomData;
+                  console.log(
+                    `[Realtime] Room for camera ${roomData.camera_id} updated`
+                  );
+                  return { ...session, camera_rooms: updatedRooms };
+                } else {
+                  // Add new room
+                  console.log(
+                    `[Realtime] Room for camera ${roomData.camera_id} added`
+                  );
+                  return {
+                    ...session,
+                    camera_rooms: [...currentRooms, roomData],
+                  };
+                }
+              }
+              return session;
+            })
+          );
+        }, 300); // 300ms debounce
+
+        roomUpdateTimersRef.current.set(roomData.camera_id, newTimer);
       }
     } catch (err) {
       console.error("Failed to parse camera room SSE event:", err);
@@ -483,13 +511,14 @@ export function useRealtimeAmbulanceSessions(
                     if (existingRoom) {
                       return existingRoom;
                     }
-
                     // Create room structure from camera if no active room
+                    // Use placeholder ID to avoid conflicts with real room UUIDs
                     return {
-                      id: camera.id,
+                      id: `placeholder-${camera.id}`, // Unique placeholder ID
                       session_id: session.id,
                       camera_id: camera.id,
                       room_id: `${session.ambulance_id}-${camera.camera_id}`,
+                      room_name: `${session.ambulance_id}-${camera.camera_id}`,
                       camera_name: camera.camera_name || "Unknown Camera",
                       connected: false, // Not connected yet
                       connection_started_at: new Date().toISOString(),
@@ -594,6 +623,13 @@ export function useRealtimeAmbulanceSessions(
       roomEventSourceRef.current.close();
       roomEventSourceRef.current = null;
     }
+
+    // Clear all pending room update timers
+    roomUpdateTimersRef.current.forEach((timerId) => {
+      clearTimeout(timerId);
+    });
+    roomUpdateTimersRef.current.clear();
+
     setIsConnected(false);
   }, []);
 
@@ -607,7 +643,10 @@ export function useRealtimeAmbulanceSessions(
     return () => {
       disconnect();
     };
-  }, [enabled, ambulanceId, sessionId, isActive]);
+    // Only reconnect when enabled changes, not when filter params change
+    // Filter params are used during initial fetch and SSE message filtering
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
 
   return {
     sessions,

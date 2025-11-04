@@ -64,7 +64,7 @@ export default function SimpleStreamingDashboard() {
     error: realtimeError,
   } = useRealtimeAmbulanceSessions({
     enabled: isAuthenticated,
-    isActive: true
+    isActive: true,
   });
 
   useEffect(() => {
@@ -352,32 +352,35 @@ export default function SimpleStreamingDashboard() {
                             <div className="text-sm font-medium text-slate-700 mb-3">
                               Camera Rooms ({ambulance.totalRooms.length})
                             </div>
-                            {ambulance.totalRooms.map((room) => (
-                              <div
-                                key={room.id}
-                                onClick={() =>
-                                  handleJoinRoom(
-                                    room.room_id,
-                                    ambulance.ambulanceId
-                                  )
-                                }
-                                className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors border border-slate-200"
-                              >
-                                <div className="flex items-center space-x-3">
-                                  <div
-                                    className={`w-3 h-3 rounded-full ${
-                                      room.connected
-                                        ? "bg-green-500 animate-pulse"
-                                        : "bg-slate-400"
-                                    }`}
-                                  />
-                                  <span className="text-sm font-medium text-slate-800">
-                                    {room.room_id}
-                                  </span>
+                            {ambulance.totalRooms.map((room) => {
+                              return (
+                                <div
+                                  key={room.id}
+                                  onClick={() =>
+                                    handleJoinRoom(
+                                      room.id,
+                                      ambulance.ambulanceId
+                                    )
+                                  }
+                                  className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors border border-slate-200"
+                                >
+                                  <div className="flex items-center space-x-3">
+                                    <div
+                                      className={`w-3 h-3 rounded-full ${
+                                        room.connected
+                                          ? "bg-green-500 animate-pulse"
+                                          : "bg-slate-400"
+                                      }`}
+                                    />
+                                    <span className="text-sm font-medium text-slate-800">
+                                      {room.room_name}
+                                    </span>
+                                  </div>
+                                  <EyeIcon className="h-4 w-4 text-slate-400" />
                                 </div>
-                                <EyeIcon className="h-4 w-4 text-slate-400" />
-                              </div>
-                            ))}
+                              );
+                            })}
+
                             {ambulance.totalRooms.length > 3 && (
                               <p className="text-xs text-slate-500 text-center">
                                 +{ambulance.totalRooms.length - 3} more rooms

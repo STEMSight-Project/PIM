@@ -36,17 +36,17 @@ LOGGER = logging.getLogger("rpi_broadcaster")
 def get_rpi_media_player(config_manager: ConfigManager) -> MediaPlayer:
     """Create media player optimized for Raspberry Pi camera"""
     camera_config = config_manager.load_camera_config()
-    
+
     # Raspberry Pi camera module device
     device = "/dev/video0"
-    
+
     # Get settings from config
     resolution = camera_config.get("resolution", [640, 480])
     framerate = camera_config.get("framerate", 30)
     bitrate = camera_config.get("bitrate", "1000000")
-    
+
     width, height = resolution
-    
+
     options = {
         "video_size": f"{width}x{height}",
         "framerate": str(framerate),
@@ -58,7 +58,7 @@ def get_rpi_media_player(config_manager: ConfigManager) -> MediaPlayer:
         "tune": "zerolatency",
         "b:v": bitrate,
     }
-    
+
     LOGGER.info(f"📹 Camera settings: {width}x{height} @ {framerate}fps")
     return MediaPlayer(device, format="v4l2", options=options)
 
@@ -123,7 +123,7 @@ async def publish(
     device_name: Optional[str] = None,
 ) -> None:
     """Main publishing function - same logic as main broadcaster.py"""
-    
+
     LOGGER.info(f"aiortc version: {aiortc.__version__}")
 
     # Generate ambulance and room names
@@ -282,7 +282,7 @@ async def publish(
             # Step 2b: Check if camera room already exists, create if not
             camera_room_payload = {
                 "camera_id": camera_id,
-                "room_id": room_name,
+                "room_name": room_name,
                 "device_name": device_name or f"RPi-{ambulance_name}",
             }
             create_camera_room_url = f"{base_url}/ambulance-streaming/camera-rooms"
@@ -291,27 +291,35 @@ async def publish(
             existing_room_id = None
             get_rooms_url = f"{base_url}/ambulance-streaming/camera-rooms"
             LOGGER.info(f"🔍 Checking for existing camera room: {room_name}")
-            
+
             async with session.get(
-                get_rooms_url,
-                params={"session_id": session_id, "limit": 100}
+                get_rooms_url, params={"session_id": session_id, "limit": 100}
             ) as get_resp:
                 if get_resp.status == 200:
                     existing_rooms = await get_resp.json()
                     for room in existing_rooms:
-                        if room.get("room_id") == room_name and room.get("camera_id") == camera_id:
+                        if (
+                            room.get("room_name") == room_name
+                            and room.get("camera_id") == camera_id
+                        ):
                             existing_room_id = room.get("id")
-                            LOGGER.info(f"✅ Found existing camera room (ID: {existing_room_id})")
+                            LOGGER.info(
+                                f"✅ Found existing camera room (UUID: {existing_room_id})"
+                            )
                             LOGGER.info(f"🔄 Rejoining existing room: {room_name}")
                             break
 
             if existing_room_id:
                 # Room exists - rejoin it
                 LOGGER.info(f"♻️  Rejoining existing camera room for camera {room_name}")
-                streaming_url = f"{base_url}/ambulance-streaming/camera/{room_name}/streamer"
+                streaming_url = (
+                    f"{base_url}/ambulance-streaming/camera/{room_name}/streamer"
+                )
             else:
                 # Room doesn't exist - create new one
-                LOGGER.info(f"🆕 Creating new camera room for camera ID {camera_id}: {room_name}")
+                LOGGER.info(
+                    f"🆕 Creating new camera room for camera ID {camera_id}: {room_name}"
+                )
                 async with session.post(
                     create_camera_room_url,
                     json=camera_room_payload,
@@ -320,25 +328,24 @@ async def publish(
                     if resp.status == 200:
                         camera_room = await resp.json()
                         LOGGER.info(f"✅ Ambulance camera room created: {camera_room}")
-                        streaming_url = (
-                            f"{base_url}/ambulance-streaming/camera/{room_name}/streamer"
-                        )
+                        streaming_url = f"{base_url}/ambulance-streaming/camera/{room_name}/streamer"
                     elif resp.status == 409:
                         # Camera room already exists
                         LOGGER.info(
                             f"🔄 Camera room already exists (409), rejoining camera ID: {camera_id}"
                         )
-                        streaming_url = (
-                            f"{base_url}/ambulance-streaming/camera/{room_name}/streamer"
-                        )
+                        streaming_url = f"{base_url}/ambulance-streaming/camera/{room_name}/streamer"
                     else:
                         error_text = await resp.text()
                         LOGGER.error(
                             f"Camera room creation failed ({resp.status}): {error_text}"
                         )
 
-                        # Check if it's a duplicate room_id error
-                        if "already exists" in error_text.lower() or "duplicate" in error_text.lower():
+                        # Check if it's a duplicate room_name error
+                        if (
+                            "already exists" in error_text.lower()
+                            or "duplicate" in error_text.lower()
+                        ):
                             LOGGER.info(
                                 f"🔄 Room {room_name} already exists (duplicate key), rejoining"
                             )
@@ -365,7 +372,7 @@ async def publish(
         answer_json = None
         max_retries = 3
         retry_count = 0
-        
+
         while retry_count < max_retries:
             try:
                 async with session.post(streaming_url, json=offer_payload) as resp:
@@ -376,21 +383,29 @@ async def publish(
                         return
                     elif resp.status == 409:
                         retry_count += 1
-                        LOGGER.warning(f"⚠️  Streamer already connected (attempt {retry_count}/{max_retries})")
-                        
+                        LOGGER.warning(
+                            f"⚠️  Streamer already connected (attempt {retry_count}/{max_retries})"
+                        )
+
                         if retry_count < max_retries:
                             LOGGER.info("🔄 Waiting 2 seconds before retry...")
                             await asyncio.sleep(2)
                             continue
                         else:
-                            LOGGER.error("❌ Max retries reached. Room may have active streamer.")
-                            LOGGER.info("💡 Try stopping other broadcasters or wait for timeout")
+                            LOGGER.error(
+                                "❌ Max retries reached. Room may have active streamer."
+                            )
+                            LOGGER.info(
+                                "💡 Try stopping other broadcasters or wait for timeout"
+                            )
                             safe_close_player(player)
                             await pc.close()
                             return
                     elif resp.status != 200:
                         error_text = await resp.text()
-                        LOGGER.error(f"❌ Streaming failed ({resp.status}): {error_text}")
+                        LOGGER.error(
+                            f"❌ Streaming failed ({resp.status}): {error_text}"
+                        )
                         safe_close_player(player)
                         await pc.close()
                         return
@@ -398,17 +413,19 @@ async def publish(
                         answer_json = await resp.json()
                         LOGGER.info("✅ Successfully connected to streaming endpoint")
                         break
-                        
+
             except Exception as e:
                 retry_count += 1
-                LOGGER.error(f"❌ Connection error (attempt {retry_count}/{max_retries}): {e}")
+                LOGGER.error(
+                    f"❌ Connection error (attempt {retry_count}/{max_retries}): {e}"
+                )
                 if retry_count < max_retries:
                     await asyncio.sleep(2)
                 else:
                     safe_close_player(player)
                     await pc.close()
                     return
-        
+
         if not answer_json:
             LOGGER.error("❌ Failed to get answer from streaming endpoint")
             safe_close_player(player)

@@ -30,7 +30,7 @@ class AmbulanceSessionCreate(BaseModel):
 
 class CameraRoomCreate(BaseModel):
     camera_id: str
-    room_id: Optional[str] = None
+    room_name: Optional[str] = None
     device_name: Optional[str] = "Camera Device"
 
 
@@ -140,16 +140,16 @@ async def end_ambulance_session(session_id: str):
 async def create_camera_room(room_data: CameraRoomCreate, session_id: str):
     """Create a new camera streaming room."""
     try:
-        # Generate room_id if not provided
-        room_id = room_data.room_id or f"{room_data.camera_id}_{session_id}"
+        # Generate room_name if not provided
+        room_name = room_data.room_name or f"{room_data.camera_id}_{session_id}"
 
         # Create camera room using the service
         room = await StreamingDatabaseService.create_camera_room(
-            session_id, room_data.camera_id, room_id, room_data.device_name
+            session_id, room_data.camera_id, room_name, room_data.device_name
         )
 
         logger.info(
-            "Created camera room %s for camera %s", room_id, room_data.camera_id
+            "Created camera room %s for camera %s", room_name, room_data.camera_id
         )
         return room
 
@@ -190,11 +190,11 @@ async def get_camera_rooms(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/camera-rooms/{room_id}", dependencies=[Depends(current_user)])
-async def get_camera_room(room_id: str):
-    """Get camera room details."""
+@router.get("/camera-rooms/{room_name}", dependencies=[Depends(current_user)])
+async def get_camera_room(room_name: str):
+    """Get camera room details by room_name."""
     try:
-        room = await StreamingDatabaseService.get_camera_room_by_id(room_id)
+        room = await StreamingDatabaseService.get_camera_room_by_id(room_name)
 
         if not room:
             raise HTTPException(status_code=404, detail="Camera room not found")
@@ -204,28 +204,30 @@ async def get_camera_room(room_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error fetching camera room %s: %s", room_id, e)
+        logger.error("Error fetching camera room %s: %s", room_name, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.put("/camera-rooms/{room_id}/disconnect", dependencies=[Depends(current_user)])
-async def disconnect_camera_room(room_id: str):
+@router.put(
+    "/camera-rooms/{room_name}/disconnect", dependencies=[Depends(current_user)]
+)
+async def disconnect_camera_room(room_name: str):
     """Disconnect a camera room."""
     try:
-        # Get room first to get the DB ID
-        room = await StreamingDatabaseService.get_camera_room_by_id(room_id)
+        # Get room first to get the DB ID (UUID)
+        room = await StreamingDatabaseService.get_camera_room_by_id(room_name)
         if not room:
             raise HTTPException(status_code=404, detail="Camera room not found")
 
         await StreamingDatabaseService.update_camera_room_status(room["id"], False)
 
-        logger.info("Disconnected camera room %s", room_id)
+        logger.info("Disconnected camera room %s", room_name)
         return {"disconnected": True}
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error disconnecting camera room %s: %s", room_id, e)
+        logger.error("Error disconnecting camera room %s: %s", room_name, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -289,48 +291,55 @@ async def camera_streamer(camera_id: str, body: SDPBody):
     """
     Establish WebRTC connection for camera streamer (publisher).
 
-    Note: camera_id parameter is actually the room_id (e.g., 'AMB-001-ROOM-001').
-    In our system, room_id IS the camera identifier.
+    Note: camera_id parameter is actually the room_name (e.g., 'AMB-001-ROOM-001').
+    This is the display name used to identify the streaming room.
     """
     try:
-        # The parameter is called camera_id for API consistency, but it's actually room_id
-        room_id = camera_id
+        # The parameter is called camera_id for API consistency, but it's actually room_name
+        room_name = camera_id
 
-        logger.info("Looking up camera room for room_id: %s", room_id)
+        logger.info("Looking up camera room for room_name: %s", room_name)
 
-        # Look up the camera room by room_id
-        camera_room = await StreamingDatabaseService.get_camera_room_by_room_id(room_id)
+        # Look up the camera room by room_name
+        camera_room = await StreamingDatabaseService.get_camera_room_by_room_id(
+            room_name
+        )
 
         if not camera_room:
             raise HTTPException(
-                status_code=404, detail=f"Camera room not found for room_id: {room_id}"
+                status_code=404,
+                detail=f"Camera room not found for room_name: {room_name}",
             )
 
-        logger.info("Found camera room: %s", camera_room.get("id"))
+        logger.info(
+            "Found camera room: %s (UUID: %s)",
+            camera_room.get("room_name"),
+            camera_room.get("id"),
+        )
 
-        # Create or get WebRTC room
-        room = room_manager.get_room(room_id)
+        # Create or get WebRTC room (using room_name as identifier)
+        room = room_manager.get_room(room_name)
         if not room:
             room = room_manager.create_room(
-                room_id=room_id,
+                room_id=room_name,
                 session_id=camera_room.get("session_id"),
                 room_db_id=camera_room.get("id"),
             )
 
-        # Register camera room for monitoring
+        # Register camera room for monitoring (room_name, UUID, session_id)
         webrtc_service.register_camera_room(
-            room_id, camera_room["id"], camera_room.get("session_id")
+            room_name, camera_room["id"], camera_room.get("session_id")
         )
 
         # Create WebRTC connection for streamer
-        sdp_response = await webrtc_service.create_streamer_connection(room_id, body)
+        sdp_response = await webrtc_service.create_streamer_connection(room_name, body)
 
-        # Update camera room status to connected
+        # Update camera room status to connected (using UUID)
         await StreamingDatabaseService.update_camera_room_status(
             camera_room["id"], connected=True
         )
 
-        logger.info("✅ Streamer connected successfully to room %s", room_id)
+        logger.info("✅ Streamer connected successfully to room %s", room_name)
 
         # Return only SDP fields (no camera_id to avoid WebRTC errors)
         return {"sdp": sdp_response["sdp"], "type": sdp_response["type"]}
@@ -347,38 +356,45 @@ async def camera_viewer(camera_id: str, body: SDPBody):
     """
     Establish WebRTC connection for camera viewer (subscriber).
 
-    Note: camera_id parameter is actually the room_id (e.g., 'AMB-001-ROOM-001').
-    In our system, room_id IS the camera identifier.
+    Note: camera_id parameter is actually the room_name (e.g., 'AMB-001-ROOM-001').
+    This is the display name used to identify the streaming room.
     """
     try:
-        # The parameter is called camera_id for API consistency, but it's actually room_id
-        room_id = camera_id
+        # The parameter is called camera_id for API consistency, but it's actually room_name
+        room_name = camera_id
 
-        logger.info("Looking up camera room for room_id: %s", room_id)
+        logger.info("Looking up camera room for room_name: %s", room_name)
 
-        # Look up the camera room by room_id
-        camera_room = await StreamingDatabaseService.get_camera_room_by_room_id(room_id)
+        # Look up the camera room by room_name
+        camera_room = await StreamingDatabaseService.get_camera_room_by_room_id(
+            room_name
+        )
 
         if not camera_room:
             raise HTTPException(
-                status_code=404, detail=f"Camera room not found for room_id: {room_id}"
+                status_code=404,
+                detail=f"Camera room not found for room_name: {room_name}",
             )
 
-        logger.info("Found camera room: %s", camera_room.get("id"))
-        logger.info("Setting up viewer for camera room %s", room_id)
+        logger.info(
+            "Found camera room: %s (UUID: %s)",
+            camera_room.get("room_name"),
+            camera_room.get("id"),
+        )
+        logger.info("Setting up viewer for camera room %s", room_name)
 
         # Get existing WebRTC room (should exist from streamer)
-        room = room_manager.get_room(room_id)
+        room = room_manager.get_room(room_name)
         if not room:
             raise HTTPException(
                 status_code=404,
-                detail=f"No active streaming session found for room {room_id}",
+                detail=f"No active streaming session found for room {room_name}",
             )
 
         # Create WebRTC connection for viewer
-        sdp_response = await webrtc_service.create_viewer_connection(room_id, body)
+        sdp_response = await webrtc_service.create_viewer_connection(room_name, body)
 
-        logger.info("✅ Viewer connected successfully to room %s", room_id)
+        logger.info("✅ Viewer connected successfully to room %s", room_name)
 
         # Return only SDP fields (no camera_id to avoid WebRTC errors)
         return {"sdp": sdp_response["sdp"], "type": sdp_response["type"]}
@@ -441,15 +457,15 @@ async def get_camera_connection_stats(camera_id: str):
         if not camera_rooms:
             raise HTTPException(status_code=404, detail="No active camera room found")
 
-        room_id = camera_rooms[0].get("room_id")
+        room_name = camera_rooms[0].get("room_name")
 
-        if not room_id:
-            raise HTTPException(status_code=400, detail="Camera room has no room_id")
+        if not room_name:
+            raise HTTPException(status_code=400, detail="Camera room has no room_name")
 
-        # Get connection statistics
-        stats = webrtc_service.get_connection_stats(room_id)
+        # Get connection statistics (room_name is used as internal identifier)
+        stats = webrtc_service.get_connection_stats(room_name)
 
-        return {"camera_id": camera_id, "room_id": room_id, **stats}
+        return {"camera_id": camera_id, "room_name": room_name, **stats}
 
     except HTTPException:
         raise
@@ -471,23 +487,23 @@ async def disconnect_camera_stream(camera_id: str):
             raise HTTPException(status_code=404, detail="No active camera room found")
 
         camera_room = camera_rooms[0]
-        room_id = camera_room.get("room_id")
+        room_name = camera_room.get("room_name")
 
-        if room_id:
-            # Close WebRTC room
-            room = room_manager.get_room(room_id)
+        if room_name:
+            # Close WebRTC room (room_name is used as internal identifier)
+            room = room_manager.get_room(room_name)
             if room:
                 await room.close()
-                room_manager.remove_room(room_id)
+                room_manager.remove_room(room_name)
 
-        # Update database status
+        # Update database status (using UUID)
         await StreamingDatabaseService.update_camera_room_status(
             camera_room["id"], connected=False
         )
 
-        logger.info("Disconnected camera %s from room %s", camera_id, room_id)
+        logger.info("Disconnected camera %s from room %s", camera_id, room_name)
 
-        return {"camera_id": camera_id, "room_id": room_id, "disconnected": True}
+        return {"camera_id": camera_id, "room_name": room_name, "disconnected": True}
 
     except HTTPException:
         raise

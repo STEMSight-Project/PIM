@@ -17,11 +17,13 @@ from core.common import logger
 class HLSSegmentMonitor:
     """
     Monitors HLS segments for a specific recording session
-    and broadcasts new segment events via SSE
+    and broadcasts new segment events via SSE.
+
+    Note: room_id parameter stores the room_name (display name like "AMB-001-ROOM-001").
     """
 
     def __init__(self, room_id: str, recording_path: Path):
-        self.room_id = room_id
+        self.room_id = room_id  # This is actually room_name (e.g., "AMB-001-ROOM-001")
         self.recording_path = recording_path
         self.is_monitoring = False
         self._monitor_task: Optional[asyncio.Task] = None
@@ -223,11 +225,13 @@ class HLSSegmentMonitor:
 
 class HLSSegmentService:
     """
-    Global service managing HLS segment monitors for all active recordings
+    Global service managing HLS segment monitors for all active recordings.
+
+    Note: room_id parameters throughout this class store room_name values (display names).
     """
 
     def __init__(self):
-        self._monitors: Dict[str, HLSSegmentMonitor] = {}  # room_id -> monitor
+        self._monitors: Dict[str, HLSSegmentMonitor] = {}  # room_name -> monitor
         logger.info("📺 HLSSegmentService initialized")
 
     async def start_monitoring_room(
@@ -237,7 +241,7 @@ class HLSSegmentService:
         Start monitoring HLS segments for a room
 
         Args:
-            room_id: Camera room ID
+            room_id: Camera room name (e.g., "AMB-001-ROOM-001")
             recording_path: Path to recording directory containing segments
 
         Returns:

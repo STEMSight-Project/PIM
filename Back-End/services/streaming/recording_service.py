@@ -38,14 +38,18 @@ HLS_SEGMENT_DURATION = 10  # 10-second segments for better responsiveness
 
 
 class SessionRecorder:
-    """Manages HLS recording for a single camera room using direct FFmpeg pipeline"""
+    """
+    Manages HLS recording for a single camera room using direct FFmpeg pipeline.
+
+    Note: room_id parameter now stores the UUID (room.id) for unique folder identification.
+    """
 
     def __init__(self, session_id: str, room_id: str, ambulance_number: str):
         self.session_id = session_id
-        self.room_id = room_id
+        self.room_id = room_id  # UUID from room.id (e.g., "8b502515-6668-4ef7-9993-4636e2bf668d")
         self.ambulance_number = ambulance_number
 
-        # Recording paths
+        # Recording paths - use UUID for unique folder names
         self.recording_path = RECORDINGS_BASE_PATH / f"room-{room_id}"
         self.playlist_path = self.recording_path / "playlist.m3u8"
         self.mp4_path = self.recording_path / "recording.mp4"
@@ -550,7 +554,11 @@ class SessionRecorder:
 
 
 class RecordingManager:
-    """Manages all active camera room recordings"""
+    """
+    Manages all active camera room recordings.
+
+    Note: room_id parameters throughout this class store room_name values (display names).
+    """
 
     def __init__(self):
         self.active_recorders: dict[str, SessionRecorder] = {}
@@ -559,7 +567,7 @@ class RecordingManager:
     async def start_session_recording(
         self,
         session_id: str,
-        room_id: str,
+        room_id: str,  # UUID from room.id for unique folder identification
         ambulance_number: str,
         video_track: MediaStreamTrack,
     ) -> SessionRecorder:

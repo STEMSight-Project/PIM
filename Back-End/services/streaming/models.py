@@ -30,7 +30,7 @@ class AmbulanceSessionUpdate(BaseModel):
 
 class CameraRoomCreate(BaseModel):
     camera_id: str
-    room_id: Optional[str] = None
+    room_name: Optional[str] = None
     device_name: Optional[str] = "Camera Device"
 
 
@@ -43,7 +43,7 @@ class CameraRoomResponse(BaseModel):
     id: str
     session_id: str
     camera_id: str
-    room_id: str
+    room_name: str
     connected: bool
     connection_started_at: str
     connection_ended_at: Optional[str] = None

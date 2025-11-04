@@ -45,15 +45,36 @@ export default function AmbulanceStreamingPage() {
   } = useRealtimeAmbulanceSessions({
     enabled: true,
     ambulanceId: ambulanceId, // Filter by ambulance ID from URL
-    // Don't filter by isActive - we want to see all rooms even if session ended
+    isActive: true,
   });
 
   // Extract ALL rooms for this ambulance (online or offline)
+  // Deduplicate by camera_id to prevent duplicate keys in React rendering
   const availableRooms = useMemo(() => {
     const rooms = allSessions.flatMap(
       (session: AmbulanceSession) => session.camera_rooms || []
     );
-    return rooms;
+
+    // Deduplicate by camera_id - keep the most recent/connected one
+    const roomMap = new Map<string, CameraRoom>();
+    for (const room of rooms) {
+      const existing = roomMap.get(room.camera_id);
+      if (!existing) {
+        roomMap.set(room.camera_id, room);
+      } else {
+        // Prioritize: 1) connected rooms, 2) more recent updates
+        if (room.connected && !existing.connected) {
+          roomMap.set(room.camera_id, room);
+        } else if (
+          room.connected === existing.connected &&
+          room.updated_at > existing.updated_at
+        ) {
+          roomMap.set(room.camera_id, room);
+        }
+      }
+    }
+
+    return Array.from(roomMap.values());
   }, [allSessions]);
 
   // Compute stats for this ambulance
@@ -72,24 +93,28 @@ export default function AmbulanceStreamingPage() {
   useEffect(() => {
     if (roomIdFromUrl && availableRooms.length > 0) {
       const roomExists = availableRooms.some(
-        (room: CameraRoom) => room.room_id === roomIdFromUrl
+        (room: CameraRoom) => room.id === roomIdFromUrl
       );
       if (roomExists && selectedRoomId !== roomIdFromUrl) {
         setSelectedRoomId(roomIdFromUrl);
       }
+    } else if (!roomIdFromUrl && !selectedRoomId && availableRooms.length > 0) {
+      // Auto-select first available room if no room specified
+      console.log("[StreamingDash] Auto-selecting first available room");
+      setSelectedRoomId(availableRooms[0].id);
     }
   }, [roomIdFromUrl, availableRooms, selectedRoomId]);
 
   // Monitor selected room's connection status
   const selectedRoom = useMemo(() => {
     return availableRooms.find(
-      (room: CameraRoom) => room.room_id === selectedRoomId
+      (room: CameraRoom) => room.id === selectedRoomId
     );
   }, [availableRooms, selectedRoomId]);
 
   const handleRoomSelect = (roomId: string) => {
     setSelectedRoomId(roomId);
-    // Update URL
+    // Update URL with room.id (UUID)
     const url = new URL(window.location.href);
     url.searchParams.set("room", roomId);
     window.history.replaceState({}, "", url.toString());
@@ -335,7 +360,7 @@ export default function AmbulanceStreamingPage() {
                 ) : (
                   <div className="space-y-2">
                     {availableRooms.map((room: CameraRoom) => {
-                      const isSelected = selectedRoomId === room.room_id;
+                      const isSelected = selectedRoomId === room.id;
                       const isLive =
                         room.connected && !room.connection_ended_at;
 
@@ -347,7 +372,7 @@ export default function AmbulanceStreamingPage() {
                               ? "border-blue-500 bg-blue-50 shadow-md"
                               : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
                           }`}
-                          onClick={() => handleRoomSelect(room.room_id)}
+                          onClick={() => handleRoomSelect(room.id)}
                         >
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
@@ -367,7 +392,7 @@ export default function AmbulanceStreamingPage() {
                                   {room.camera_name || "Camera"}
                                 </p>
                                 <p className="text-xs text-slate-500 font-mono">
-                                  {room.room_id.split("-").pop()}
+                                  {room.room_name}
                                 </p>
                               </div>
                             </div>
@@ -472,7 +497,7 @@ export default function AmbulanceStreamingPage() {
                         </p>
                         <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
                           <p className="text-sm font-mono text-blue-900 mb-1">
-                            {selectedRoom.room_id}
+                            {selectedRoom.room_name}
                           </p>
                           <p className="text-xs text-blue-700">
                             Status:{" "}

@@ -101,10 +101,10 @@ export interface AmbulanceSessionUpdate {
 // ============================================================================
 
 export interface CameraRoom {
-  id: string;
+  id: string; // UUID - Primary key (used for selection/identification)
   session_id: string;
   camera_id: string;
-  room_id: string;
+  room_name: string; // Display name - e.g., "AMB-003-ROOM-003"
   camera_name: string;
   connected: boolean;
   connection_started_at: string;

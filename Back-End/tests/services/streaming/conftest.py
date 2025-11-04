@@ -1,6 +1,7 @@
 """
 Pytest fixtures for streaming service tests
 """
+
 import asyncio
 import pytest
 from pathlib import Path
@@ -20,22 +21,26 @@ def event_loop():
 def mock_supabase():
     """Mock Supabase client"""
     mock = MagicMock()
-    
+
     # Mock table operations
     mock_table = MagicMock()
     mock_table.insert.return_value.execute.return_value.data = [{"id": "test-id-123"}]
-    mock_table.update.return_value.eq.return_value.execute.return_value.data = [{"id": "test-id-123"}]
+    mock_table.update.return_value.eq.return_value.execute.return_value.data = [
+        {"id": "test-id-123"}
+    ]
     mock_table.select.return_value.eq.return_value.execute.return_value.data = []
-    
+
     mock.table.return_value = mock_table
-    
+
     # Mock storage operations
     mock_storage = MagicMock()
     mock_storage.upload.return_value = {"path": "test/path.mp4"}
-    mock_storage.get_public_url.return_value = "https://storage.supabase.co/test/path.mp4"
-    
+    mock_storage.get_public_url.return_value = (
+        "https://storage.supabase.co/test/path.mp4"
+    )
+
     mock.storage.from_.return_value = mock_storage
-    
+
     return mock
 
 
@@ -58,11 +63,11 @@ def mock_ffmpeg_process():
 def mock_video_track():
     """Mock WebRTC video track"""
     mock = AsyncMock()
-    
+
     # Mock frame
     mock_frame = MagicMock()
     mock_frame.to_ndarray.return_value = MagicMock()
-    
+
     mock.recv.return_value = mock_frame
     return mock
 
@@ -80,9 +85,10 @@ def sample_session_data():
     """Sample session data for testing"""
     return {
         "session_id": "test-session-uuid-1234",
-        "room_id": "AMB-001-ROOM-001",
+        "room_id": "AMB-001-ROOM-001",  # This is actually room_name for backward compatibility
+        "room_name": "AMB-001-ROOM-001",  # Explicit room_name field
         "ambulance_number": "001",
-        "camera_id": "AMB-001-CAM-01"
+        "camera_id": "AMB-001-CAM-01",
     }
 
 
@@ -95,5 +101,5 @@ def sample_recording_metadata():
         "segment_count": 4,
         "started_at": datetime.utcnow().isoformat(),
         "ended_at": datetime.utcnow().isoformat(),
-        "status": "completed"
+        "status": "completed",
     }

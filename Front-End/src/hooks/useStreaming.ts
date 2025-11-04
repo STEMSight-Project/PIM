@@ -55,7 +55,7 @@
  */
 
 import { ambulanceStreamingService } from "@/services/streamingService";
-import type { AmbulanceSession } from "@/types";
+import type { AmbulanceSession, CameraRoom } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // ============================================================================
@@ -253,7 +253,7 @@ export function useStreaming(): UseStreamingReturn {
       roomId: string,
       sessionId: string,
       timeoutMs: number = 15000
-    ): Promise<{ room_id: string; connected: boolean } | null> => {
+    ): Promise<CameraRoom | null> => {
       const startTime = Date.now();
       const pollInterval = 500; // Check every 500ms
 
@@ -269,7 +269,7 @@ export function useStreaming(): UseStreamingReturn {
           });
 
           if (roomsResponse.data && roomsResponse.data.length > 0) {
-            const room = roomsResponse.data.find((r) => r.room_id === roomId);
+            const room = roomsResponse.data.find((r) => r.id === roomId);
             if (room && room.connected) {
               console.log(`✅ Room ${roomId} is now connected!`);
               return room;
@@ -470,8 +470,7 @@ export function useStreaming(): UseStreamingReturn {
 
   const createPeerConnection = useCallback(
     async (roomId: string): Promise<RTCPeerConnection> => {
-      // Note: roomId parameter is used as camera_id in the API endpoint
-      // In our system: room_id IS the camera identifier (e.g., "AMB-001-ROOM-001")
+      // roomId is the UUID (room.id) - we need to fetch room_name for API
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -930,10 +929,11 @@ export function useStreaming(): UseStreamingReturn {
 
       // Send offer to server and get answer using ambulance camera streaming
       // Note: roomId is passed as camera_id parameter to the API
+      // roomId is actually room_name (e.g., "AMB-001-ROOM-001")
       try {
         console.log(`📡 [API] Sending offer to server for room: ${roomId}...`);
         const response = await ambulanceStreamingService.connectCameraViewer(
-          roomId, // room_id is used as camera_id parameter
+          roomId, // room_name is used as camera_id parameter
           {
             sdp: pc.localDescription!.sdp,
             type: pc.localDescription!.type,
@@ -1054,12 +1054,18 @@ export function useStreaming(): UseStreamingReturn {
 
         console.log("🔍 [SESSION] Looking for active session...");
         // Look for existing active session (started by RPi device)
-        const session = await findActiveSession(ambulanceId);
+        const sessionPromise = findActiveSession(ambulanceId);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Session lookup timeout after 10s")), 10000)
+        );
+        
+        const session = await Promise.race([sessionPromise, timeoutPromise]) as AmbulanceSession | null;
+        
         if (!session) {
+          const errorMsg = "No active ambulance session found. Please ensure the ambulance camera device is connected and streaming.";
           console.error("❌ [SESSION] No active session found");
-          throw new Error(
-            "No active ambulance session found. Please ensure the ambulance camera device is connected and streaming."
-          );
+          console.error("❌ [SESSION] Error message:", errorMsg);
+          throw new Error(errorMsg);
         }
 
         console.log("✅ [SESSION] Found active session:", session.id);
@@ -1067,96 +1073,127 @@ export function useStreaming(): UseStreamingReturn {
         console.log("✅ [SESSION] Session type:", session.session_type);
 
         // Get camera rooms for this ambulance session
-        let targetRoomId = roomId;
-        if (!targetRoomId) {
-          console.log("🔍 [ROOM] Getting camera rooms for session...");
-          const roomsResponse = await ambulanceStreamingService.getCameraRooms({
-            session_id: session.id,
-          });
+        console.log("🔍 [ROOM] Getting camera rooms for session...");
+        const roomsResponse = await ambulanceStreamingService.getCameraRooms({
+          session_id: session.id,
+        });
 
-          console.log(
-            "🔍 [ROOM] Found",
-            roomsResponse.data?.length || 0,
-            "room(s)"
-          );
+        console.log(
+          "🔍 [ROOM] Found",
+          roomsResponse.data?.length || 0,
+          "room(s)"
+        );
 
-          if (roomsResponse.data && roomsResponse.data.length > 0) {
-            // Log all rooms
-            roomsResponse.data.forEach((room, idx) => {
-              console.log(`  - Room ${idx + 1}:`, {
-                room_id: room.room_id,
-                connected: room.connected,
-                camera_id: room.camera_id,
-              });
-            });
-
-            // Use the first connected room, or first room if none connected
-            const connectedRoom = roomsResponse.data.find((r) => r.connected);
-            targetRoomId = (connectedRoom || roomsResponse.data[0]).room_id;
-
-            console.log(
-              "🎯 [ROOM] Selected room:",
-              targetRoomId,
-              connectedRoom ? "(connected)" : "(not connected yet)"
-            );
-
-            // ✅ NEW: If room is not connected yet, wait for it to become ready
-            if (!connectedRoom) {
-              console.log(
-                "⏳ [ROOM] Room not connected yet, waiting for stream to be ready..."
-              );
-              setUserFriendlyStatus(
-                "Camera is connecting, waiting for stream to be ready..."
-              );
-              const waitedRoom = await waitForRoomConnected(
-                targetRoomId,
-                session.id,
-                15000
-              ); // Wait up to 15 seconds
-              if (!waitedRoom) {
-                console.warn(
-                  "⚠️ [ROOM] Room did not become connected within timeout, attempting connection anyway"
-                );
-              } else {
-                console.log(
-                  "✅ [ROOM] Room is now connected:",
-                  waitedRoom.connected
-                );
-              }
-            } else {
-              console.log("✅ [ROOM] Room is already connected, proceeding");
-            }
-          } else {
-            console.error("❌ [ROOM] No camera rooms found");
-            throw new Error("No camera rooms found for this ambulance session");
-          }
+        if (!roomsResponse.data || roomsResponse.data.length === 0) {
+          console.error("❌ [ROOM] No camera rooms found");
+          throw new Error("No camera rooms found for this ambulance session");
         }
 
-        // Store the room_id (which IS the camera identifier in our API)
-        currentCameraIdRef.current = targetRoomId;
-        console.log("📝 [ROOM] Stored camera ID:", targetRoomId);
+        // Log all rooms
+        roomsResponse.data.forEach((room, idx) => {
+          console.log(`  - Room ${idx + 1}:`, {
+            id: room.id,
+            room_name: room.room_name,
+            connected: room.connected,
+            camera_id: room.camera_id,
+          });
+        });
+
+        // Find the target room
+        let selectedRoom;
+        if (roomId) {
+          console.log("🔍 [ROOM] Looking for specific room ID:", roomId);
+          
+          // Check if roomId is a placeholder ID
+          if (roomId.startsWith("placeholder-")) {
+            // Extract camera UUID from placeholder
+            const cameraId = roomId.replace("placeholder-", "");
+            console.log("🔍 [ROOM] Detected placeholder ID, looking for camera_id:", cameraId);
+            selectedRoom = roomsResponse.data.find((r) => r.camera_id === cameraId);
+          } else {
+            // Look for room by ID (UUID)
+            selectedRoom = roomsResponse.data.find((r) => r.id === roomId);
+          }
+
+          if (!selectedRoom) {
+            console.error("❌ [ROOM] Specified room not found:", roomId);
+            throw new Error(`Camera room ${roomId} not found or not streaming yet`);
+          }
+        } else {
+          // No specific room requested - use first connected, or first available
+          const connectedRoom = roomsResponse.data.find((r) => r.connected);
+          selectedRoom = connectedRoom || roomsResponse.data[0];
+        }
+
+        const targetRoomId = selectedRoom.id; // UUID for identification
+        const targetRoomName = selectedRoom.room_name; // Display name for API
+
+        console.log(
+          "🎯 [ROOM] Selected room:",
+          targetRoomName,
+          `(UUID: ${targetRoomId})`,
+          selectedRoom.connected ? "(connected)" : "(not connected yet)"
+        );
+
+        // ✅ If room is not connected yet, wait for it to become ready
+        if (!selectedRoom.connected) {
+          console.log(
+            "⏳ [ROOM] Room not connected yet, waiting for stream to be ready..."
+          );
+          setUserFriendlyStatus(
+            "Camera is connecting, waiting for stream to be ready..."
+          );
+          const waitedRoom = await waitForRoomConnected(
+            targetRoomId,
+            session.id,
+            15000
+          ); // Wait up to 15 seconds
+          if (!waitedRoom) {
+            console.warn(
+              "⚠️ [ROOM] Room did not become connected within timeout, attempting connection anyway"
+            );
+          } else {
+            console.log(
+              "✅ [ROOM] Room is now connected:",
+              waitedRoom.connected
+            );
+          }
+        } else {
+          console.log("✅ [ROOM] Room is already connected, proceeding");
+        }
+
+        // Store the room_name (display name used in API endpoints)
+        currentCameraIdRef.current = targetRoomName;
+
+        // currentCameraIdRef now stores the room_name for API calls
+        console.log(
+          "📝 [ROOM] Stored camera ID (room_name):",
+          currentCameraIdRef.current
+        );
+        console.log("📝 [ROOM] Room UUID:", targetRoomId);
 
         // Clean up any existing connection
         if (peerConnectionRef.current) {
           peerConnectionRef.current.close();
         }
 
-        if (!targetRoomId) {
-          throw new Error("Room ID is required for streaming");
+        if (!currentCameraIdRef.current) {
+          throw new Error("Room name is required for streaming");
         }
 
         console.log(
           "🔌 [WEBRTC] Creating peer connection for room:",
-          targetRoomId
+          currentCameraIdRef.current
         );
 
-        // Create peer connection using room_id (which is the camera_id parameter in API)
-        const pc = await createPeerConnection(targetRoomId);
+        // Create peer connection using room_name (which is the camera_id parameter in API)
+        const pc = await createPeerConnection(currentCameraIdRef.current);
         peerConnectionRef.current = pc;
 
         console.log("✅ [COMPLETE] Ambulance streaming connection established");
         console.log("✅ [COMPLETE] Session ID:", session.id);
-        console.log("✅ [COMPLETE] Room ID:", targetRoomId);
+        console.log("✅ [COMPLETE] Room Name:", currentCameraIdRef.current);
+        console.log("✅ [COMPLETE] Room UUID:", targetRoomId);
         console.log("✅ [COMPLETE] ========================================");
         setUserFriendlyStatus("Connected to ambulance camera successfully!");
       } catch (err) {

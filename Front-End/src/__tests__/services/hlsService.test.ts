@@ -13,6 +13,20 @@ jest.mock("@/services/api");
 const mockApi = api as jest.Mocked<typeof api>;
 
 describe("hlsService", () => {
+  // Suppress console.error and console.log during tests to reduce noise
+  const originalError = console.error;
+  const originalLog = console.log;
+  
+  beforeAll(() => {
+    console.error = jest.fn();
+    console.log = jest.fn();
+  });
+
+  afterAll(() => {
+    console.error = originalError;
+    console.log = originalLog;
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });

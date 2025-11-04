@@ -99,45 +99,53 @@ export function HybridStreamPlayer({
   }, [viewMode, timeBehindLive]);
   const hasRecording = !!roomId && !!recordingStatus;
 
-  // 🔥 CRITICAL: Auto-start live streaming with stale connection cleanup
+  // 🔥 CRITICAL: Auto-start live streaming on mount and mode changes
   useEffect(() => {
     console.log("[HybridPlayer] Auto-start effect triggered", {
       viewMode,
       isLiveConnected,
       isLiveConnecting,
+      ambulanceId,
+      roomId,
     });
 
-    // Clean up stale connection before starting (fixes navigation issue)
-    if (viewMode === "live" && (isLiveConnected || isLiveConnecting)) {
-      console.log("[HybridPlayer] Cleaning up stale connection");
-      stopStreaming();
-      setTimeout(() => {
-        startStreaming(ambulanceId, roomId);
-      }, 100);
+    // Only auto-start in live mode
+    if (viewMode !== "live") {
+      console.log("[HybridPlayer] Not in live mode, skipping auto-start");
       return;
     }
 
-    // Start fresh connection
-    if (viewMode === "live" && !isLiveConnected && !isLiveConnecting) {
-      console.log("[HybridPlayer] Starting live stream");
-      startStreaming(ambulanceId, roomId);
+    // Wait for roomId to be available (prevents race condition on initial load)
+    if (!roomId) {
+      console.log("[HybridPlayer] Room ID not ready yet, waiting...");
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, ambulanceId, roomId]);
 
-  // 🔥 CRITICAL: Cleanup on unmount (empty deps = runs ONLY on unmount)
+    // If already connected or connecting, don't restart
+    if (isLiveConnected || isLiveConnecting) {
+      console.log("[HybridPlayer] Already connected/connecting, skipping");
+      return;
+    }
+
+    // Start live streaming
+    console.log("[HybridPlayer] Starting live stream");
+    startStreaming(ambulanceId, roomId);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, ambulanceId, roomId]); // Don't include connection states to avoid loops
+
+  // 🔥 CRITICAL: Cleanup on unmount or room change
   useEffect(() => {
     return () => {
-      console.log("[HybridPlayer] Component unmounting - cleanup");
-      if (isLiveConnected || isLiveConnecting) {
-        stopStreaming();
-      }
-      if (hlsVideoRef.current && !hlsVideoRef.current.paused) {
+      console.log("[HybridPlayer] Component unmounting or room changed - cleanup");
+      stopStreaming();
+      if (hlsVideoRef.current) {
         hlsVideoRef.current.pause();
+        hlsVideoRef.current.src = "";
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [roomId, ambulanceId]); // Cleanup when room/ambulance changes
 
   // Video event listeners for playback mode
 

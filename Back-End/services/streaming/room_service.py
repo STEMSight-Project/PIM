@@ -13,13 +13,17 @@ from services.streaming.recording_service import recording_manager
 
 
 class StreamActivityMonitor:
-    """Professional monitor for stream activity with automatic timeout handling."""
+    """
+    Professional monitor for stream activity with automatic timeout handling.
+
+    Note: room_id parameter stores the room_name (display name like "AMB-001-ROOM-001").
+    """
 
     TIMEOUT_SECONDS = 120  # Increased to 120 seconds (2 minutes) for stability
     CHECK_INTERVAL = 10  # Check every 10 seconds (reduced overhead)
 
     def __init__(self, room_id: str, session_id: Optional[str] = None):
-        self.room_id = room_id
+        self.room_id = room_id  # This is actually room_name (e.g., "AMB-001-ROOM-001")
         self.session_id = session_id
         self.last_data_timestamp = time.time()
         self.monitor_task: Optional[asyncio.Task] = None
@@ -160,13 +164,18 @@ class StreamActivityMonitor:
 
 
 class ReconnectionHandler:
-    """Professional handler for room reconnection with 5-minute grace period."""
+    """
+    Professional handler for room reconnection with 5-minute grace period.
+
+    Note: room_id parameter stores the room_name (display name like "AMB-001-ROOM-001").
+    room_db_id stores the UUID from the database.
+    """
 
     RECONNECTION_TIMEOUT = 300  # 5 minutes
 
     def __init__(self, room_id: str, room_db_id: Optional[str] = None):
-        self.room_id = room_id
-        self.room_db_id = room_db_id
+        self.room_id = room_id  # This is actually room_name (e.g., "AMB-001-ROOM-001")
+        self.room_db_id = room_db_id  # This is the UUID from database
         self.timeout_task: Optional[asyncio.Task] = None
         self.reconnection_start_time: Optional[datetime] = None
         self._db_service = StreamingDatabaseService()
@@ -255,7 +264,12 @@ class ReconnectionHandler:
 
 
 class Room:
-    """Manages a WebRTC room with peer connections and database sync."""
+    """
+    Manages a WebRTC room with peer connections and database sync.
+
+    Note: room_id parameter stores the room_name (display name like "AMB-001-ROOM-001").
+    room_db_id stores the UUID from the database.
+    """
 
     def __init__(
         self,
@@ -263,9 +277,9 @@ class Room:
         session_id: Optional[str] = None,
         room_db_id: Optional[str] = None,
     ):
-        self.room_id = room_id
+        self.room_id = room_id  # room_name for display (e.g., "AMB-001-ROOM-001")
         self.session_id = session_id
-        self.room_db_id = room_db_id
+        self.room_db_id = room_db_id  # UUID from database (used for recording folders)
         self.pcs: Set[RTCPeerConnection] = set()
         self.streamer_pcs: Set[RTCPeerConnection] = set()
         self.viewer_pcs: Set[RTCPeerConnection] = set()
@@ -477,7 +491,7 @@ class Room:
                                 f"Stopping HLS recording for room {self.room_id} (session {self.session_id})"
                             )
                             asyncio.create_task(
-                                recording_manager.stop_session_recording(self.room_id)
+                                recording_manager.stop_session_recording(self.room_db_id)  # Use UUID
                             )
                         except Exception as e:
                             logger.error(
@@ -678,14 +692,15 @@ class Room:
                         f"✅ [RECORDING] Video track ready, starting HLS recording for room {self.room_id} (session {self.session_id})"
                     )
 
+                    # Use room_db_id (UUID) for recording folder identification
                     await recording_manager.start_session_recording(
                         self.session_id,
-                        self.room_id,
+                        self.room_db_id,  # Pass UUID instead of room_name
                         ambulance_number,
                         self.video_track,
                     )
                     logger.info(
-                        f"✅ [RECORDING] start_session_recording() completed for room {self.room_id}"
+                        f"✅ [RECORDING] start_session_recording() completed for room {self.room_id} (UUID: {self.room_db_id})"
                     )
                     return
 
