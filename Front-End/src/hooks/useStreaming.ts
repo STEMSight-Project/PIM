@@ -145,6 +145,9 @@ export function useStreaming(): UseStreamingReturn {
   const videoDataTimeoutRef = useRef<NodeJS.Timeout | null>(null); // NEW: Timeout for video data
   const videoEventCleanupRef = useRef<(() => void) | null>(null); // NEW: Cleanup function for video event listeners
 
+  // 🔥 CRITICAL: AbortController for API requests to prevent hanging
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // 🔥 NEW: Ref-based state tracking to prevent stale closure issues
   const isConnectingRef = useRef(false);
   const isConnectedRef = useRef(false);
@@ -213,10 +216,30 @@ export function useStreaming(): UseStreamingReturn {
 
   /**
    * Find active session for ambulance (started by RPi device)
+   * 🔥 CRITICAL: Uses AbortController with 3-second timeout to prevent hanging
    */
   const findActiveSession = useCallback(
     async (ambulanceId: string): Promise<AmbulanceSession | null> => {
+      // 🔥 Cancel any existing request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      // Create new AbortController for this request
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      // Set 3-second timeout
+      const timeoutId = setTimeout(() => {
+        console.warn(
+          "⏱️ [SESSION] Lookup timed out after 3 seconds, aborting..."
+        );
+        controller.abort();
+      }, 3000);
+
       try {
+        console.log("🔍 [SESSION] Looking up active session for:", ambulanceId);
+
         // Look for active sessions for this ambulance (started by RPi devices)
         const sessionsResponse =
           await ambulanceStreamingService.getAmbulanceSessions({
@@ -224,19 +247,42 @@ export function useStreaming(): UseStreamingReturn {
             is_active: true, // Only get active sessions
           });
 
+        clearTimeout(timeoutId);
+
         if (sessionsResponse.data && sessionsResponse.data.length > 0) {
           const session = sessionsResponse.data[0];
-          console.log("Found existing active ambulance session:", session.id);
+          console.log(
+            "✅ [SESSION] Found active ambulance session:",
+            session.id
+          );
           setCurrentSession(session);
+          abortControllerRef.current = null;
           return session;
         }
 
         // No active session found - RPi device hasn't started streaming yet
-        console.log("No active session found for ambulance:", ambulanceId);
+        console.log(
+          "⚠️ [SESSION] No active session found for ambulance:",
+          ambulanceId
+        );
         setCurrentSession(null);
+        abortControllerRef.current = null;
         return null;
       } catch (error) {
-        console.error("Error finding active ambulance session:", error);
+        clearTimeout(timeoutId);
+        abortControllerRef.current = null;
+
+        // Check if it was aborted due to timeout
+        if (error instanceof Error && error.name === "AbortError") {
+          console.error("❌ [SESSION] Request aborted (timeout or cancelled)");
+          setCurrentSession(null);
+          return null;
+        }
+
+        console.error(
+          "❌ [SESSION] Error finding active ambulance session:",
+          error
+        );
         setCurrentSession(null);
         return null;
       }
@@ -1343,6 +1389,13 @@ export function useStreaming(): UseStreamingReturn {
 
       // Set user stopped flag
       isUserStoppedRef.current = true;
+
+      // 🔥 CRITICAL: Abort any pending API requests
+      if (abortControllerRef.current) {
+        console.log("🧹 [UNMOUNT] Aborting pending API requests");
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
 
       // Clear all timeouts
       if (reconnectionTimeoutRef.current) {

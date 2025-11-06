@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -57,6 +57,10 @@ app = FastAPI(
         {
             "name": "PIM Classification",
             "description": "AI-powered movement classification",
+        },
+        {
+            "name": "Movement Detections",
+            "description": "Movement detection records with realtime support",
         },
     ],
 )
@@ -132,6 +136,15 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 def read_root():
     """Redirect to API documentation"""
     return RedirectResponse(url="/docs")
+
+
+@app.get("/test-realtime", response_class=HTMLResponse)
+async def serve_realtime_test():
+    """Serve the realtime test HTML page"""
+    html_path = Path(__file__).parent / "test_movement_realtime.html"
+    if html_path.exists():
+        return HTMLResponse(content=html_path.read_text(), status_code=200)
+    return HTMLResponse(content="<h1>Test file not found</h1>", status_code=404)
 
 
 # Mount static files for HLS recordings

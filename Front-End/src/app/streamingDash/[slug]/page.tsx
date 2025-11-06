@@ -1,6 +1,7 @@
 "use client";
 
 import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
+import { MovementDetectionPanel } from "@/components/MovementDetectionPanel";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
 import { useRealtimeAmbulanceSessions } from "@/hooks/useRealtime";
 import type { AmbulanceSession, CameraRoom } from "@/types";
@@ -232,9 +233,9 @@ export default function AmbulanceStreamingPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Video Stream - HybridStreamPlayer */}
-          <div className="lg:col-span-2">
+          <div className="xl:col-span-2">
             <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
               <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50">
                 <div className="flex items-center justify-between">
@@ -510,6 +511,48 @@ export default function AmbulanceStreamingPage() {
                     </>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Movement Detection Panel */}
+          <div className="space-y-6">
+            <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-orange-50">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <span className="text-2xl">🎯</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      Movement Detection
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Real-time AI detection
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4">
+                {selectedRoomId ? (
+                  <MovementDetectionPanel
+                    roomId={selectedRoomId}
+                    showValidationButtons={true}
+                    maxDetections={15}
+                  />
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 mx-auto mb-3 bg-slate-100 rounded-full flex items-center justify-center">
+                      <span className="text-3xl">🎯</span>
+                    </div>
+                    <p className="text-slate-600 font-medium mb-1">
+                      No Camera Selected
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Select a camera to view detections
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -53,6 +53,19 @@ export type { HLSRecordingInfo, HLSRecordingStatus } from "./hlsService";
 export { noteService } from "./noteService";
 export type { Note, NoteCreateRequest, NoteUpdateRequest } from "./noteService";
 
+// Movement detection service for Parkinson's involuntary movements
+export type {
+  CreateMovementDetection,
+  MovementDetection,
+  MovementDetectionRealtimeEvent,
+  MovementDetectionStats,
+  MovementType,
+  UpdateMovementDetection,
+  UpdateValidationStatus,
+  ValidationStatus,
+} from "@/types/movementDetection";
+export { movementDetectionService } from "./movementDetectionService";
+
 // Live streaming services for real-time video sessions
 // Ambulance streaming service (new)
 export type {

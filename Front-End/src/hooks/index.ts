@@ -15,6 +15,11 @@ export { AuthProvider, useAuth } from "./useAuth";
 export { useIsClient, useLocalStorage } from "./useClientSide";
 export { Specialization, useDoctors } from "./useDoctors";
 export { useMedicalHistory } from "./useMedicalHistory";
+export { useMovementDetections } from "./useMovementDetections";
+export type {
+  UseMovementDetectionsOptions,
+  UseMovementDetectionsReturn,
+} from "./useMovementDetections";
 export { useNotes } from "./useNotes";
 export { usePasswordReset } from "./usePasswordReset";
 export { usePatientEvents } from "./usePatientEvents";

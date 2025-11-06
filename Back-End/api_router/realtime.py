@@ -229,6 +229,58 @@ async def realtime_ai_detections(
     )
 
 
+@router.get("/movement-detections")
+async def realtime_movement_detections(
+    request: Request,
+    room_id: Optional[str] = None,
+    recording_id: Optional[str] = None,
+    validation_status: Optional[str] = None,
+):
+    """
+    Stream real-time updates for movement detections using SSE
+
+    Query Parameters:
+    - room_id: Filter by specific room ID
+    - recording_id: Filter by specific recording ID
+    - validation_status: Filter by validation status (pending, confirmed, dismissed)
+    """
+    logger.info(
+        "Starting real-time movement detections stream - room_id: %s, recording_id: %s, status: %s",
+        room_id or "all",
+        recording_id or "all",
+        validation_status or "all",
+    )
+
+    # Build custom filter based on provided parameters
+    filters = []
+    if room_id:
+        filters.append(f"room_id=eq.{room_id}")
+    if recording_id:
+        filters.append(f"recording_id=eq.{recording_id}")
+    if validation_status:
+        filters.append(f"validation_status=eq.{validation_status}")
+
+    custom_filter = ",".join(filters) if filters else None
+
+    stream = realtime_service.create_sse_stream(
+        request=request,
+        table="movement_detections",
+        patient_id=None,
+        event_filter="*",
+        custom_filter=custom_filter,
+    )
+
+    return StreamingResponse(
+        stream,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 # Keep legacy endpoint for backward compatibility
 @router.get("/patient/{patient_id}/status", dependencies=[Depends(current_user)])
 async def realtime_patient_status(request: Request, patient_id: str):

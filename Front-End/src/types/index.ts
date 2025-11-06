@@ -3,3 +3,4 @@ export * from "./ambulance";
 export * from "./api";
 export * from "./auth";
 export * from "./medical";
+export * from "./movementDetection";
