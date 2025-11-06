@@ -42,6 +42,7 @@ class HLSService {
 
   /**
    * Get the full URL for an HLS playlist
+   * Uses /videos/hls/{room_id}/playlist.m3u8 endpoint
    */
   getPlaylistUrl(roomId: string): string {
     return `${this.baseUrl}/videos/hls/${roomId}/playlist.m3u8`;
@@ -49,23 +50,22 @@ class HLSService {
 
   /**
    * Get the full URL for an HLS segment
+   * Uses /videos/hls/{room_id}/{segment_name} endpoint
    */
-  getSegmentUrl(sessionId: string, segmentName: string): string {
-    return `${this.baseUrl}/videos/hls/${sessionId}/${segmentName}`;
+  getSegmentUrl(roomId: string, segmentName: string): string {
+    return `${this.baseUrl}/videos/hls/${roomId}/${segmentName}`;
   }
 
   /**
    * Get recording status
    *
-   * @param sessionId - The session ID to check
+   * @param roomId - The room ID to check (e.g., AMB-001-ROOM-001)
    * @returns Recording status information
    */
-  async getRecordingStatus(
-    sessionId: string
-  ): Promise<HLSRecordingStatus | null> {
+  async getRecordingStatus(roomId: string): Promise<HLSRecordingStatus | null> {
     try {
       const response = await api.get<HLSRecordingStatus>(
-        `/videos/hls/${sessionId}/status`
+        `/videos/hls/${roomId}/status`
       );
 
       if (response.error) {
@@ -104,12 +104,12 @@ class HLSService {
   /**
    * Delete a recording
    *
-   * @param sessionId - The session ID to delete
+   * @param roomId - The room ID to delete
    * @returns Success status
    */
-  async deleteRecording(sessionId: string): Promise<boolean> {
+  async deleteRecording(roomId: string): Promise<boolean> {
     try {
-      const response = await api.delete(`/videos/hls/${sessionId}`);
+      const response = await api.delete(`/videos/hls/${roomId}`);
 
       if (response.error) {
         console.error("Error deleting recording:", response.error);
@@ -126,11 +126,11 @@ class HLSService {
   /**
    * Check if HLS is ready for playback
    *
-   * @param sessionId - The session ID to check
+   * @param roomId - The room ID to check
    * @returns True if HLS is ready (has playlist and segments)
    */
-  async isHLSReady(sessionId: string): Promise<boolean> {
-    const status = await this.getRecordingStatus(sessionId);
+  async isHLSReady(roomId: string): Promise<boolean> {
+    const status = await this.getRecordingStatus(roomId);
     return status?.hls_ready || false;
   }
 
@@ -139,20 +139,20 @@ class HLSService {
    *
    * Polls the status endpoint until HLS is ready or timeout is reached.
    *
-   * @param sessionId - The session ID to wait for
+   * @param roomId - The room ID to wait for
    * @param timeoutMs - Maximum time to wait in milliseconds (default: 30000)
    * @param intervalMs - Polling interval in milliseconds (default: 1000)
    * @returns True if HLS became ready, false if timeout
    */
   async waitForHLSReady(
-    sessionId: string,
+    roomId: string,
     timeoutMs: number = 30000,
     intervalMs: number = 1000
   ): Promise<boolean> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeoutMs) {
-      const ready = await this.isHLSReady(sessionId);
+      const ready = await this.isHLSReady(roomId);
 
       if (ready) {
         return true;
@@ -166,19 +166,29 @@ class HLSService {
   }
 
   /**
+   * Get SSE endpoint URL for real-time segment notifications
+   *
+   * @param roomId - The room ID to monitor
+   * @returns EventSource URL for SSE connection
+   */
+  getSegmentEventsUrl(roomId: string): string {
+    return `${this.baseUrl}/videos/hls/segments/${roomId}/events`;
+  }
+
+  /**
    * Poll recording status
    *
    * Continuously polls the status endpoint and calls a callback with updates.
    * Only triggers callback when segment_count changes to reduce unnecessary updates.
    * Returns a cleanup function to stop polling.
    *
-   * @param sessionId - The session ID to monitor
+   * @param roomId - The room ID to monitor
    * @param callback - Function to call with status updates (only on segment count change)
    * @param intervalMs - Polling interval in milliseconds (default: 15000)
    * @returns Cleanup function to stop polling
    */
   pollRecordingStatus(
-    sessionId: string,
+    roomId: string,
     callback: (status: HLSRecordingStatus | null) => void,
     intervalMs: number = 15000
   ): () => void {
@@ -187,7 +197,7 @@ class HLSService {
 
     const poll = async () => {
       while (isPolling) {
-        const status = await this.getRecordingStatus(sessionId);
+        const status = await this.getRecordingStatus(roomId);
 
         // Only call callback if segment count changed or first fetch
         if (status) {

@@ -60,7 +60,7 @@ class SupabaseRealtimeService:
                             "No data in realtime payload for table %s", table
                         )
                         return
-
+                    print("Received realtime event data:", data)
                     event_data = {
                         "type": "database_change",
                         "table": table,

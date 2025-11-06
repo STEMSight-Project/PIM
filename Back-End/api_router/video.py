@@ -303,6 +303,95 @@ async def get_hls_playlist(room_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/hls/segments/{room_id}/events")
+async def hls_segment_events(request: Request, room_id: str):
+    """
+    Server-Sent Events (SSE) endpoint for real-time HLS segment notifications.
+
+    Clients can connect to this endpoint to receive events when new HLS segments
+    are created during recording. This enables real-time HLS playback updates.
+
+    Event Types:
+    - connected: Initial connection confirmation
+    - new_segment: New HLS segment created
+    - heartbeat: Keep-alive ping every 30 seconds
+    - error: Error occurred
+
+    Args:
+        request: FastAPI request object
+        room_id: Camera room ID
+
+    Returns:
+        StreamingResponse with SSE events
+
+    ⚠️ IMPORTANT: This route MUST be defined BEFORE the catch-all segment route
+    to prevent /segments/{room_id}/events from being captured as a segment file.
+
+    Example client usage (JavaScript):
+    ```javascript
+    const eventSource = new EventSource('/videos/hls/segments/AMB-001-ROOM-001/events');
+
+    eventSource.addEventListener('message', (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'new_segment') {
+            console.log('New segment:', data.segment_name);
+            // Reload HLS player to get latest segments
+            hls.loadSource('/videos/hls/AMB-001-ROOM-001/playlist.m3u8');
+        }
+    });
+    ```
+    """
+    try:
+        # Get segment monitor for this room
+        monitor = hls_segment_service.get_monitor(room_id)
+
+        if not monitor:
+            raise HTTPException(
+                status_code=404, detail=f"No active recording found for room {room_id}"
+            )
+
+        # Generate unique client ID
+        client_id = str(uuid4())
+
+        # Create SSE stream
+        return StreamingResponse(
+            monitor.create_sse_stream(request, client_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating SSE stream for room {room_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hls/segments/stats")
+async def get_segment_service_stats():
+    """
+    Get statistics about active HLS segment monitoring.
+
+    Useful for debugging and monitoring the segment service health.
+
+    Returns:
+        Statistics including active monitors, SSE clients, and segment counts
+
+    ⚠️ IMPORTANT: This route MUST be defined BEFORE the catch-all segment route.
+    """
+    try:
+        stats = hls_segment_service.get_stats()
+        return {"data": stats, "error": None}
+    except Exception as e:
+        logger.error(f"Error getting segment service stats: {e}")
+        return {"data": None, "error": str(e)}
+
+
 @router.get("/hls/{room_id}/status")
 async def get_recording_status(room_id: str):
     """
@@ -374,38 +463,43 @@ async def get_hls_segment(room_id: str, segment_name: str):
     try:
         # Debug logging
         logger.info(
-            f"[HLS] Segment request - Room: {room_id}, Raw segment: '{segment_name}', Length: {len(segment_name)}, Repr: {repr(segment_name)}"
+            f"[HLS] Segment request - Room: {room_id}, Raw segment: '{segment_name}'"
         )
 
-        # Remove any leading slashes or backslashes first
-        segment_name = segment_name.lstrip("/\\")
-        logger.info(f"[HLS] After stripping: '{segment_name}'")
+        # Clean segment name: Remove leading/trailing slashes and backslashes
+        segment_name = segment_name.strip("/\\")
 
-        # Security: Validate segment name to prevent path traversal
-        # Only allow filename (no subdirectories)
-        if "/" in segment_name or "\\" in segment_name:
-            logger.warning(f"Segment name contains path separators: {segment_name}")
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid segment name - no subdirectories allowed",
-            )
+        if debug := True:  # Enable for troubleshooting
+            logger.info(f"[HLS] Cleaned segment name: '{segment_name}'")
 
+        # Security validation AFTER cleaning
         # Prevent directory traversal
         if ".." in segment_name:
-            logger.warning(f"Directory traversal attempted: {segment_name}")
+            logger.warning(f"[HLS] Directory traversal attempted: {segment_name}")
             raise HTTPException(
                 status_code=400,
                 detail="Invalid segment name - directory traversal not allowed",
             )
 
-        # Allow only .ts files (check lowercase to handle case variations)
-        if not segment_name.lower().endswith(".ts"):
+        # Prevent subdirectories (after cleaning, no slashes should remain)
+        if "/" in segment_name or "\\" in segment_name:
             logger.warning(
-                f"Non-TS file requested: '{segment_name}' (ends with: '{segment_name[-10:] if len(segment_name) > 10 else segment_name}')"
+                f"[HLS] Segment name contains path separators after cleaning: {segment_name}"
             )
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid segment name - only .ts files allowed (got: {segment_name})",
+                detail="Invalid segment name - no subdirectories allowed",
+            )
+
+        # Validate file extension (.ts or .m3u8 for playlist)
+        if not (
+            segment_name.lower().endswith(".ts")
+            or segment_name.lower().endswith(".m3u8")
+        ):
+            logger.warning(f"[HLS] Invalid file type requested: {segment_name}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid segment name - only .ts or .m3u8 files allowed",
             )
 
         segment_path = RECORDINGS_BASE_PATH / f"room-{room_id}" / segment_name
@@ -674,95 +768,6 @@ async def get_recording_status_public(room_id: str):
 async def list_hls_recordings_public():
     """List all available HLS recordings (public endpoint)"""
     return await list_hls_recordings()
-
-
-# ============================================================================
-# HLS SEGMENT SSE ENDPOINTS (Real-time segment notifications)
-# ============================================================================
-
-
-@router.get("/hls/segments/{room_id}/events")
-async def hls_segment_events(request: Request, room_id: str):
-    """
-    Server-Sent Events (SSE) endpoint for real-time HLS segment notifications.
-
-    Clients can connect to this endpoint to receive events when new HLS segments
-    are created during recording. This enables real-time HLS playback updates.
-
-    Event Types:
-    - connected: Initial connection confirmation
-    - new_segment: New HLS segment created
-    - heartbeat: Keep-alive ping every 30 seconds
-    - error: Error occurred
-
-    Args:
-        request: FastAPI request object
-        room_id: Camera room ID
-
-    Returns:
-        StreamingResponse with SSE events
-
-    Example client usage (JavaScript):
-    ```javascript
-    const eventSource = new EventSource('/videos/hls/segments/AMB-001-ROOM-001/events');
-
-    eventSource.addEventListener('message', (event) => {
-        const data = JSON.parse(event.data);
-
-        if (data.type === 'new_segment') {
-            console.log('New segment:', data.segment_name);
-            // Reload HLS player to get latest segments
-            hls.loadSource('/videos/hls/AMB-001-ROOM-001/playlist.m3u8');
-        }
-    });
-    ```
-    """
-    try:
-        # Get segment monitor for this room
-        monitor = hls_segment_service.get_monitor(room_id)
-
-        if not monitor:
-            raise HTTPException(
-                status_code=404, detail=f"No active recording found for room {room_id}"
-            )
-
-        # Generate unique client ID
-        client_id = str(uuid4())
-
-        # Create SSE stream
-        return StreamingResponse(
-            monitor.create_sse_stream(request, client_id),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",  # Disable nginx buffering
-            },
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error creating SSE stream for room {room_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/hls/segments/stats")
-async def get_segment_service_stats():
-    """
-    Get statistics about active HLS segment monitoring.
-
-    Useful for debugging and monitoring the segment service health.
-
-    Returns:
-        Statistics including active monitors, SSE clients, and segment counts
-    """
-    try:
-        stats = hls_segment_service.get_stats()
-        return {"data": stats, "error": None}
-    except Exception as e:
-        logger.error(f"Error getting segment service stats: {e}")
-        return {"data": None, "error": str(e)}
 
 
 @public_hls_router.get("/hls/segments/{room_id}/events")

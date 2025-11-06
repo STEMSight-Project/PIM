@@ -92,9 +92,7 @@ export function useHLSSegmentEvents(
   const connect = () => {
     if (!roomId) {
       if (debug) {
-        console.log(
-          "[useHLSSegmentEvents] No room ID provided, skipping connection"
-        );
+        ("[useHLSSegmentEvents] No room ID provided, skipping connection");
       }
       return;
     }
@@ -102,10 +100,9 @@ export function useHLSSegmentEvents(
     // Clean up existing connection
     disconnect();
 
-    const sseUrl = `${API_BASE_URL}/api/videos/hls/segments/${roomId}/events`;
+    const sseUrl = `${API_BASE_URL}/videos/hls/segments/${roomId}/events`;
 
     if (debug) {
-      console.log("[useHLSSegmentEvents] Connecting to SSE:", sseUrl);
     }
 
     try {
@@ -118,7 +115,6 @@ export function useHLSSegmentEvents(
       // Event: SSE connection opened
       eventSource.onopen = () => {
         if (debug) {
-          console.log("[useHLSSegmentEvents] SSE connection opened");
         }
         setIsConnected(true);
         setStatus("Connected");
@@ -131,7 +127,6 @@ export function useHLSSegmentEvents(
           const data: SegmentEvent = JSON.parse(event.data);
 
           if (debug) {
-            console.log("[useHLSSegmentEvents] Event received:", data);
           }
 
           switch (data.type) {
@@ -150,7 +145,6 @@ export function useHLSSegmentEvents(
               setStatus(
                 `New segment ${data.segment_number || "unknown"} available`
               );
-
               if (debug) {
                 console.log(
                   `[useHLSSegmentEvents] New segment: ${data.segment_name} (${data.file_size} bytes)`
@@ -162,19 +156,70 @@ export function useHLSSegmentEvents(
                 onSegmentAdded(data);
               }
 
-              // Auto-reload HLS player
-              if (autoReload && hls && hls.url) {
+              // Auto-reload HLS player playlist (smooth, non-disruptive)
+              if (autoReload && hls && hls.media) {
+                const video = hls.media;
+                const currentTime = video.currentTime;
+                const duration = video.duration || 0;
+                const isPlaying = !video.paused;
+
+                // Check if we're near the live edge (within 15 seconds)
+                const timeBehindLive = duration - currentTime;
+                const isNearLive = timeBehindLive < 15;
+
                 if (debug) {
-                  console.log("[useHLSSegmentEvents] Reloading HLS player...");
+                  console.log(
+                    `[useHLSSegmentEvents] Auto-reload check - Time: ${currentTime.toFixed(
+                      2
+                    )}s, Duration: ${duration.toFixed(
+                      2
+                    )}s, Behind: ${timeBehindLive.toFixed(
+                      2
+                    )}s, Near Live: ${isNearLive}`
+                  );
                 }
 
-                // Reload the playlist to include new segment
-                const currentTime = hls.media?.currentTime || 0;
-                hls.loadSource(hls.url);
+                // ALWAYS reload playlist when new segment arrives
+                // This ensures the player knows about new segments
+                if (debug) {
+                  console.log(
+                    "[useHLSSegmentEvents] Forcing playlist reload for new segment..."
+                  );
+                }
 
-                // Try to restore playback position
-                if (hls.media) {
-                  hls.media.currentTime = currentTime;
+                try {
+                  // Force playlist reload by resetting level and restarting load
+                  // This is the CORRECT way to refresh playlist in HLS.js
+                  hls.loadLevel = -1; // Reset to auto quality selection
+
+                  // Stop and restart loading to fetch updated playlist
+                  hls.stopLoad();
+                  hls.startLoad(currentTime); // Start from current position
+
+                  if (debug) {
+                    console.log(
+                      "[useHLSSegmentEvents] Playlist reload triggered successfully"
+                    );
+                  }
+
+                  // Ensure video continues playing if it was playing
+                  if (isPlaying && video.paused) {
+                    video.play().catch((err) => {
+                      if (debug) {
+                        console.warn(
+                          "[useHLSSegmentEvents] Failed to resume playback:",
+                          err
+                        );
+                      }
+                    });
+                  }
+                } catch (err) {
+                  if (debug) {
+                    console.error(
+                      "[useHLSSegmentEvents] Error refreshing playlist:",
+                      err
+                    );
+                  }
                 }
               }
               break;
@@ -182,7 +227,6 @@ export function useHLSSegmentEvents(
             case "heartbeat":
               // Keep-alive ping
               if (debug) {
-                console.log("[useHLSSegmentEvents] Heartbeat received");
               }
               break;
 
@@ -193,7 +237,6 @@ export function useHLSSegmentEvents(
               setStatus(`Error: ${errorMsg}`);
 
               if (debug) {
-                console.error("[useHLSSegmentEvents] Server error:", errorMsg);
               }
 
               if (onError) {
@@ -210,15 +253,12 @@ export function useHLSSegmentEvents(
               }
           }
         } catch (err) {
-          console.error("[useHLSSegmentEvents] Error parsing SSE event:", err);
           setError("Failed to parse SSE event");
         }
       };
 
       // Event: SSE error
       eventSource.onerror = (err) => {
-        console.error("[useHLSSegmentEvents] SSE connection error:", err);
-
         setIsConnected(false);
         setStatus("Connection error");
         setError("SSE connection failed");
@@ -234,13 +274,11 @@ export function useHLSSegmentEvents(
         // Attempt reconnection after 5 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
           if (debug) {
-            console.log("[useHLSSegmentEvents] Attempting to reconnect...");
           }
           connect();
         }, 5000);
       };
     } catch (err) {
-      console.error("[useHLSSegmentEvents] Failed to create EventSource:", err);
       setError("Failed to connect to SSE");
       setStatus("Connection failed");
     }
@@ -259,7 +297,6 @@ export function useHLSSegmentEvents(
     // Close EventSource
     if (eventSourceRef.current) {
       if (debug) {
-        console.log("[useHLSSegmentEvents] Closing SSE connection");
       }
 
       eventSourceRef.current.close();
@@ -274,7 +311,6 @@ export function useHLSSegmentEvents(
    */
   const reconnect = () => {
     if (debug) {
-      console.log("[useHLSSegmentEvents] Manual reconnect triggered");
     }
     connect();
   };

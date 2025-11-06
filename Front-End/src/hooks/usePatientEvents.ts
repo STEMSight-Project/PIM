@@ -60,7 +60,6 @@ export function usePatientEvents(): UsePatientEventsReturn {
       const message =
         err instanceof Error ? err.message : "Failed to fetch patient events";
       setError(message);
-      console.error("Error fetching patient events:", err);
     } finally {
       setLoading(false);
     }
@@ -78,7 +77,6 @@ export function usePatientEvents(): UsePatientEventsReturn {
       const message =
         err instanceof Error ? err.message : "Failed to fetch video events";
       setError(message);
-      console.error("Error fetching video events:", err);
     } finally {
       setLoading(false);
     }
@@ -111,7 +109,6 @@ export function usePatientEvents(): UsePatientEventsReturn {
         const message =
           err instanceof Error ? err.message : "Failed to update event status";
         setError(message);
-        console.error("Error updating event status:", err);
         return null;
       } finally {
         setLoading(false);

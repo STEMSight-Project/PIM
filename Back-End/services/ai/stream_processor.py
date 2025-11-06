@@ -19,8 +19,10 @@ logger = logging.getLogger(__name__)
 
 class StreamMovementProcessor:
     """
-    Processes video streams for automatic movement detection
-    Buffers skeleton data and triggers AI classification
+    Processes video streams for automatic movement detection.
+    Buffers skeleton data and triggers AI classification.
+
+    Note: room_id parameter stores the room_name (display name like "AMB-001-ROOM-001").
     """
 
     def __init__(
@@ -29,7 +31,7 @@ class StreamMovementProcessor:
         camera_id: str,
         video_id: int,
         patient_id: int,
-        room_id: str = None,
+        room_id: str = None,  # This is actually room_name (e.g., "AMB-001-ROOM-001")
         window_size: int = 60,
         stride: int = 30,
         min_confidence: float = 0.70,
@@ -42,7 +44,7 @@ class StreamMovementProcessor:
             camera_id: Camera ID
             video_id: ID of the video being processed
             patient_id: ID of the patient
-            room_id: Optional room ID
+            room_id: Optional room name (e.g., "AMB-001-ROOM-001")
             window_size: Number of frames to collect before prediction
             stride: Number of frames to move window (for overlapping detection)
             min_confidence: Minimum confidence to save detection

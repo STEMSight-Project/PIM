@@ -30,7 +30,7 @@ class AIDetectionService:
         recommendation: str,
         all_probabilities: Dict,
         requires_review: bool,
-        room_id: str = None,
+        room_id: str = None,  # This is actually room_name (e.g., "AMB-001-ROOM-001")
         frame_timestamp: datetime = None,
         metadata: Dict = None,
     ) -> Dict:
@@ -50,7 +50,7 @@ class AIDetectionService:
             recommendation: Clinical recommendation text
             all_probabilities: Dictionary of all class probabilities
             requires_review: Whether manual review is needed
-            room_id: Optional room ID
+            room_id: Optional room name (e.g., "AMB-001-ROOM-001")
             frame_timestamp: Timestamp of the frame
             metadata: Additional metadata
 

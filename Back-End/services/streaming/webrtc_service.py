@@ -512,13 +512,23 @@ class WebRTCService:
                 asyncio.create_task(self._monitor_track_activity(track, room_id, room))
 
                 # Add track to all other peer connections in the room
+                viewers_updated = 0
                 for other_pc in room.pcs:
                     if other_pc != pc:
                         other_pc.addTrack(relayed_track)
-                        logger.debug(
-                            "[RELAY] Added relayed track to peer connection in room %s",
-                            room_id,
+                        viewers_updated += 1
+                        logger.info(
+                            f"[RELAY] Added {track.kind} track to existing viewer in room {room_id}"
                         )
+
+                if viewers_updated > 0:
+                    logger.info(
+                        f"✅ [RELAY] Added track to {viewers_updated} existing viewer(s) in room {room_id}"
+                    )
+                else:
+                    logger.info(
+                        f"📝 [RELAY] Track ready for room {room_id}, waiting for viewers to connect"
+                    )
 
                 @track.on("ended")
                 async def on_ended():
@@ -565,6 +575,7 @@ class WebRTCService:
                     room.remove_peer_connection(pc)
 
             # Add existing tracks from other connections
+            tracks_added = 0
             for other_pc in room.pcs:
                 if other_pc != pc:
                     for transceiver in other_pc.getTransceivers():
@@ -572,6 +583,23 @@ class WebRTCService:
                             track = transceiver.receiver.track
                             relayed_track = self.relay.subscribe(track)
                             pc.addTrack(relayed_track)
+                            tracks_added += 1
+                            logger.info(
+                                f"[VIEWER] Added {track.kind} track to viewer for room {room_id}"
+                            )
+
+            # Log diagnostic information
+            if tracks_added == 0:
+                logger.warning(
+                    f"⚠️ [VIEWER] No tracks available yet for room {room_id}. "
+                    f"Streamer connections: {len(room.streamer_pcs)}, "
+                    f"First frame received: {room._first_frame_received}. "
+                    f"Viewer may need to reconnect once stream is ready."
+                )
+            else:
+                logger.info(
+                    f"✅ [VIEWER] Successfully added {tracks_added} track(s) to viewer for room {room_id}"
+                )
 
             # Set remote description
             await pc.setRemoteDescription(

@@ -11,7 +11,10 @@ import { useEffect, useState } from "react";
 // -
 function hasAnyToken() {
   if (typeof window === "undefined") return false;
-  return !!(localStorage.getItem("access_token") || localStorage.getItem("refresh_token"));
+  return !!(
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("refresh_token")
+  );
 }
 
 export function usePatients() {
@@ -24,7 +27,7 @@ export function usePatients() {
       setIsLoading(true);
       setError(null);
 
-      // - 
+      // -
       if (!hasAnyToken()) {
         setError("AUTH_MISSING: You’re signed out. Please sign in.");
         return;
@@ -40,7 +43,6 @@ export function usePatients() {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to fetch patients";
       setError(errorMessage);
-      console.error("Error fetching patients:", err);
     } finally {
       setIsLoading(false);
     }

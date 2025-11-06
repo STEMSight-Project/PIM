@@ -209,7 +209,7 @@ class CameraBroadcaster:
                 # Create/join camera room
                 camera_room_payload = {
                     "camera_id": self.camera_id,
-                    "room_id": self.room_name,
+                    "room_name": self.room_name,
                     "device_name": self.device_name,
                 }
                 create_room_url = f"{self.base_url}/ambulance-streaming/camera-rooms"

@@ -299,7 +299,7 @@ async def check_room_status(base_url: str, room_id: str) -> None:
                             print(f"   📷 Camera Rooms:")
                             for room in found_ambulance["camera_rooms"]:
                                 print(
-                                    f"      - {room.get('camera_name', 'Unknown')}: {room.get('room_id', 'No ID')}"
+                                    f"      - {room.get('camera_name', 'Unknown')}: {room.get('room_name', 'No Name')} (UUID: {room.get('id', 'No ID')})"
                                 )
                     else:
                         print(f"   ❌ Ambulance {room_id} not found")
@@ -565,7 +565,7 @@ async def publish(
             # Step 2b: Check if camera room already exists, create if not
             camera_room_payload = {
                 "camera_id": camera_id,
-                "room_id": room_name,
+                "room_name": room_name,
                 "device_name": device_name or "Ambulance Broadcaster",
             }
             create_camera_room_url = f"{base_url}/ambulance-streaming/camera-rooms"
@@ -582,12 +582,12 @@ async def publish(
                     existing_rooms = await get_resp.json()
                     for room in existing_rooms:
                         if (
-                            room.get("room_id") == room_name
+                            room.get("room_name") == room_name
                             and room.get("camera_id") == camera_id
                         ):
                             existing_room_id = room.get("id")
                             LOGGER.info(
-                                f"✅ Found existing camera room (ID: {existing_room_id})"
+                                f"✅ Found existing camera room (UUID: {existing_room_id})"
                             )
                             LOGGER.info(f"🔄 Rejoining existing room: {room_name}")
                             break
@@ -624,7 +624,7 @@ async def publish(
                             f"Camera room creation failed ({resp.status}): {error_text}"
                         )
 
-                        # Check if it's a duplicate room_id error
+                        # Check if it's a duplicate room_name error
                         if (
                             "already exists" in error_text.lower()
                             or "duplicate" in error_text.lower()
@@ -645,7 +645,7 @@ async def publish(
             # Fallback to regular streaming room
             room_payload = {
                 "session_id": session_id,
-                "room_id": room_name,
+                "room_name": room_name,
                 "device_name": device_name or "Ambulance Device",
             }
             create_room_url = f"{base_url}/streaming/rooms"
@@ -653,12 +653,12 @@ async def publish(
             async with session.post(create_room_url, json=room_payload) as resp:
                 if resp.status == 200:
                     room_json = await resp.json()
-                    room_id_created = (
-                        room_json.get("room_name") or room_payload["room_id"]
+                    room_name_created = (
+                        room_json.get("room_name") or room_payload["room_name"]
                     )
-                    LOGGER.info(f"✅ Regular room created: {room_id_created}")
+                    LOGGER.info(f"✅ Regular room created: {room_name_created}")
                     streaming_url = (
-                        f"{base_url}/streaming/room/{room_id_created}/streamer"
+                        f"{base_url}/streaming/room/{room_name_created}/streamer"
                     )
                 else:
                     error_text = await resp.text()

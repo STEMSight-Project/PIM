@@ -25,7 +25,7 @@ export interface UseHLSOptions {
   /** Enable debug logging */
   debug?: boolean;
 
-  /** Polling interval for status updates (ms) - default: 15000ms (15s, matches segment duration/2) */
+  /** Polling interval for status updates (ms) - default: 5000ms (5s, half of 10s segment duration) */
   statusPollingInterval?: number;
 }
 
@@ -71,7 +71,7 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
     lowLatencyMode = false,
     maxBufferLength = 30,
     debug = false,
-    statusPollingInterval = 15000, // Poll every 15 seconds (half of 30s segment duration)
+    statusPollingInterval = 5000, // Poll every 5 seconds (half of 10s segment duration)
   } = options;
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -96,11 +96,13 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
     }
 
     const video = videoRef.current;
-    const playlistUrl = hlsService.getPlaylistUrl(roomId);
+    // Add cache-busting timestamp to prevent loading old playlist data
+    const timestamp = Date.now();
+    const playlistUrl = `${hlsService.getPlaylistUrl(roomId)}?t=${timestamp}`;
 
     if (debug) {
       console.log("[useHLS] Initializing player for room:", roomId);
-      console.log("[useHLS] Playlist URL:", playlistUrl);
+      console.log("[useHLS] Playlist URL (with cache-bust):", playlistUrl);
     }
 
     // Clean up existing instance
@@ -121,6 +123,16 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
         lowLatencyMode,
         maxBufferLength,
         debug,
+        // Disable HLS.js internal caching to force fresh playlist fetches
+        xhrSetup: function (xhr: XMLHttpRequest, url: string) {
+          // Add cache-busting headers
+          xhr.setRequestHeader(
+            "Cache-Control",
+            "no-cache, no-store, must-revalidate"
+          );
+          xhr.setRequestHeader("Pragma", "no-cache");
+          xhr.setRequestHeader("Expires", "0");
+        },
       });
 
       hlsRef.current = hls;
@@ -161,41 +173,57 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
         }
 
         // Check if new segments might be available (for live/growing recordings)
-        // Reload playlist every 15 seconds to check for new segments (half of segment duration)
+        // Reload playlist every 5 seconds to check for new segments (half of segment duration)
         if (reloadTimerRef.current) {
           clearTimeout(reloadTimerRef.current);
         }
 
         reloadTimerRef.current = setTimeout(() => {
-          if (hlsRef.current) {
-            const currentDuration = videoRef.current?.duration || 0;
+          if (hlsRef.current && videoRef.current) {
+            const currentDuration = videoRef.current.duration || 0;
+            const currentTime = videoRef.current.currentTime || 0;
+            const isPlaying = !videoRef.current.paused;
 
             // Only reload if we're near the end (within 30 seconds) or duration changed
-            const isNearEnd = videoRef.current
-              ? Math.abs(currentDuration - videoRef.current.currentTime) < 30
-              : false;
+            const timeBehindLive = currentDuration - currentTime;
+            const isNearEnd = timeBehindLive < 30;
 
             if (isNearEnd || currentDuration !== lastDurationRef.current) {
               if (debug) {
                 console.log(
-                  `[useHLS] Reloading playlist to check for new segments (duration: ${currentDuration}s)`
+                  `[useHLS] Periodic playlist refresh (duration: ${currentDuration.toFixed(
+                    2
+                  )}s, behind: ${timeBehindLive.toFixed(2)}s)`
                 );
               }
 
               lastDurationRef.current = currentDuration;
-              hlsRef.current.loadLevel = -1; // Reset to auto quality
 
-              // Trigger playlist reload without disrupting playback
+              // Force playlist reload properly
               try {
-                hlsRef.current.startLoad();
+                hlsRef.current.loadLevel = -1; // Reset to auto quality
+                hlsRef.current.stopLoad();
+                hlsRef.current.startLoad(currentTime); // Start from current position
+
+                // Ensure playback continues if it was playing
+                if (isPlaying && videoRef.current.paused) {
+                  videoRef.current.play().catch((err) => {
+                    if (debug) {
+                      console.warn(
+                        "[useHLS] Failed to resume playback after reload:",
+                        err
+                      );
+                    }
+                  });
+                }
               } catch (err) {
                 if (debug) {
-                  console.warn("[useHLS] Error reloading playlist:", err);
+                  console.warn("[useHLS] Error refreshing playlist:", err);
                 }
               }
             }
           }
-        }, 15000); // Check every 15 seconds (half of 30-second segments)
+        }, 5000); // Check every 5 seconds (half of 10-second segments)
       });
 
       // Event: Level updated (playlist updated with new segments)
@@ -204,26 +232,39 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
           console.log(
             `[useHLS] Playlist updated - segments: ${
               data.details?.fragments?.length || 0
-            }`
+            }, duration: ${data.details?.totalduration?.toFixed(2) || 0}s`
           );
         }
 
-        // Force video to update its duration
-        if (
-          videoRef.current &&
-          videoRef.current.duration !== lastDurationRef.current
-        ) {
+        // Force video to update its duration and ensure playback continues
+        if (videoRef.current) {
           const newDuration = videoRef.current.duration;
-          lastDurationRef.current = newDuration;
+          const isPlaying = !videoRef.current.paused;
 
-          if (debug) {
-            console.log(
-              `[useHLS] Duration updated: ${newDuration.toFixed(2)}s`
-            );
+          if (newDuration !== lastDurationRef.current) {
+            lastDurationRef.current = newDuration;
+
+            if (debug) {
+              console.log(
+                `[useHLS] Duration updated: ${newDuration.toFixed(2)}s`
+              );
+            }
+
+            // Dispatch a custom event to notify components about duration update
+            videoRef.current.dispatchEvent(new Event("durationchange"));
           }
 
-          // Dispatch a custom event to notify components about duration update
-          videoRef.current.dispatchEvent(new Event("durationchange"));
+          // Ensure video continues playing after playlist update
+          if (isPlaying && videoRef.current.paused) {
+            videoRef.current.play().catch((err) => {
+              if (debug) {
+                console.warn(
+                  "[useHLS] Failed to resume playback after duration update:",
+                  err
+                );
+              }
+            });
+          }
         }
       });
 
@@ -321,7 +362,12 @@ export function useHLS(options: UseHLSOptions): UseHLSReturn {
           console.log("[useHLS] Status update:", status);
         }
       },
-      statusPollingInterval
+      statusPollingInterval,
+      () => {
+        if (debug) {
+          console.log("[useHLS] Stopped polling recording status");
+        }
+      }
     );
 
     pollCleanupRef.current = cleanup;

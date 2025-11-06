@@ -13,13 +13,17 @@ from services.streaming.recording_service import recording_manager
 
 
 class StreamActivityMonitor:
-    """Professional monitor for stream activity with automatic timeout handling."""
+    """
+    Professional monitor for stream activity with automatic timeout handling.
+
+    Note: room_id parameter stores the room_name (display name like "AMB-001-ROOM-001").
+    """
 
     TIMEOUT_SECONDS = 120  # Increased to 120 seconds (2 minutes) for stability
     CHECK_INTERVAL = 10  # Check every 10 seconds (reduced overhead)
 
     def __init__(self, room_id: str, session_id: Optional[str] = None):
-        self.room_id = room_id
+        self.room_id = room_id  # This is actually room_name (e.g., "AMB-001-ROOM-001")
         self.session_id = session_id
         self.last_data_timestamp = time.time()
         self.monitor_task: Optional[asyncio.Task] = None
@@ -160,13 +164,18 @@ class StreamActivityMonitor:
 
 
 class ReconnectionHandler:
-    """Professional handler for room reconnection with 5-minute grace period."""
+    """
+    Professional handler for room reconnection with 5-minute grace period.
+
+    Note: room_id parameter stores the room_name (display name like "AMB-001-ROOM-001").
+    room_db_id stores the UUID from the database.
+    """
 
     RECONNECTION_TIMEOUT = 300  # 5 minutes
 
     def __init__(self, room_id: str, room_db_id: Optional[str] = None):
-        self.room_id = room_id
-        self.room_db_id = room_db_id
+        self.room_id = room_id  # This is actually room_name (e.g., "AMB-001-ROOM-001")
+        self.room_db_id = room_db_id  # This is the UUID from database
         self.timeout_task: Optional[asyncio.Task] = None
         self.reconnection_start_time: Optional[datetime] = None
         self._db_service = StreamingDatabaseService()
@@ -255,7 +264,12 @@ class ReconnectionHandler:
 
 
 class Room:
-    """Manages a WebRTC room with peer connections and database sync."""
+    """
+    Manages a WebRTC room with peer connections and database sync.
+
+    Note: room_id parameter stores the room_name (display name like "AMB-001-ROOM-001").
+    room_db_id stores the UUID from the database.
+    """
 
     def __init__(
         self,
@@ -263,9 +277,9 @@ class Room:
         session_id: Optional[str] = None,
         room_db_id: Optional[str] = None,
     ):
-        self.room_id = room_id
+        self.room_id = room_id  # room_name for display (e.g., "AMB-001-ROOM-001")
         self.session_id = session_id
-        self.room_db_id = room_db_id
+        self.room_db_id = room_db_id  # UUID from database (used for recording folders)
         self.pcs: Set[RTCPeerConnection] = set()
         self.streamer_pcs: Set[RTCPeerConnection] = set()
         self.viewer_pcs: Set[RTCPeerConnection] = set()
@@ -285,6 +299,10 @@ class Room:
         # Video track for recording AND for new viewer connections
         self.video_track = None
         self.relayed_track = None  # Store relayed track for new viewers
+
+        # ✅ NEW: Track if we've received actual video data before marking as connected
+        self._first_frame_received = False
+        self._waiting_for_first_frame = False
 
     async def close(self):
         """Close all peer connections and clean up resources."""
@@ -365,6 +383,15 @@ class Room:
         # Update legacy attribute for backward compatibility
         self.last_data_timestamp = time.time()
 
+        # ✅ NEW: Mark that first frame has been received and update room status
+        if not self._first_frame_received:
+            self._first_frame_received = True
+            logger.info(
+                f"🎬 [FIRST FRAME] Room {self.room_id} received first video frame, updating status to connected"
+            )
+            # Update room status to connected NOW that we have actual data
+            asyncio.create_task(self._update_room_connected_on_first_frame())
+
     def add_peer_connection(self, pc: RTCPeerConnection, is_streamer: bool = False):
         """Add a peer connection to this room.
 
@@ -393,12 +420,22 @@ class Room:
             )
             self.log_connection_state()
 
-            # Only update room status to connected when STREAMER joins
+            # ✅ IMPROVED: Only start waiting for first frame when STREAMER joins
+            # Database update to connected will happen when first frame arrives
+            # BUT: If we've already received first frame (reconnection), don't wait again
             if was_streamer_empty:
-                logger.info(
-                    f"✅ Room {self.room_id} now has streamer connection, updating status to connected"
-                )
-                asyncio.create_task(self._update_room_connected())
+                if not self._first_frame_received:
+                    logger.info(
+                        f"⏳ [WAITING] Room {self.room_id} has streamer connection, waiting for first video frame before marking as connected"
+                    )
+                    self._waiting_for_first_frame = True
+                else:
+                    # Reconnection case - we already received frames before
+                    logger.info(
+                        f"✅ [RECONNECTION] Room {self.room_id} streamer reconnected (first frame was already received, marking as connected immediately)"
+                    )
+                    # Update database immediately for reconnections
+                    asyncio.create_task(self._update_room_connected())
 
                 # Schedule recording to start after video track is received
                 if self.session_id:
@@ -454,7 +491,9 @@ class Room:
                                 f"Stopping HLS recording for room {self.room_id} (session {self.session_id})"
                             )
                             asyncio.create_task(
-                                recording_manager.stop_session_recording(self.room_id)
+                                recording_manager.stop_session_recording(
+                                    self.room_db_id
+                                )  # Use UUID
                             )
                         except Exception as e:
                             logger.error(
@@ -511,22 +550,77 @@ class Room:
         """Update room status to connected when first STREAMER connection is added."""
         try:
             if self.room_db_id:
+                logger.info(
+                    "[DB UPDATE] Starting update for room %s (db_id: %s) to connected=True",
+                    self.room_id,
+                    self.room_db_id,
+                )
+
                 await self._db_service.update_camera_room_status(
                     self.room_db_id, connected=True
                 )
+
                 logger.info(
-                    "Updated room %s status to connected in database (streamer connected)",
+                    "✅ [DB UPDATE] Successfully updated room %s status to connected in database",
+                    self.room_id,
+                )
+            else:
+                logger.warning(
+                    "[DB UPDATE] Room %s has no room_db_id, cannot update database",
                     self.room_id,
                 )
         except (OSError, ConnectionError, RuntimeError) as e:
             logger.error(
-                "Database error updating room %s status to connected: %s",
+                "[DB UPDATE] Database error updating room %s status to connected: %s",
                 self.room_id,
                 str(e),
             )
         except Exception as e:
             logger.error(
-                "Unexpected error updating room %s status to connected: %s",
+                "[DB UPDATE] Unexpected error updating room %s status to connected: %s",
+                self.room_id,
+                str(e),
+            )
+
+    async def _update_room_connected_on_first_frame(self):
+        """Update room status to connected when first video frame is received.
+
+        This is called from update_stream_activity() when the first frame arrives,
+        ensuring the camera is actually working before marking as connected.
+        """
+        try:
+            if self.room_db_id:
+                logger.info(
+                    "✅ [FIRST FRAME DB] Updating room %s (db_id: %s) to connected=True after receiving video data",
+                    self.room_id,
+                    self.room_db_id,
+                )
+
+                await self._db_service.update_camera_room_status(
+                    self.room_db_id, connected=True
+                )
+
+                logger.info(
+                    "✅ [FIRST FRAME DB] Successfully updated room %s status to connected in database (verified working camera)",
+                    self.room_id,
+                )
+
+                # Reset waiting flag
+                self._waiting_for_first_frame = False
+            else:
+                logger.warning(
+                    "[FIRST FRAME DB] Room %s has no room_db_id, cannot update database",
+                    self.room_id,
+                )
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.error(
+                "[FIRST FRAME DB] Database error updating room %s status to connected: %s",
+                self.room_id,
+                str(e),
+            )
+        except Exception as e:
+            logger.error(
+                "[FIRST FRAME DB] Unexpected error updating room %s status to connected: %s",
                 self.room_id,
                 str(e),
             )
@@ -543,6 +637,8 @@ class Room:
             "viewer_connections": len(self.viewer_pcs),
             "is_active": self.is_active,
             "has_streamers": len(self.streamer_pcs) > 0,
+            "first_frame_received": self._first_frame_received,
+            "waiting_for_first_frame": self._waiting_for_first_frame,
             "last_data_timestamp": self.last_data_timestamp,
             "seconds_since_data": int(time_since_data),
             "timeout_seconds": self.STREAM_TIMEOUT_SECONDS,
@@ -561,13 +657,18 @@ class Room:
             else "not monitoring"
         )
 
+        frame_status = "✅ received" if self._first_frame_received else "⏳ waiting"
+        if self._waiting_for_first_frame:
+            frame_status = "⏳ waiting (streamer connected)"
+
         logger.info(
-            "Room %s connection state: total=%d, streamers=%d, viewers=%d, active=%s, data_age=%ds, activity=%s",
+            "Room %s connection state: total=%d, streamers=%d, viewers=%d, active=%s, first_frame=%s, data_age=%ds, activity=%s",
             self.room_id,
             len(self.pcs),
             len(self.streamer_pcs),
             len(self.viewer_pcs),
             self.is_active,
+            frame_status,
             int(time_since_data),
             monitoring_status,
         )
@@ -593,14 +694,15 @@ class Room:
                         f"✅ [RECORDING] Video track ready, starting HLS recording for room {self.room_id} (session {self.session_id})"
                     )
 
+                    # Use room_db_id (UUID) for recording folder identification
                     await recording_manager.start_session_recording(
                         self.session_id,
-                        self.room_id,
+                        self.room_db_id,  # Pass UUID instead of room_name
                         ambulance_number,
                         self.video_track,
                     )
                     logger.info(
-                        f"✅ [RECORDING] start_session_recording() completed for room {self.room_id}"
+                        f"✅ [RECORDING] start_session_recording() completed for room {self.room_id} (UUID: {self.room_db_id})"
                     )
                     return
 
@@ -749,8 +851,14 @@ class RoomManager:
                 is_active=True, limit=100
             )
 
+            logger.debug(
+                "[SESSION MONITOR] Checking %d active session(s) for camera activity",
+                len(active_sessions),
+            )
+
             for session in active_sessions:
                 session_id = session["id"]
+                ambulance_id = session.get("ambulance_id", "unknown")
 
                 # Check if session has any active cameras
                 has_active = await db_service.has_active_cameras(session_id)
@@ -761,8 +869,9 @@ class RoomManager:
                         self.session_inactivity_timers[session_id].cancel()
                         del self.session_inactivity_timers[session_id]
                         logger.info(
-                            "Session %s has active cameras - timeout timer cancelled",
-                            session_id,
+                            "Session %s (AMB %s) has active cameras - timeout timer cancelled",
+                            session_id[:8],
+                            ambulance_id,
                         )
                 else:
                     # Session has NO active cameras
@@ -773,8 +882,9 @@ class RoomManager:
                         )
                         self.session_inactivity_timers[session_id] = timeout_task
                         logger.warning(
-                            "Session %s has no active cameras - started %d minute timeout timer",
-                            session_id,
+                            "Session %s (AMB %s) has no active cameras - started %d minute timeout timer",
+                            session_id[:8],
+                            ambulance_id,
                             self.SESSION_TIMEOUT_MINUTES,
                         )
 

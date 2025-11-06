@@ -1,8 +1,66 @@
 "use client";
 
+// ============================================================================
+// useStreaming - Live WebRTC Camera Viewer Hook
+// ============================================================================
+/**
+ * Hook for viewing live ambulance camera feeds via WebRTC
+ *
+ * **Purpose:** Manage WebRTC peer connections for live video streaming (viewer-side)
+ *
+ * **Use When:**
+ * - Displaying live camera feed to users
+ * - Building camera viewer components
+ * - Implementing video player with live stream
+ *
+ * **Don't Use For:**
+ * - Session management (use `useRealtimeAmbulanceSessions` from `useRealtime.ts` instead)
+ * - Admin dashboards (use `useRealtimeAmbulanceSessions` from `useRealtime.ts` instead)
+ * - HLS playback (use `useHLS` instead)
+ *
+ * **Key Features:**
+ * - WebRTC peer connection management
+ * - Automatic reconnection with exponential backoff
+ * - Connection quality monitoring
+ * - Video element ref management
+ * - User-friendly status messages
+ *
+ * @example
+ * ```tsx
+ * function LiveCameraViewer({ ambulanceId, roomId }) {
+ *   const {
+ *     videoRef,
+ *     isConnected,
+ *     error,
+ *     userFriendlyStatus,
+ *     startStreaming,
+ *     stopStreaming,
+ *   } = useStreaming();
+ *
+ *   useEffect(() => {
+ *     startStreaming(ambulanceId, roomId);
+ *     return () => stopStreaming();
+ *   }, [ambulanceId, roomId]);
+ *
+ *   return (
+ *     <div>
+ *       <video ref={videoRef} autoPlay playsInline />
+ *       <p>{userFriendlyStatus}</p>
+ *     </div>
+ *   );
+ * }
+ * ```
+ *
+ * @see {@link STREAMING_HOOKS_GUIDE.md} for detailed usage guide
+ */
+
 import { ambulanceStreamingService } from "@/services/streamingService";
-import type { AmbulanceSession } from "@/types";
+import type { AmbulanceSession, CameraRoom } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
 
 interface UseStreamingReturn {
   // State
@@ -37,7 +95,15 @@ interface UseStreamingReturn {
   cancelReconnection: () => void;
 }
 
+// ============================================================================
+// MAIN HOOK IMPLEMENTATION
+// ============================================================================
+
 export function useStreaming(): UseStreamingReturn {
+  // ============================================================================
+  // STATE MANAGEMENT
+  // ============================================================================
+
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -65,6 +131,10 @@ export function useStreaming(): UseStreamingReturn {
   );
   const maxReconnectionAttempts = 5;
 
+  // ============================================================================
+  // REFS (for avoiding stale closures and cleanup)
+  // ============================================================================
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -73,7 +143,36 @@ export function useStreaming(): UseStreamingReturn {
   const reconnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUserStoppedRef = useRef(false);
   const videoDataTimeoutRef = useRef<NodeJS.Timeout | null>(null); // NEW: Timeout for video data
+  const videoEventCleanupRef = useRef<(() => void) | null>(null); // NEW: Cleanup function for video event listeners
 
+  // 🔥 NEW: Ref-based state tracking to prevent stale closure issues
+  const isConnectingRef = useRef(false);
+  const isConnectedRef = useRef(false);
+
+  // ============================================================================
+  // HELPER FUNCTIONS (sync state with refs)
+  // ============================================================================
+
+  /**
+   * Set connecting state (syncs both state and ref to prevent stale closures)
+   */
+  const setConnectingState = useCallback((value: boolean) => {
+    isConnectingRef.current = value;
+    setIsConnecting(value);
+  }, []);
+
+  const setConnectedState = useCallback((value: boolean) => {
+    isConnectedRef.current = value;
+    setIsConnected(value);
+  }, []);
+
+  // ============================================================================
+  // UTILITY FUNCTIONS
+  // ============================================================================
+
+  /**
+   * Clear error state
+   */
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -92,6 +191,9 @@ export function useStreaming(): UseStreamingReturn {
     }
   }, []);
 
+  /**
+   * Update session status in database
+   */
   const updateSessionStatus = useCallback(
     async (sessionId: string, isActive: boolean) => {
       try {
@@ -109,6 +211,9 @@ export function useStreaming(): UseStreamingReturn {
     []
   );
 
+  /**
+   * Find active session for ambulance (started by RPi device)
+   */
   const findActiveSession = useCallback(
     async (ambulanceId: string): Promise<AmbulanceSession | null> => {
       try {
@@ -135,6 +240,53 @@ export function useStreaming(): UseStreamingReturn {
         setCurrentSession(null);
         return null;
       }
+    },
+    []
+  );
+
+  /**
+   * Wait for a camera room to become connected (i.e., streamer has sent first frame)
+   * This prevents race condition where viewer tries to connect before track is ready
+   */
+  const waitForRoomConnected = useCallback(
+    async (
+      roomId: string,
+      sessionId: string,
+      timeoutMs: number = 15000
+    ): Promise<CameraRoom | null> => {
+      const startTime = Date.now();
+      const pollInterval = 500; // Check every 500ms
+
+      console.log(
+        `⏳ Waiting for room ${roomId} to become connected (timeout: ${timeoutMs}ms)...`
+      );
+
+      while (Date.now() - startTime < timeoutMs) {
+        try {
+          // Get all rooms for this session and find the target room
+          const roomsResponse = await ambulanceStreamingService.getCameraRooms({
+            session_id: sessionId,
+          });
+
+          if (roomsResponse.data && roomsResponse.data.length > 0) {
+            const room = roomsResponse.data.find((r) => r.id === roomId);
+            if (room && room.connected) {
+              console.log(`✅ Room ${roomId} is now connected!`);
+              return room;
+            }
+          }
+
+          // Wait before next poll
+          await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        } catch (error) {
+          console.error("Error polling room status:", error);
+          // Continue polling despite errors
+          await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        }
+      }
+
+      console.warn(`⚠️ Timeout waiting for room ${roomId} to become connected`);
+      return null;
     },
     []
   );
@@ -318,8 +470,7 @@ export function useStreaming(): UseStreamingReturn {
 
   const createPeerConnection = useCallback(
     async (roomId: string): Promise<RTCPeerConnection> => {
-      // Note: roomId parameter is used as camera_id in the API endpoint
-      // In our system: room_id IS the camera identifier (e.g., "AMB-001-ROOM-001")
+      // roomId is the UUID (room.id) - we need to fetch room_name for API
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -329,15 +480,81 @@ export function useStreaming(): UseStreamingReturn {
 
       // Set up event handlers
       pc.ontrack = (event) => {
-        console.log("Received remote stream");
+        console.log("🎬 [ONTRACK] Received track event from streamer");
+        console.log("🎬 [ONTRACK] Track kind:", event.track.kind);
+        console.log("🎬 [ONTRACK] Track ID:", event.track.id);
+        console.log("🎬 [ONTRACK] Track label:", event.track.label);
+        console.log("🎬 [ONTRACK] Track readyState:", event.track.readyState);
+        console.log("🎬 [ONTRACK] Track muted:", event.track.muted);
+        console.log("🎬 [ONTRACK] Number of streams:", event.streams.length);
+
+        if (event.streams.length > 0) {
+          console.log(
+            "🎬 [ONTRACK] Stream ID:",
+            event.streams[0].id,
+            "Active:",
+            event.streams[0].active
+          );
+          console.log(
+            "🎬 [ONTRACK] Stream tracks:",
+            event.streams[0].getTracks().length
+          );
+        }
+
         if (videoRef.current && event.streams[0]) {
+          console.log("✅ [VIDEO] Attaching stream to video element");
+
+          // 🔥 CRITICAL: Clean up previous event listeners to prevent accumulation
+          if (videoEventCleanupRef.current) {
+            console.log("🧹 [VIDEO] Cleaning up previous event listeners");
+            videoEventCleanupRef.current();
+            videoEventCleanupRef.current = null;
+          }
+
+          // 🔥 CRITICAL: Reset video element state before attaching new stream
+          if (videoRef.current.srcObject) {
+            console.log("🔄 [VIDEO] Removing previous srcObject");
+            videoRef.current.srcObject = null;
+          }
+
           videoRef.current.srcObject = event.streams[0];
-          videoRef.current.play().catch((err) => {
-            console.error("Video autoplay failed:", err);
-          });
+
+          // 🔥 CRITICAL: Set video properties for proper playback
+          videoRef.current.muted = true; // Mute to allow autoplay
+          videoRef.current.playsInline = true; // For mobile devices
+          videoRef.current.autoplay = true; // Enable autoplay
+
+          // Log video element state
+          console.log(
+            "📺 [VIDEO] Video readyState before play:",
+            videoRef.current.readyState
+          );
+          console.log(
+            "📺 [VIDEO] Video networkState:",
+            videoRef.current.networkState
+          );
+          console.log("📺 [VIDEO] Video paused:", videoRef.current.paused);
+
+          // 🔥 CRITICAL: Force play even if track is initially muted
+          const tryPlay = async () => {
+            try {
+              await videoRef.current!.play();
+              console.log("✅ [VIDEO] Video play() succeeded");
+            } catch (err) {
+              console.error("❌ [VIDEO] Video autoplay failed:", err);
+              console.log(
+                "⚠️ [VIDEO] User interaction required - video will play when user clicks"
+              );
+              // Set a flag or show UI to prompt user to click
+              setUserFriendlyStatus("Click anywhere to start video");
+            }
+          };
+
+          tryPlay();
 
           // NEW: Set up video data timeout monitoring
           setIsWaitingForData(true);
+          console.log("⏳ [VIDEO] Waiting for video data...");
 
           // Clear any existing timeout
           if (videoDataTimeoutRef.current) {
@@ -347,24 +564,63 @@ export function useStreaming(): UseStreamingReturn {
           // Set 2-second timeout for receiving video data
           videoDataTimeoutRef.current = setTimeout(() => {
             // Check if video is actually playing (has received data)
-            if (
-              videoRef.current &&
-              (videoRef.current.readyState < 2 || videoRef.current.paused)
-            ) {
-              console.warn("No video data received within 2 seconds");
-              setIsWaitingForData(true);
-              setUserFriendlyStatus("Waiting for video data from camera...");
+            if (videoRef.current) {
+              console.warn(
+                "⚠️ [VIDEO-TIMEOUT] No video data received within 2 seconds"
+              );
+              console.warn(
+                "⚠️ [VIDEO-TIMEOUT] readyState:",
+                videoRef.current.readyState
+              );
+              console.warn(
+                "⚠️ [VIDEO-TIMEOUT] paused:",
+                videoRef.current.paused
+              );
+              console.warn(
+                "⚠️ [VIDEO-TIMEOUT] currentTime:",
+                videoRef.current.currentTime
+              );
+
+              if (videoRef.current.readyState < 2 || videoRef.current.paused) {
+                setIsWaitingForData(true);
+                setUserFriendlyStatus("Waiting for video data from camera...");
+              }
             }
           }, 2000);
 
           // Monitor video metadata to detect when data is actually flowing
           const handleVideoData = () => {
+            console.log(
+              "🎉 [VIDEO-DATA] Video data received! Event:",
+              event.type
+            );
+            console.log(
+              "🎉 [VIDEO-DATA] readyState:",
+              videoRef.current?.readyState
+            );
+            console.log(
+              "🎉 [VIDEO-DATA] currentTime:",
+              videoRef.current?.currentTime
+            );
+
             if (videoDataTimeoutRef.current) {
               clearTimeout(videoDataTimeoutRef.current);
               videoDataTimeoutRef.current = null;
             }
             setIsWaitingForData(false);
             setUserFriendlyStatus("Receiving live video stream");
+            console.log("✅ [VIDEO-DATA] Successfully receiving live stream");
+
+            // 🔥 CRITICAL: Ensure video is playing when data arrives
+            if (videoRef.current && videoRef.current.paused) {
+              console.log(
+                "🔄 [VIDEO-DATA] Video paused, attempting to play..."
+              );
+              videoRef.current.play().catch((err) => {
+                console.error("❌ [VIDEO-DATA] Play failed:", err);
+              });
+            }
+
             videoRef.current?.removeEventListener(
               "loadeddata",
               handleVideoData
@@ -372,18 +628,157 @@ export function useStreaming(): UseStreamingReturn {
             videoRef.current?.removeEventListener("playing", handleVideoData);
           };
 
+          // Add all possible video events for debugging
+          const debugVideoEvents = [
+            "loadstart",
+            "loadedmetadata",
+            "loadeddata",
+            "canplay",
+            "canplaythrough",
+            "playing",
+            "play",
+            "pause",
+            "ended",
+            "error",
+            "stalled",
+            "suspend",
+            "waiting",
+          ];
+
+          // 🔥 CRITICAL: Store event listeners for cleanup
+          const eventListeners: Array<{ event: string; handler: () => void }> =
+            [];
+
+          debugVideoEvents.forEach((eventName) => {
+            const handler = () => {
+              console.log(`📺 [VIDEO-EVENT] ${eventName}`);
+              if (eventName === "error" && videoRef.current?.error) {
+                console.error(
+                  "📺 [VIDEO-ERROR]",
+                  videoRef.current.error.message
+                );
+              }
+
+              // 🔥 CRITICAL: Try to play when video can play
+              if (
+                (eventName === "canplay" || eventName === "canplaythrough") &&
+                videoRef.current &&
+                videoRef.current.paused
+              ) {
+                console.log(
+                  `🔄 [${eventName.toUpperCase()}] Video ready, attempting to play...`
+                );
+                videoRef.current.play().catch((err) => {
+                  console.error(
+                    `❌ [${eventName.toUpperCase()}] Play failed:`,
+                    err
+                  );
+                });
+              }
+            };
+
+            videoRef.current?.addEventListener(eventName, handler);
+            eventListeners.push({ event: eventName, handler });
+          });
+
           videoRef.current.addEventListener("loadeddata", handleVideoData);
           videoRef.current.addEventListener("playing", handleVideoData);
+          eventListeners.push({
+            event: "loadeddata",
+            handler: handleVideoData,
+          });
+          eventListeners.push({ event: "playing", handler: handleVideoData });
+
+          // 🔥 CRITICAL: Store cleanup function
+          videoEventCleanupRef.current = () => {
+            eventListeners.forEach(({ event, handler }) => {
+              videoRef.current?.removeEventListener(event, handler);
+            });
+            console.log("🧹 [VIDEO] Removed all event listeners");
+          };
+
+          // Also listen to track events
+          event.track.onmute = () => {
+            console.warn("🔇 [TRACK] Track muted");
+          };
+          event.track.onunmute = () => {
+            console.log("🔊 [TRACK] Track unmuted");
+            // 🔥 CRITICAL: Retry playing video when track unmutes
+            if (videoRef.current && videoRef.current.paused) {
+              console.log("🔄 [TRACK] Track unmuted, retrying video play...");
+              videoRef.current.play().catch((err) => {
+                console.error("❌ [TRACK] Retry play failed:", err);
+              });
+            }
+          };
+          event.track.onended = () => {
+            console.warn("🛑 [TRACK] Track ended");
+          };
+        } else {
+          console.error("❌ [ONTRACK] No video element or stream available");
         }
       };
 
       pc.onconnectionstatechange = () => {
-        console.log("Connection state:", pc.connectionState);
+        const timestamp = new Date().toISOString();
+        console.log(
+          `🔌 [CONNECTION-STATE] ${timestamp} - State:`,
+          pc.connectionState
+        );
+        console.log("🔌 [CONNECTION-STATE] ICE state:", pc.iceConnectionState);
+        console.log(
+          "🔌 [CONNECTION-STATE] Signaling state:",
+          pc.signalingState
+        );
+
+        // Log transceiver state
+        const transceivers = pc.getTransceivers();
+        console.log("🔌 [CONNECTION-STATE] Transceivers:", transceivers.length);
+        transceivers.forEach((t, idx) => {
+          console.log(`  - Transceiver ${idx}:`, {
+            direction: t.direction,
+            currentDirection: t.currentDirection,
+            mid: t.mid,
+            receiver: {
+              track: t.receiver.track
+                ? {
+                    id: t.receiver.track.id,
+                    kind: t.receiver.track.kind,
+                    readyState: t.receiver.track.readyState,
+                    muted: t.receiver.track.muted,
+                  }
+                : null,
+            },
+          });
+        });
 
         switch (pc.connectionState) {
           case "connected":
-            setIsConnected(true);
-            setIsConnecting(false);
+            console.log("✅ [CONNECTED] WebRTC connection established!");
+            console.log(
+              "✅ [CONNECTED] Checking for tracks in transceivers..."
+            );
+
+            // Check if we have tracks
+            let hasVideoTrack = false;
+            transceivers.forEach((t) => {
+              if (t.receiver.track && t.receiver.track.kind === "video") {
+                hasVideoTrack = true;
+                console.log(
+                  "✅ [CONNECTED] Found video track:",
+                  t.receiver.track.id
+                );
+              }
+            });
+
+            if (!hasVideoTrack) {
+              console.warn(
+                "⚠️ [CONNECTED] No video tracks found despite connection!"
+              );
+            }
+
+            setConnectedState(true); // 🔥 Use helper
+            setConnectingState(false); // 🔥 Use helper
             setIsReconnecting(false);
             setError(null);
             setUserFriendlyStatus("Live stream connected");
@@ -396,33 +791,43 @@ export function useStreaming(): UseStreamingReturn {
             }
             break;
           case "connecting":
-            setIsConnecting(true);
+            console.log("🔄 [CONNECTING] Establishing WebRTC connection...");
+            setConnectingState(true); // 🔥 Use helper
             setUserFriendlyStatus("Establishing connection...");
             break;
           case "disconnected":
             console.warn(
-              "⚠️ Connection disconnected - will attempt reconnection"
+              "⚠️ [DISCONNECTED] Connection disconnected - will attempt reconnection"
             );
-            setIsConnected(false);
-            setIsConnecting(false);
+            console.warn("⚠️ [DISCONNECTED] ICE state:", pc.iceConnectionState);
+            console.warn(
+              "⚠️ [DISCONNECTED] Signaling state:",
+              pc.signalingState
+            );
+            setConnectedState(false); // 🔥 Use helper
+            setConnectingState(false); // 🔥 Use helper
             // Only auto-reconnect if user didn't manually stop
             if (!isUserStoppedRef.current) {
               handleAutoReconnection();
             }
             break;
           case "failed":
-            console.error("❌ Connection failed - will attempt reconnection");
-            setIsConnected(false);
-            setIsConnecting(false);
+            console.error(
+              "❌ [FAILED] Connection failed - will attempt reconnection"
+            );
+            console.error("❌ [FAILED] ICE state:", pc.iceConnectionState);
+            console.error("❌ [FAILED] Signaling state:", pc.signalingState);
+            setConnectedState(false); // 🔥 Use helper
+            setConnectingState(false); // 🔥 Use helper
             // Only auto-reconnect if user didn't manually stop
             if (!isUserStoppedRef.current) {
               handleAutoReconnection();
             }
             break;
           case "closed":
-            console.log("🔒 Connection closed");
-            setIsConnected(false);
-            setIsConnecting(false);
+            console.log("🔒 [CLOSED] Connection closed");
+            setConnectedState(false); // 🔥 Use helper
+            setConnectingState(false); // 🔥 Use helper
             setConnectionQuality(null);
 
             // Clear video data timeout
@@ -471,14 +876,27 @@ export function useStreaming(): UseStreamingReturn {
       };
 
       // Add transceivers for receiving media
-      pc.addTransceiver("video", { direction: "recvonly" });
-      pc.addTransceiver("audio", { direction: "recvonly" });
+      console.log("🎥 [SETUP] Adding transceivers for video and audio...");
+      const videoTransceiver = pc.addTransceiver("video", {
+        direction: "recvonly",
+      });
+      const audioTransceiver = pc.addTransceiver("audio", {
+        direction: "recvonly",
+      });
+      console.log("🎥 [SETUP] Video transceiver added:", videoTransceiver.mid);
+      console.log("🎥 [SETUP] Audio transceiver added:", audioTransceiver.mid);
 
       // Create offer
+      console.log("📝 [SDP] Creating offer...");
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      console.log("Created offer:", offer.type);
+      console.log("📝 [SDP] Offer created:", offer.type);
+      console.log("📝 [SDP] Local description set");
+      console.log(
+        "📝 [SDP] Offer SDP (first 200 chars):",
+        offer.sdp?.substring(0, 200)
+      );
 
       // Wait for ICE gathering to complete
       await new Promise<void>((resolve, reject) => {
@@ -511,16 +929,28 @@ export function useStreaming(): UseStreamingReturn {
 
       // Send offer to server and get answer using ambulance camera streaming
       // Note: roomId is passed as camera_id parameter to the API
+      // roomId is actually room_name (e.g., "AMB-001-ROOM-001")
       try {
+        console.log(`📡 [API] Sending offer to server for room: ${roomId}...`);
         const response = await ambulanceStreamingService.connectCameraViewer(
-          roomId, // room_id is used as camera_id parameter
+          roomId, // room_name is used as camera_id parameter
           {
             sdp: pc.localDescription!.sdp,
-            type: pc.localDescription!.type as any,
+            type: pc.localDescription!.type,
           }
         );
 
+        console.log("📡 [API] Server response received");
+        console.log("📡 [API] Response has data:", !!response.data);
+        console.log("📡 [API] Response has SDP:", !!response.data?.sdp);
+        console.log("📡 [API] Response type:", response.data?.type);
+
         if (response.data && response.data.sdp && response.data.type) {
+          console.log(
+            "📝 [SDP] Answer SDP (first 200 chars):",
+            response.data.sdp.substring(0, 200)
+          );
+
           // Validate that the type is a valid RTCSdpType
           const validTypes: RTCSdpType[] = [
             "answer",
@@ -534,6 +964,9 @@ export function useStreaming(): UseStreamingReturn {
             throw new Error(`Invalid SDP type received: ${response.data.type}`);
           }
 
+          console.log(
+            "📝 [SDP] Setting remote description (answer from server)..."
+          );
           await pc.setRemoteDescription(
             new RTCSessionDescription({
               sdp: response.data.sdp,
@@ -541,15 +974,19 @@ export function useStreaming(): UseStreamingReturn {
             })
           );
           console.log(
-            "Remote description set successfully for ambulance camera"
+            "✅ [SDP] Remote description set successfully for ambulance camera"
+          );
+          console.log(
+            "✅ [SDP] Signaling complete, waiting for ICE and media..."
           );
         } else {
           const errorMessage =
             response.error || "No SDP answer received from server";
+          console.error("❌ [API] Server response invalid:", errorMessage);
           throw new Error(errorMessage);
         }
       } catch (err) {
-        console.error("Failed to set remote description:", err);
+        console.error("❌ [API] Failed to set remote description:", err);
         pc.close();
         throw err;
       }
@@ -567,11 +1004,22 @@ export function useStreaming(): UseStreamingReturn {
 
   const startStreaming = useCallback(
     async (ambulanceId: string, roomId?: string): Promise<void> => {
-      // ✅ Guard: Prevent duplicate connections
-      if (isConnecting || isConnected) {
+      console.log("🚀 [START] ========================================");
+      console.log("🚀 [START] Starting streaming process...");
+      console.log("🚀 [START] Ambulance ID:", ambulanceId);
+      console.log("🚀 [START] Room ID:", roomId || "(will be determined)");
+
+      // 🔥 CRITICAL: Use refs for guard check to avoid stale closure
+      console.log("🚀 [START] Is Connecting (ref):", isConnectingRef.current);
+      console.log("🚀 [START] Is Connected (ref):", isConnectedRef.current);
+
+      // ✅ Guard: Prevent duplicate connections using refs
+      if (isConnectingRef.current || isConnectedRef.current) {
         console.warn(
-          "⚠️ Streaming already in progress - ignoring duplicate request"
+          "⚠️ [START] Streaming already in progress - ignoring duplicate request"
         );
+        console.warn("⚠️ [START] isConnecting:", isConnectingRef.current);
+        console.warn("⚠️ [START] isConnected:", isConnectedRef.current);
         return;
       }
 
@@ -581,7 +1029,11 @@ export function useStreaming(): UseStreamingReturn {
         peerConnectionRef.current.connectionState !== "closed"
       ) {
         console.warn(
-          "⚠️ Existing peer connection detected - cleaning up before starting"
+          "⚠️ [START] Existing peer connection detected - cleaning up before starting"
+        );
+        console.warn(
+          "⚠️ [START] Old connection state:",
+          peerConnectionRef.current.connectionState
         );
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
@@ -593,58 +1045,170 @@ export function useStreaming(): UseStreamingReturn {
       }
 
       try {
-        setIsConnecting(true);
+        setConnectingState(true); // 🔥 Use helper to sync ref + state
         setError(null);
         setUserFriendlyStatus("Looking for active ambulance camera...");
         isUserStoppedRef.current = false;
         currentAmbulanceIdRef.current = ambulanceId;
         resetReconnectionState();
 
+        console.log("🔍 [SESSION] Looking for active session...");
         // Look for existing active session (started by RPi device)
-        const session = await findActiveSession(ambulanceId);
+        const sessionPromise = findActiveSession(ambulanceId);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Session lookup timeout after 10s")),
+            10000
+          )
+        );
+
+        const session = (await Promise.race([
+          sessionPromise,
+          timeoutPromise,
+        ])) as AmbulanceSession | null;
+
         if (!session) {
-          throw new Error(
-            "No active ambulance session found. Please ensure the ambulance camera device is connected and streaming."
-          );
+          const errorMsg =
+            "No active ambulance session found. Please ensure the ambulance camera device is connected and streaming.";
+          console.error("❌ [SESSION] No active session found");
+          console.error("❌ [SESSION] Error message:", errorMsg);
+          throw new Error(errorMsg);
         }
+
+        console.log("✅ [SESSION] Found active session:", session.id);
+        console.log("✅ [SESSION] Session started at:", session.started_at);
+        console.log("✅ [SESSION] Session type:", session.session_type);
 
         // Get camera rooms for this ambulance session
-        let targetRoomId = roomId;
-        if (!targetRoomId) {
-          const roomsResponse = await ambulanceStreamingService.getCameraRooms({
-            session_id: session.id,
-          });
-          if (roomsResponse.data && roomsResponse.data.length > 0) {
-            // Use the first connected room, or first room if none connected
-            const connectedRoom = roomsResponse.data.find((r) => r.connected);
-            targetRoomId = (connectedRoom || roomsResponse.data[0]).room_id;
-          } else {
-            throw new Error("No camera rooms found for this ambulance session");
-          }
+        console.log("🔍 [ROOM] Getting camera rooms for session...");
+        const roomsResponse = await ambulanceStreamingService.getCameraRooms({
+          session_id: session.id,
+        });
+
+        console.log(
+          "🔍 [ROOM] Found",
+          roomsResponse.data?.length || 0,
+          "room(s)"
+        );
+
+        if (!roomsResponse.data || roomsResponse.data.length === 0) {
+          console.error("❌ [ROOM] No camera rooms found");
+          throw new Error("No camera rooms found for this ambulance session");
         }
 
-        // Store the room_id (which IS the camera identifier in our API)
-        currentCameraIdRef.current = targetRoomId;
+        // Log all rooms
+        roomsResponse.data.forEach((room, idx) => {
+          console.log(`  - Room ${idx + 1}:`, {
+            id: room.id,
+            room_name: room.room_name,
+            connected: room.connected,
+            camera_id: room.camera_id,
+          });
+        });
+
+        // Find the target room
+        let selectedRoom;
+        if (roomId) {
+          console.log("🔍 [ROOM] Looking for specific room ID:", roomId);
+
+          // Check if roomId is a placeholder ID
+          if (roomId.startsWith("placeholder-")) {
+            // Extract camera UUID from placeholder
+            const cameraId = roomId.replace("placeholder-", "");
+            console.log(
+              "🔍 [ROOM] Detected placeholder ID, looking for camera_id:",
+              cameraId
+            );
+            selectedRoom = roomsResponse.data.find(
+              (r) => r.camera_id === cameraId
+            );
+          } else {
+            // Look for room by ID (UUID)
+            selectedRoom = roomsResponse.data.find((r) => r.id === roomId);
+          }
+
+          if (!selectedRoom) {
+            console.error("❌ [ROOM] Specified room not found:", roomId);
+            throw new Error(
+              `Camera room ${roomId} not found or not streaming yet`
+            );
+          }
+        } else {
+          // No specific room requested - use first connected, or first available
+          const connectedRoom = roomsResponse.data.find((r) => r.connected);
+          selectedRoom = connectedRoom || roomsResponse.data[0];
+        }
+
+        const targetRoomId = selectedRoom.id; // UUID for identification
+        const targetRoomName = selectedRoom.room_name; // Display name for API
+
+        console.log(
+          "🎯 [ROOM] Selected room:",
+          targetRoomName,
+          `(UUID: ${targetRoomId})`,
+          selectedRoom.connected ? "(connected)" : "(not connected yet)"
+        );
+
+        // ✅ If room is not connected yet, wait for it to become ready
+        if (!selectedRoom.connected) {
+          console.log(
+            "⏳ [ROOM] Room not connected yet, waiting for stream to be ready..."
+          );
+          setUserFriendlyStatus(
+            "Camera is connecting, waiting for stream to be ready..."
+          );
+          const waitedRoom = await waitForRoomConnected(
+            targetRoomId,
+            session.id,
+            15000
+          ); // Wait up to 15 seconds
+          if (!waitedRoom) {
+            console.warn(
+              "⚠️ [ROOM] Room did not become connected within timeout, attempting connection anyway"
+            );
+          } else {
+            console.log(
+              "✅ [ROOM] Room is now connected:",
+              waitedRoom.connected
+            );
+          }
+        } else {
+          console.log("✅ [ROOM] Room is already connected, proceeding");
+        }
+
+        // Store the room_name (display name used in API endpoints)
+        currentCameraIdRef.current = targetRoomName;
+
+        // currentCameraIdRef now stores the room_name for API calls
+        console.log(
+          "📝 [ROOM] Stored camera ID (room_name):",
+          currentCameraIdRef.current
+        );
+        console.log("📝 [ROOM] Room UUID:", targetRoomId);
 
         // Clean up any existing connection
         if (peerConnectionRef.current) {
           peerConnectionRef.current.close();
         }
 
-        if (!targetRoomId) {
-          throw new Error("Room ID is required for streaming");
+        if (!currentCameraIdRef.current) {
+          throw new Error("Room name is required for streaming");
         }
 
-        // Create peer connection using room_id (which is the camera_id parameter in API)
-        const pc = await createPeerConnection(targetRoomId);
+        console.log(
+          "🔌 [WEBRTC] Creating peer connection for room:",
+          currentCameraIdRef.current
+        );
+
+        // Create peer connection using room_name (which is the camera_id parameter in API)
+        const pc = await createPeerConnection(currentCameraIdRef.current);
         peerConnectionRef.current = pc;
 
-        console.log(
-          "Ambulance streaming connection established with session:",
-          session.id,
-          "room_id:",
-          targetRoomId
-        );
+        console.log("✅ [COMPLETE] Ambulance streaming connection established");
+        console.log("✅ [COMPLETE] Session ID:", session.id);
+        console.log("✅ [COMPLETE] Room Name:", currentCameraIdRef.current);
+        console.log("✅ [COMPLETE] Room UUID:", targetRoomId);
+        console.log("✅ [COMPLETE] ========================================");
         setUserFriendlyStatus("Connected to ambulance camera successfully!");
       } catch (err) {
         let message = "Failed to start streaming";
@@ -677,7 +1241,7 @@ export function useStreaming(): UseStreamingReturn {
         setUserFriendlyStatus(userMessage);
         setCanManualRetry(true);
         console.error("Error starting streaming:", err);
-        setIsConnecting(false);
+        setConnectingState(false); // 🔥 Use helper
         setIsReconnecting(false);
         currentAmbulanceIdRef.current = null;
         currentCameraIdRef.current = null;
@@ -686,13 +1250,15 @@ export function useStreaming(): UseStreamingReturn {
       }
     },
     [
-      isConnecting,
-      isConnected,
+      // 🔥 Removed isConnecting and isConnected to prevent stale closure
+      // Using refs (isConnectingRef, isConnectedRef) for guard checks instead
+      setConnectingState,
       createPeerConnection,
       resetReconnectionState,
       findActiveSession,
       currentSession,
       updateSessionStatus,
+      waitForRoomConnected,
     ]
   );
 
@@ -709,6 +1275,13 @@ export function useStreaming(): UseStreamingReturn {
     }
     setIsWaitingForData(false);
 
+    // 🔥 CRITICAL: Clean up video event listeners
+    if (videoEventCleanupRef.current) {
+      console.log("🧹 [STOP] Cleaning up video event listeners");
+      videoEventCleanupRef.current();
+      videoEventCleanupRef.current = null;
+    }
+
     // Don't end the session - it's managed by RPi device
     // Just disconnect the viewer and clear local state
     setCurrentSession(null);
@@ -722,15 +1295,15 @@ export function useStreaming(): UseStreamingReturn {
       videoRef.current.srcObject = null;
     }
 
-    setIsConnected(false);
-    setIsConnecting(false);
+    setConnectedState(false); // 🔥 Use helper
+    setConnectingState(false); // 🔥 Use helper
     setIsReconnecting(false);
     setConnectionQuality(null);
     setError(null);
     setUserFriendlyStatus("Disconnected from camera");
 
     console.log("Viewer disconnected from streaming");
-  }, [resetReconnectionState]);
+  }, [resetReconnectionState, setConnectedState, setConnectingState]);
 
   const reconnect = useCallback(async (): Promise<void> => {
     if (!currentAmbulanceIdRef.current) {
@@ -782,6 +1355,13 @@ export function useStreaming(): UseStreamingReturn {
         videoDataTimeoutRef.current = null;
       }
 
+      // 🔥 CRITICAL: Clean up video event listeners
+      if (videoEventCleanupRef.current) {
+        console.log("🧹 [UNMOUNT] Cleaning up video event listeners");
+        videoEventCleanupRef.current();
+        videoEventCleanupRef.current = null;
+      }
+
       // Close peer connection
       if (peerConnectionRef.current) {
         console.log("Closing peer connection on unmount");
@@ -798,13 +1378,29 @@ export function useStreaming(): UseStreamingReturn {
         videoRef.current.srcObject = null;
       }
 
+      // 🔥 CRITICAL: Reset state AND refs to allow reconnection after remount
+      console.log("🔄 [CLEANUP] Resetting connection state and refs");
+
+      // Reset refs first
+      isConnectingRef.current = false;
+      isConnectedRef.current = false;
+
+      // Then reset state (using direct setters is fine here, but could use helpers for consistency)
+      setIsConnecting(false);
+      setIsConnected(false);
+      setIsReconnecting(false);
+      setIsWaitingForData(false);
+      setError(null);
+      setConnectionQuality(null);
+
       // Clear refs
       currentAmbulanceIdRef.current = null;
       currentCameraIdRef.current = null;
 
-      console.log("✅ Cleanup completed");
+      console.log("✅ Cleanup completed - hook ready for remount");
     };
-  }, []); // Empty deps - only run on mount/unmount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - cleanup runs ONLY on unmount
 
   return {
     isConnected,

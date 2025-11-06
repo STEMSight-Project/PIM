@@ -34,18 +34,24 @@ LOGGER = logging.getLogger(__name__)
 
 # Recording configuration
 RECORDINGS_BASE_PATH = Path("recordings")
-HLS_SEGMENT_DURATION = 30  # 30-second segments (reduced server load)
+HLS_SEGMENT_DURATION = 10  # 10-second segments for better responsiveness
 
 
 class SessionRecorder:
-    """Manages HLS recording for a single camera room using direct FFmpeg pipeline"""
+    """
+    Manages HLS recording for a single camera room using direct FFmpeg pipeline.
+
+    Note: room_id parameter now stores the UUID (room.id) for unique folder identification.
+    """
 
     def __init__(self, session_id: str, room_id: str, ambulance_number: str):
         self.session_id = session_id
-        self.room_id = room_id
+        self.room_id = (
+            room_id  # UUID from room.id (e.g., "8b502515-6668-4ef7-9993-4636e2bf668d")
+        )
         self.ambulance_number = ambulance_number
 
-        # Recording paths
+        # Recording paths - use UUID for unique folder names
         self.recording_path = RECORDINGS_BASE_PATH / f"room-{room_id}"
         self.playlist_path = self.recording_path / "playlist.m3u8"
         self.mp4_path = self.recording_path / "recording.mp4"
@@ -62,8 +68,52 @@ class SessionRecorder:
         # Frame tracking
         self.frame_count = 0
 
-        # Create recording directory
+        # Clean up existing recording directory if it exists (prevents frame processing conflicts)
+        self._cleanup_existing_directory()
+
+        # Create fresh recording directory
         self.recording_path.mkdir(parents=True, exist_ok=True)
+        LOGGER.info(f"📁 Created fresh recording directory: {self.recording_path}")
+
+    def _cleanup_existing_directory(self):
+        """Remove existing recording directory to prevent conflicts with old files"""
+        try:
+            if self.recording_path.exists():
+                import shutil
+
+                # Count existing files for logging
+                file_count = sum(
+                    1 for _ in self.recording_path.rglob("*") if _.is_file()
+                )
+                total_size = sum(
+                    f.stat().st_size
+                    for f in self.recording_path.rglob("*")
+                    if f.is_file()
+                )
+                size_mb = total_size / (1024 * 1024)
+
+                LOGGER.info(
+                    f"🗑️ Removing existing recording directory: {self.recording_path} "
+                    f"({file_count} files, {size_mb:.2f} MB)"
+                )
+
+                # Remove entire directory tree
+                shutil.rmtree(self.recording_path)
+
+                LOGGER.info(
+                    f"✅ Successfully removed old recording directory for room {self.room_id}"
+                )
+            else:
+                LOGGER.debug(
+                    f"📁 No existing directory to clean for room {self.room_id}"
+                )
+
+        except Exception as e:
+            LOGGER.error(
+                f"⚠️ Failed to cleanup existing directory {self.recording_path}: {e}",
+                exc_info=True,
+            )
+            # Continue anyway - mkdir will create the directory
 
     def get_duration(self) -> int:
         """Get recording duration in seconds"""
@@ -129,7 +179,9 @@ class SessionRecorder:
                 "-video_size",
                 "640x480",
                 "-framerate",
-                "30",
+                "30",  # Input frame rate from WebRTC
+                "-use_wallclock_as_timestamps",
+                "1",  # CRITICAL: Use real-time timestamps
                 "-i",
                 "pipe:0",
                 # HLS output
@@ -142,7 +194,13 @@ class SessionRecorder:
                 "-b:v",
                 "1M",
                 "-g",
-                "60",
+                "60",  # Keyframe every 2 seconds (30 fps * 2)
+                "-r",
+                "30",  # Output frame rate (IMPORTANT: match input)
+                "-vsync",
+                "cfr",  # Constant frame rate (prevent speed issues)
+                "-copyts",  # Copy input timestamps
+                "-start_at_zero",  # Start timestamps at zero
                 "-f",
                 "hls",
                 "-hls_time",
@@ -159,6 +217,10 @@ class SessionRecorder:
                 "libx264",
                 "-preset",
                 "ultrafast",
+                "-r",
+                "30",  # Output frame rate for MP4
+                "-vsync",
+                "cfr",  # Constant frame rate for MP4
                 "-movflags",
                 "+faststart",
                 "-f",
@@ -494,7 +556,11 @@ class SessionRecorder:
 
 
 class RecordingManager:
-    """Manages all active camera room recordings"""
+    """
+    Manages all active camera room recordings.
+
+    Note: room_id parameters throughout this class store room_name values (display names).
+    """
 
     def __init__(self):
         self.active_recorders: dict[str, SessionRecorder] = {}
@@ -503,7 +569,7 @@ class RecordingManager:
     async def start_session_recording(
         self,
         session_id: str,
-        room_id: str,
+        room_id: str,  # UUID from room.id for unique folder identification
         ambulance_number: str,
         video_track: MediaStreamTrack,
     ) -> SessionRecorder:

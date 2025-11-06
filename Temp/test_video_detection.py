@@ -35,7 +35,7 @@ from services.ai import get_classifier_service
 
 class Config:
     # Video settings
-    VIDEO_PATH = r"D:\DevProj\STEMSight\PIM\AI_Training\split_videos\ballistic\2025-08-04 19-15-27_00-10-35_39_view1.mp4"
+    VIDEO_PATH = r"D:\DevProj\STEMSight\PIM\AI_Training\test_videos\all_movements_from_splits.mp4"
 
     # MediaPipe model settings
     MODEL_PATH = r"D:\DevProj\STEMSight\PIM\AI_Training\pose_landmarker_heavy.task"
@@ -136,9 +136,9 @@ class VideoDetectionTester:
                 base_options=BaseOptions(model_asset_path=str(config.MODEL_PATH)),
                 running_mode=VisionRunningMode.VIDEO,
                 num_poses=1,
-                min_pose_detection_confidence=0.5,
-                min_pose_presence_confidence=0.5,
-                min_tracking_confidence=0.5,
+                min_pose_detection_confidence=0.7,
+                min_pose_presence_confidence=0.7,
+                min_tracking_confidence=0.7,
             )
 
             self.landmarkers = [

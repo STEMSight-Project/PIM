@@ -77,10 +77,21 @@ class StreamingDatabaseService:
     async def create_camera_room(
         session_id: str,
         camera_id: str,
-        room_id: str,
+        room_name: str,
         device_name: str = "Camera Device",
     ) -> Dict[str, Any]:
-        """Create a new camera room entry in the database."""
+        """
+        Create a new camera room entry in the database.
+
+        Args:
+            session_id: UUID of the ambulance session
+            camera_id: UUID of the camera
+            room_name: Display name for the room (e.g., "AMB-001-ROOM-001")
+            device_name: Name of the device
+
+        Returns:
+            Created room record with id (UUID), room_name, and other fields
+        """
         try:
             # Verify camera exists
             camera_result = (
@@ -95,7 +106,7 @@ class StreamingDatabaseService:
                     {
                         "session_id": session_id,
                         "camera_id": camera_id,
-                        "room_id": room_id,
+                        "room_name": room_name,
                         "device_name": device_name,
                         "connected": True,
                     }
@@ -106,41 +117,61 @@ class StreamingDatabaseService:
             if not room_result.data:
                 raise Exception("Failed to create camera room entry")
 
-            logger.info("Created camera room %s for session %s", room_id, session_id)
+            logger.info("Created camera room %s for session %s", room_name, session_id)
             return room_result.data[0]
 
         except Exception as e:
-            logger.error("Error creating camera room %s: %s", room_id, e)
+            logger.error("Error creating camera room %s: %s", room_name, e)
             raise
 
     @staticmethod
-    async def get_camera_room_by_id(room_id: str) -> Optional[Dict[str, Any]]:
-        """Get existing camera room from database by room_id."""
+    async def get_camera_room_by_id(room_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get existing camera room from database by room_name.
+        Only returns rooms that belong to an ACTIVE session.
+
+        Args:
+            room_name: Display name of the room (e.g., "AMB-001-ROOM-001")
+
+        Returns:
+            Room record with id (UUID), room_name, and joined session/camera data
+        """
         try:
             room_result = (
                 supabase.table("camera_streaming_rooms")
-                .select("*, cameras(*)")
-                .eq("room_id", room_id)
+                .select("*, cameras(*), ambulance_streaming_sessions!inner(is_active)")
+                .eq("room_name", room_name)
+                .eq("ambulance_streaming_sessions.is_active", True)
+                .order("created_at", desc=True)
+                .limit(1)
                 .execute()
             )
 
             if room_result.data:
-                logger.info("Found existing camera room %s in database", room_id)
+                logger.info(
+                    "Found existing camera room %s in active session", room_name
+                )
                 return room_result.data[0]
 
+            logger.info("No active camera room found for %s", room_name)
             return None
 
         except Exception as e:
-            logger.error("Error getting camera room %s: %s", room_id, e)
+            logger.error("Error getting camera room %s: %s", room_name, e)
             raise
 
     @staticmethod
-    async def get_camera_room_by_room_id(room_id: str) -> Optional[Dict[str, Any]]:
+    async def get_camera_room_by_room_id(room_name: str) -> Optional[Dict[str, Any]]:
         """
-        Get existing camera room from database by room_id string (e.g., 'AMB-002-ROOM-002').
-        Alias for get_camera_room_by_id for clarity.
+        Get existing camera room from database by room_name (alias for backward compatibility).
+
+        Args:
+            room_name: Display name of the room (e.g., "AMB-001-ROOM-001")
+
+        Returns:
+            Room record with id (UUID), room_name, and joined session/camera data
         """
-        return await StreamingDatabaseService.get_camera_room_by_id(room_id)
+        return await StreamingDatabaseService.get_camera_room_by_id(room_name)
 
     @staticmethod
     async def update_camera_room_status(
@@ -523,7 +554,8 @@ class StreamingDatabaseService:
                                 ),
                                 "camera_rooms": [
                                     {
-                                        "room_id": r["room_id"],
+                                        "id": r["id"],
+                                        "room_name": r["room_name"],
                                         "camera_id": r["camera_id"],
                                         "camera_name": (
                                             r["cameras"]["camera_name"]
