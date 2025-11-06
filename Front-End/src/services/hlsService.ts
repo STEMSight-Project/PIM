@@ -43,6 +43,8 @@ class HLSService {
   /**
    * Get the full URL for an HLS playlist
    * Uses /videos/hls/{room_id}/playlist.m3u8 endpoint
+   *
+   * @param roomId - The room UUID (room.id) for unique identification
    */
   getPlaylistUrl(roomId: string): string {
     return `${this.baseUrl}/videos/hls/${roomId}/playlist.m3u8`;
@@ -51,6 +53,8 @@ class HLSService {
   /**
    * Get the full URL for an HLS segment
    * Uses /videos/hls/{room_id}/{segment_name} endpoint
+   *
+   * @param roomId - The room UUID (room.id) for unique identification
    */
   getSegmentUrl(roomId: string, segmentName: string): string {
     return `${this.baseUrl}/videos/hls/${roomId}/${segmentName}`;
@@ -59,7 +63,7 @@ class HLSService {
   /**
    * Get recording status
    *
-   * @param roomId - The room ID to check (e.g., AMB-001-ROOM-001)
+   * @param roomId - The room UUID (room.id) to check
    * @returns Recording status information
    */
   async getRecordingStatus(roomId: string): Promise<HLSRecordingStatus | null> {

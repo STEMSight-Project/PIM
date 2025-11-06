@@ -19,6 +19,8 @@ from api_router.realtime import router as realtime_router
 from api_router.recent_sessions import router as recent_sessions_router
 
 from api_router.ambulance_sessions import router as ambulance_sessions_router
+from api_router.movement_detection import router as movement_detection_router
+from api_router.test_sse import router as test_sse_router
 
 # from api_router.reset_password import router as reset_password_router
 
@@ -55,4 +57,6 @@ api_router.include_router(
     patient_event_router, prefix="/patient_event", tags=["Patient Events"]
 )
 api_router.include_router(ambulance_sessions_router)
+api_router.include_router(movement_detection_router)  # No prefix - already in router
+api_router.include_router(test_sse_router, prefix="/test", tags=["Testing"])
 # api_router.include_router(reset_password_router, prefix="/auth", tags=["Auth"])
