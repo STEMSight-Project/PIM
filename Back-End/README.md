@@ -2,10 +2,7 @@
 
 ## Overview
 
-The STEMSight PIM backend is a **FastAPI-based** Camera AI Service designed to detect and track postures and movements using computer vision technology. It provides REST APIs for camera management, real-time streaming, AI-powered pose detection, and integration with Raspberry Pi 4 edge devices.
-
-**Session Management**: The backend receives and manages camera sessions that are automatically initiated by Raspberry Pi 4 devices. The system focuses on processing and storing detection data rather than manual session control.
-
+The STEMSight PIM backend is a **FastAPI-based** Camera AI Service designed to detect and track postures and movements using computer vision technology. It provides REST APIs for camera management, real-time streaming, AI-
 ## 🏗️ Project Structure
 
 ````
