@@ -1,0 +1,22 @@
+name: deploy-backend
+on:
+  push:
+    branches: [main]
+    paths: ['Back-End/**', '.github/workflows/deploy-backend.yml']
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: Back-End } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          zip -r ../backend.zip .
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_BACKEND_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
+          package: backend.zip
