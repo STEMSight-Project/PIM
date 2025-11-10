@@ -10,13 +10,16 @@ const Header = ({ patientId }: { patientId: string | null }) => {
     <header className="bg-white shadow">
       <div className="flex items-center justify-between px-6 py-3">
         <div className="flex items-center space-x-4">
-          {/* Clickable logo that navigates to the patient-dashboard */}
-          <Link
+          {/* Logo - patient-dashboard link temporarily hidden */}
+          <div className="font-bold text-2xl text-blue-700">
+            StemSight
+          </div>
+          {/* <Link
             href="/patient-dashboard"
             className="font-bold text-2xl text-blue-700 transition-transform transform hover:scale-105"
           >
             StemSight
-          </Link>
+          </Link> */}
         </div>
         <div className="flex items-center space-x-6">
           <div className="relative">

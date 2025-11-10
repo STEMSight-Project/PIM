@@ -29,7 +29,7 @@ interface DashboardLayoutProps {
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: CustomDash },
-  { name: "Patients", href: "/patients", icon: CustomPatient },
+  // { name: "Patients", href: "/patients", icon: CustomPatient }, // Temporarily hidden
   {
     name: "Recent Live Session",
     href: "/recent-live-session",
