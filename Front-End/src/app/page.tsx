@@ -180,7 +180,7 @@ export default function LandingPage() {
             <span className="text-lg font-semibold">STEMSight PIM</span>
           </div>
           <p className="text-gray-400">
-            © 2024 STEMSight.
+            © 2025 STEMSight.
           </p>
         </div>
       </footer>

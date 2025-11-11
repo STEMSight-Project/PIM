@@ -7,15 +7,16 @@ import React, { useEffect, useState } from "react";
 
 // Fallback for the doctor specializations list in case the backend request fails
 const FALLBACK_SPECIALIZATIONS = [
-    "General Practice/Family Medicine",
+    "Choose an option ...",
+    "General Practitioner",
     "Internal Medicine",
     "Cardiology",
     "Dermatology",
     "Endocrinology",
     "Gastroenterology",
     "Neurology",
-    "neurosurgeon",
-    "Obstetrics & Gynecology",
+    "Obstetrics",
+    "Gynecology",
     "Oncology",
     "Orthopedics",
     "Pediatrics",
