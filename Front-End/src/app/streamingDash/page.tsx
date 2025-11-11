@@ -1,56 +1,39 @@
 "use client";
 
+import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
-import { patientService, streamingService } from "@/services";
-import type { StreamingSession } from "@/types";
+import { useAuth } from "@/hooks/useAuth";
+import { useRealtimeAmbulanceSessions } from "@/hooks/useRealtime";
+import type { AmbulanceSession, CameraRoom } from "@/types";
 import {
-  ArrowPathIcon,
   CameraIcon,
-  ClockIcon,
   ExclamationTriangleIcon,
   EyeIcon,
-  PlayIcon,
-  StopIcon,
-  UserIcon,
+  SignalIcon,
+  TruckIcon,
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 
-interface PatientWithSession {
-  id: string;
-  first_name: string;
-  last_name: string;
-  sessions: StreamingSession[];
-}
-
-// Badge component following UI design system rules
+// Simple Badge component
 const Badge = ({
   children,
   variant = "default",
   className = "",
 }: {
   children: React.ReactNode;
-  variant?:
-    | "default"
-    | "secondary"
-    | "outline"
-    | "success"
-    | "warning"
-    | "danger"
-    | "live";
+  variant?: "default" | "secondary" | "success" | "warning" | "live";
   className?: string;
 }) => {
   const baseClasses =
-    "inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200";
+    "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium";
   const variantClasses = {
-    default: "bg-blue-100 text-blue-800 border border-blue-200",
-    secondary: "bg-slate-100 text-slate-700 border border-slate-200",
-    outline: "border border-blue-200 text-blue-700 bg-white hover:bg-blue-50",
-    success: "bg-emerald-100 text-emerald-800 border border-emerald-200",
-    warning: "bg-amber-100 text-amber-800 border border-amber-200",
-    danger: "bg-red-100 text-red-800 border border-red-200",
-    live: "bg-red-500 text-white shadow-lg animate-pulse border-2 border-red-400",
+    default: "bg-blue-100 text-blue-800",
+    secondary: "bg-gray-100 text-gray-800",
+    success: "bg-green-100 text-green-800",
+    warning: "bg-yellow-100 text-yellow-800",
+    live: "bg-red-500 text-white animate-pulse",
   };
 
   return (
@@ -60,205 +43,102 @@ const Badge = ({
   );
 };
 
-export default function LiveStreamingDashboard() {
-  const [activePatients, setActivePatients] = useState<PatientWithSession[]>(
-    []
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// Simple ambulance data structure
+interface SimpleAmbulanceData {
+  ambulanceId: string;
+  ambulanceNumber: string;
+  activeSessions: AmbulanceSession[];
+  connectedRooms: CameraRoom[];
+  totalRooms: CameraRoom[];
+}
+
+export default function SimpleStreamingDashboard() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
+  // Single source of truth - real-time sessions data
+  const {
+    sessions: realtimeSessions,
+    isConnected: realtimeConnected,
+    isLoading: realtimeLoading,
+    error: realtimeError,
+  } = useRealtimeAmbulanceSessions({
+    enabled: isAuthenticated,
+    isActive: true,
+  });
+
   useEffect(() => {
-    fetchActivePatients();
-    const interval = setInterval(fetchActivePatients, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchActivePatients = async () => {
-    try {
-      setError(null);
-      const response = await streamingService.getSessions({ is_live: true });
-
-      if (response.error) {
-        setError(response.error);
-        return;
-      }
-
-      // Safely check if response.data exists and is an array
-      if (!response.data || !Array.isArray(response.data)) {
-        console.log("No valid session data received:", response.data);
-        setActivePatients([]);
-        return;
-      }
-
-      if (response.data.length === 0) {
-        setActivePatients([]);
-        return;
-      }
-
-      // Filter sessions that have patient_id and get unique patient IDs
-      const validSessions = response.data.filter(
-        (session) => session && session.patient_id
-      );
-      const patientIds = [
-        ...new Set(validSessions.map((session) => session.patient_id)),
-      ];
-
-      if (patientIds.length === 0) {
-        setActivePatients([]);
-        return;
-      }
-
-      // Fetch patient data for each ID
-      const patientPromises = patientIds.map(async (patientId) => {
-        try {
-          const patientResponse = await patientService.getById(patientId);
-          if (patientResponse.error || !patientResponse.data) {
-            return null;
-          }
-
-          const patientSessions = validSessions.filter(
-            (session) => session.patient_id === patientId
-          );
-
-          return {
-            id: patientResponse.data.id,
-            first_name: patientResponse.data.first_name,
-            last_name: patientResponse.data.last_name,
-            sessions: patientSessions,
-          };
-        } catch (err) {
-          console.error(`Error fetching patient ${patientId}:`, err);
-          return null;
-        }
-      });
-
-      const patients = await Promise.all(patientPromises);
-      setActivePatients(patients.filter(Boolean) as PatientWithSession[]);
-    } catch (err) {
-      console.error("Error in fetchActivePatients:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch active sessions"
-      );
-    } finally {
-      setLoading(false);
+    if (!authLoading && !isAuthenticated) {
+      router.push("/");
     }
-  };
+  }, [isAuthenticated, authLoading, router]);
 
-  const handleViewStream = (patientId: string) => {
-    router.push(`/streamingDash/${patientId}`);
-  };
+  // Process sessions into simple ambulance data
+  const ambulancesData = useMemo(() => {
+    const ambulanceMap = new Map<string, SimpleAmbulanceData>();
 
-  const handleJoinRoom = (roomId: string, patientId: string) => {
-    // Navigate to streaming room with room ID parameter
-    router.push(`/streamingDash/${patientId}?room=${roomId}`);
-  };
+    realtimeSessions.forEach((session) => {
+      const ambulanceId = session.ambulance_id;
 
-  const getSessionStatusBadge = (sessions: StreamingSession[]) => {
-    const activeCount = sessions.filter((s) => s.status === "active").length;
-    const totalCount = sessions.length;
+      if (!ambulanceMap.has(ambulanceId)) {
+        ambulanceMap.set(ambulanceId, {
+          ambulanceId,
+          ambulanceNumber: `AMB-${ambulanceId.substring(0, 3).toUpperCase()}`,
+          activeSessions: [],
+          connectedRooms: [],
+          totalRooms: [],
+        });
+      }
 
-    if (activeCount === 0)
-      return (
-        <Badge variant="secondary">
-          <StopIcon className="w-3 h-3" />
-          Offline
-        </Badge>
+      const ambulanceData = ambulanceMap.get(ambulanceId)!;
+
+      if (session.is_active) {
+        ambulanceData.activeSessions.push(session);
+      }
+
+      const sessionRooms = session.camera_rooms || [];
+
+      ambulanceData.totalRooms.push(...sessionRooms);
+      ambulanceData.connectedRooms.push(
+        ...sessionRooms.filter((room) => room.connected)
       );
+    });
 
-    if (activeCount === totalCount)
-      return (
-        <Badge variant="live">
-          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-          LIVE
-        </Badge>
-      );
+    return Array.from(ambulanceMap.values());
+  }, [realtimeSessions]);
 
-    return (
-      <Badge variant="warning">
-        <PlayIcon className="w-3 h-3" />
-        {activeCount}/{totalCount} Active
-      </Badge>
-    );
+  const handleViewStream = (ambulanceId: string) => {
+    router.push(`/streamingDash/${ambulanceId}`);
   };
 
-  if (loading) {
+  const handleJoinRoom = (roomId: string, ambulanceId: string) => {
+    router.push(`/streamingDash/${ambulanceId}?room=${roomId}`);
+  };
+
+  if (authLoading || realtimeLoading) {
     return (
-      <div className="min-h-screen bg-transparent">
-        <div className="container mx-auto px-6 py-8">
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center">
-              <div className="relative mx-auto w-16 h-16 mb-8">
-                <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
-                <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
-              </div>
-              <h3 className="text-xl font-semibold text-slate-800 mb-2">
-                Loading Live Streams
-              </h3>
-              <p className="text-slate-600">
-                Connecting to camera feeds and patient sessions...
-              </p>
-              <div className="mt-4 flex justify-center">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                  <div
-                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.1s" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.2s" }}
-                  ></div>
-                </div>
-              </div>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="relative mx-auto w-16 h-16 mb-8">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
+              <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
             </div>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">
+              Loading Dashboard
+            </h3>
+            <p className="text-slate-600">Loading streaming data...</p>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="container mx-auto px-6 py-8">
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center max-w-md">
-              <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6">
-                <ExclamationTriangleIcon className="w-8 h-8 text-red-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-slate-800 mb-3">
-                Connection Failed
-              </h3>
-              <p className="text-slate-600 mb-6">
-                Unable to connect to streaming service. Please check your
-                internet connection and try again.
-              </p>
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-                <p className="text-red-800 text-sm font-medium">
-                  Error Details:
-                </p>
-                <p className="text-red-700 text-sm mt-1">{error}</p>
-              </div>
-              <button
-                onClick={() => window.location.reload()}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors duration-200"
-              >
-                <ArrowPathIcon className="w-5 h-5" />
-                Retry Connection
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-transparent">
-      <div className="container mx-auto px-6 py-8">
-        {/* Standard page header following UI design system */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+    <DashboardLayout>
+      <div className="space-y-8">
+        {/* Simple Header */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
@@ -270,97 +150,85 @@ export default function LiveStreamingDashboard() {
                     Live Streaming Dashboard
                   </h1>
                   <p className="text-blue-100 mt-1">
-                    Real-time camera monitoring and patient session management
+                    Real-time ambulance camera monitoring
                   </p>
                 </div>
               </div>
               <div className="hidden lg:flex items-center space-x-6">
                 <div className="text-center bg-white/10 rounded-lg px-4 py-2 backdrop-blur-sm">
                   <div className="text-2xl font-bold text-white">
-                    {activePatients.length}
+                    {ambulancesData.length}
                   </div>
                   <div className="text-blue-200 text-sm font-medium">
-                    Patients
+                    Ambulances
                   </div>
                 </div>
                 <div className="text-center bg-white/10 rounded-lg px-4 py-2 backdrop-blur-sm">
                   <div className="text-2xl font-bold text-white">
-                    {activePatients.reduce(
-                      (acc, p) =>
-                        acc +
-                        p.sessions.filter((s) => s.status === "active").length,
+                    {ambulancesData.reduce(
+                      (total, amb) => total + amb.connectedRooms.length,
                       0
                     )}
                   </div>
                   <div className="text-blue-200 text-sm font-medium">
-                    Live Now
+                    Live Cameras
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Status bar */}
+          {/* Status Bar */}
           <div className="bg-slate-50 px-8 py-4 border-t border-slate-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-6">
                 <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      realtimeConnected
+                        ? "bg-green-500 animate-pulse"
+                        : "bg-red-500"
+                    }`}
+                  ></div>
                   <span className="text-sm font-medium text-slate-700">
-                    System Online
+                    Real-time:{" "}
+                    {realtimeConnected ? "Connected" : "Disconnected"}
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <CameraIcon className="h-4 w-4 text-blue-600" />
                   <span className="text-sm text-slate-600">
-                    {activePatients.reduce(
-                      (acc, p) => acc + p.sessions.length,
-                      0
-                    )}{" "}
-                    total sessions
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <ClockIcon className="h-4 w-4 text-slate-500" />
-                  <span className="text-sm text-slate-600">
-                    Last updated: {new Date().toLocaleTimeString()}
+                    {realtimeSessions.length} active sessions
                   </span>
                 </div>
               </div>
-              <Button
-                onClick={fetchActivePatients}
-                className="border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors duration-200"
-              >
-                <ArrowPathIcon className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
+              {realtimeError && (
+                <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                  Connection issues detected
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-xl shadow-sm">
+        {/* Error Message */}
+        {realtimeError && (
+          <div className="p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-xl shadow-sm">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-red-500 rounded-lg">
-                <StopIcon className="h-5 w-5 text-white" />
+                <ExclamationTriangleIcon className="h-5 w-5 text-white" />
               </div>
-              <div>
-                <p className="text-red-800 font-medium">Connection Error</p>
-                <p className="text-red-600 text-sm">{error}</p>
+              <div className="flex-1">
+                <p className="text-red-800 font-medium">
+                  Real-time Connection Issues
+                </p>
+                <p className="text-red-600 text-sm">{realtimeError}</p>
               </div>
             </div>
-            <Button
-              onClick={fetchActivePatients}
-              variant="outline"
-              size="sm"
-              className="mt-3 border-red-300 text-red-700 hover:bg-red-50"
-            >
-              Try Again
-            </Button>
           </div>
         )}
 
-        {activePatients.length === 0 ? (
+        {ambulancesData.length === 0 ? (
           <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
             <CardContent className="text-center py-16">
               <div className="mb-8">
@@ -369,35 +237,30 @@ export default function LiveStreamingDashboard() {
                 </div>
               </div>
               <h3 className="text-xl font-semibold text-slate-800 mb-3">
-                No Active Streams
+                No Active Sessions
               </h3>
               <p className="text-slate-600 mb-8 max-w-md mx-auto">
-                No patients are currently streaming. Active camera feeds will
-                appear here automatically.
+                No ambulance sessions are currently active. Sessions will appear
+                here when cameras connect.
               </p>
-              <Button
-                onClick={fetchActivePatients}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors duration-200"
-              >
-                <ArrowPathIcon className="h-5 w-5" />
-                Refresh Dashboard
-              </Button>
             </CardContent>
           </Card>
         ) : (
           <>
             {/* Stats Bar */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex flex-wrap items-center justify-between gap-6">
                 <div className="flex items-center space-x-8">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <UserIcon className="h-5 w-5 text-blue-600" />
+                      <TruckIcon className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-slate-500">Active Patients</p>
+                      <p className="text-sm text-slate-500">
+                        Active Ambulances
+                      </p>
                       <p className="text-xl font-semibold text-slate-800">
-                        {activePatients.length}
+                        {ambulancesData.length}
                       </p>
                     </div>
                   </div>
@@ -408,127 +271,145 @@ export default function LiveStreamingDashboard() {
                     <div>
                       <p className="text-sm text-slate-500">Live Sessions</p>
                       <p className="text-xl font-semibold text-slate-800">
-                        {activePatients.reduce(
-                          (acc, p) =>
-                            acc +
-                            p.sessions.filter((s) => s.status === "active")
-                              .length,
+                        {ambulancesData.reduce(
+                          (acc, amb) => acc + amb.activeSessions.length,
+                          0
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                      <SignalIcon className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">
+                        Connected Cameras
+                      </p>
+                      <p className="text-xl font-semibold text-slate-800">
+                        {ambulancesData.reduce(
+                          (acc, amb) => acc + amb.connectedRooms.length,
                           0
                         )}
                       </p>
                     </div>
                   </div>
                 </div>
-                <Button
-                  onClick={fetchActivePatients}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors duration-200"
-                >
-                  <ArrowPathIcon className="h-4 w-4" />
-                  Refresh
-                </Button>
               </div>
             </div>
 
-            {/* Patient Cards Grid */}
+            {/* Ambulance Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {activePatients.map((patient) => (
+              {ambulancesData.map((ambulance) => (
                 <Card
-                  key={patient.id}
-                  className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden"
+                  key={ambulance.ambulanceId}
+                  className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200"
                 >
                   <CardHeader className="border-b border-slate-100 bg-slate-50">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                          <UserIcon className="h-5 w-5 text-blue-600" />
+                          <TruckIcon className="h-5 w-5 text-blue-600" />
                         </div>
-                        <h3 className="text-lg font-semibold text-slate-800 truncate">
-                          {patient.first_name} {patient.last_name}
+                        <h3 className="text-lg font-semibold text-slate-800">
+                          {ambulance.ambulanceNumber}
                         </h3>
                       </div>
-                      {getSessionStatusBadge(patient.sessions)}
+                      {ambulance.activeSessions.length > 0 ? (
+                        ambulance.connectedRooms.length > 0 ? (
+                          <Badge variant="live">
+                            <div className="w-2 h-2 bg-white rounded-full" />
+                            LIVE
+                          </Badge>
+                        ) : (
+                          <Badge variant="warning">Session Active</Badge>
+                        )
+                      ) : (
+                        <Badge variant="secondary">Inactive</Badge>
+                      )}
                     </div>
                   </CardHeader>
 
                   <CardContent className="p-6 space-y-4">
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center space-x-2">
-                          <CameraIcon className="h-4 w-4 text-blue-600" />
-                          <span className="font-medium text-slate-700">
-                            {patient.sessions.length} session
-                            {patient.sessions.length !== 1 ? "s" : ""}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-1 text-slate-500">
-                          <ClockIcon className="h-4 w-4" />
-                          <span className="text-xs">
-                            {new Date(
-                              patient.sessions[0]?.updated_at || ""
-                            ).toLocaleTimeString()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      {patient.sessions.slice(0, 2).map((session) => (
-                        <div
-                          key={session.id}
-                          onClick={() =>
-                            handleJoinRoom(session.room_id, patient.id)
-                          }
-                          className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors duration-200 border border-slate-200"
-                          title={`Click to join room ${session.room_id}`}
-                        >
-                          <div className="flex items-center space-x-3">
-                            <div
-                              className={`w-3 h-3 rounded-full ${
-                                session.status === "active"
-                                  ? "bg-green-500 animate-pulse"
-                                  : "bg-slate-400"
-                              }`}
-                            ></div>
-                            <span className="text-sm font-medium text-slate-700 truncate">
-                              Room: {session.room_id.split("-")[0]}...
-                            </span>
+                    {ambulance.activeSessions.length > 0 ? (
+                      <>
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                          <div className="text-sm">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-slate-700">
+                                Sessions: {ambulance.activeSessions.length}
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                Rooms: {ambulance.connectedRooms.length}/
+                                {ambulance.totalRooms.length}
+                              </span>
+                            </div>
                           </div>
-                          <Badge
-                            variant={
-                              session.status === "active" ? "live" : "secondary"
-                            }
-                          >
-                            {session.status === "active" ? (
-                              <>
-                                <PlayIcon className="h-3 w-3" />
-                                Live
-                              </>
-                            ) : (
-                              <>
-                                <StopIcon className="h-3 w-3" />
-                                Stopped
-                              </>
+                        </div>
+
+                        {ambulance.totalRooms.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="text-sm font-medium text-slate-700 mb-3">
+                              Camera Rooms ({ambulance.totalRooms.length})
+                            </div>
+                            {ambulance.totalRooms.map((room) => {
+                              return (
+                                <div
+                                  key={room.id}
+                                  onClick={() =>
+                                    handleJoinRoom(
+                                      room.id,
+                                      ambulance.ambulanceId
+                                    )
+                                  }
+                                  className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors border border-slate-200"
+                                >
+                                  <div className="flex items-center space-x-3">
+                                    <div
+                                      className={`w-3 h-3 rounded-full ${
+                                        room.connected
+                                          ? "bg-green-500 animate-pulse"
+                                          : "bg-slate-400"
+                                      }`}
+                                    />
+                                    <span className="text-sm font-medium text-slate-800">
+                                      {room.room_name}
+                                    </span>
+                                  </div>
+                                  <EyeIcon className="h-4 w-4 text-slate-400" />
+                                </div>
+                              );
+                            })}
+
+                            {ambulance.totalRooms.length > 3 && (
+                              <p className="text-xs text-slate-500 text-center">
+                                +{ambulance.totalRooms.length - 3} more rooms
+                              </p>
                             )}
-                          </Badge>
-                        </div>
-                      ))}
+                          </div>
+                        )}
 
-                      {patient.sessions.length > 2 && (
-                        <div className="text-center">
-                          <Badge variant="secondary" className="text-xs">
-                            +{patient.sessions.length - 2} more sessions
-                          </Badge>
+                        <div className="pt-4 border-t border-slate-200">
+                          <Button
+                            onClick={() =>
+                              handleViewStream(ambulance.ambulanceId)
+                            }
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2 px-4"
+                          >
+                            <VideoCameraIcon className="h-4 w-4 mr-2" />
+                            View Stream
+                          </Button>
                         </div>
-                      )}
-                    </div>
-
-                    <Button
-                      onClick={() => handleViewStream(patient.id)}
-                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors duration-200"
-                    >
-                      <EyeIcon className="h-4 w-4" />
-                      View Live Stream
-                    </Button>
+                      </>
+                    ) : (
+                      <div className="text-center py-8 text-slate-500">
+                        <CameraIcon className="h-12 w-12 mx-auto mb-3 text-slate-300" />
+                        <p className="font-medium">No Active Session</p>
+                        <p className="text-sm">
+                          Waiting for cameras to connect
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -536,6 +417,6 @@ export default function LiveStreamingDashboard() {
           </>
         )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

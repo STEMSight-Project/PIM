@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui";
+import { Button, ClientOnly } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/utils/cn";
 import {
@@ -10,29 +10,33 @@ import {
   ChevronDoubleRightIcon,
   DocumentTextIcon,
   HomeIcon,
+  PlayIcon,
   UserGroupIcon,
   UserIcon,
   VideoCameraIcon,
-  XMarkIcon,
+  XMarkIcon
 } from "@heroicons/react/24/outline";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { CustomCamera, CustomDash, CustomPatient, CustomRecent, CustomReplay } from "../ui/CustomIcons";
+
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
-  { name: "Subjects", href: "/patients", icon: UserGroupIcon },
+  { name: "Dashboard", href: "/dashboard", icon: CustomDash },
+  // { name: "Patients", href: "/patients", icon: CustomPatient }, // Temporarily hidden
   {
     name: "Recent Live Session",
     href: "/recent-live-session",
-    icon: DocumentTextIcon,
+    icon: CustomRecent,
   },
-  { name: "Live Cameras", href: "/streamingDash", icon: VideoCameraIcon },
+  { name: "Live Cameras", href: "/streamingDash", icon: CustomCamera },
+  { name: "Video Playback", href: "/video-playback", icon: CustomReplay },
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -40,7 +44,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  // Derive display name/email from authenticated user to display in sidebar 
+  const firstName = (user as any)?.first_name ?? (user as any)?.user_metadata?.first_name ?? "";
+  const lastName = (user as any)?.last_name ?? (user as any)?.user_metadata?.last_name ?? "";
+  const hasName = Boolean(firstName || lastName);
+  const displayName = hasName
+    ? `Dr. ${[firstName, lastName].filter(Boolean).join(" ")}`
+    : user?.email
+      ? `Dr. ${user.email.split("@")[0]}`
+      : "Doctor";
+  const displayEmail = user?.email ?? "";
 
   // Load collapsed state from localStorage
   useEffect(() => {
@@ -171,7 +185,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 scale-105"
                       : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:scale-102",
                     sidebarCollapsed &&
-                      "lg:justify-center lg:space-x-0 lg:w-12 lg:h-12 lg:mx-auto lg:p-0"
+                    "lg:justify-center lg:space-x-0 lg:w-12 lg:h-12 lg:mx-auto lg:p-0"
                   )}
                   onClick={() => setSidebarOpen(false)}
                   title={sidebarCollapsed ? item.name : undefined}
@@ -215,10 +229,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {(!sidebarCollapsed || sidebarOpen) && (
                 <div className="flex-1 min-w-0 transition-opacity duration-300">
                   <p className="text-sm font-semibold text-slate-900 truncate">
-                    Dr. Smith
+                    {displayName}
                   </p>
                   <p className="text-xs text-slate-500 truncate">
-                    doctor@stemsight.com
+                    {displayEmail}
                   </p>
                 </div>
               )}
@@ -291,21 +305,32 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
 
             <div className="hidden lg:flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-slate-900">
-                  {new Date().toLocaleDateString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {new Date().toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
+              <ClientOnly
+                fallback={
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-slate-900">
+                      Loading...
+                    </p>
+                    <p className="text-xs text-slate-500">--:--</p>
+                  </div>
+                }
+              >
+                <div className="text-right">
+                  <p className="text-sm font-medium text-slate-900">
+                    {new Date().toLocaleDateString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {new Date().toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              </ClientOnly>
             </div>
           </div>
         </header>

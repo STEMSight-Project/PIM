@@ -29,7 +29,7 @@ const TabsContainer = ({
   const [currentTab, setCurrentTab] = useState<TabType>("timeline");
 
   return (
-    <div className="bg-white rounded-lg shadow-lg">
+    <div className="w-full bg-white rounded-lg shadow-lg">
       {/* Tab Navigation - Timeline and Notes */}
       <div className="p-4">
         <div className="flex bg-gray-50 rounded-lg p-1 mb-6">
@@ -92,9 +92,13 @@ const TabsContainer = ({
 
       {/* Tab Content */}
       <div className="px-4 pb-4">
-        <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
+        <div className="bg-gray-50 rounded-lg p-4 min-h-96 overflow-y-auto">
           {currentTab === "timeline" && (
-            <Timeline setCurrentTimestamp={setCurrentTimestamp} />
+            <Timeline
+              setCurrentTimestamp={setCurrentTimestamp}
+              videoId={videoId}
+              patientId={patientId}
+            />
           )}
           {currentTab === "notes" && (
             <Notes

@@ -4,10 +4,12 @@ from fastapi import Depends, HTTPException, APIRouter, status
 from pydantic import BaseModel, Field
 from core.common import logger
 from core.common import supabase
-from security.jwt_verify import router_auth_dependency
+from security.jwt_verify import router_auth_dependency, CurrentUser
+from user_actions import log_patient_action
+
+router = APIRouter(dependencies=[Depends(router_auth_dependency)])
 
 # Use universal authentication for both OAuth2 docs AND frontend requests
-router = APIRouter(dependencies=[Depends(router_auth_dependency())])
 
 
 class PatientBase(BaseModel):
@@ -64,7 +66,14 @@ async def get_all_patients():
         if result.data is None:
             return []
 
-        return result.data
+        # Ensure dates/datetimes are JSON serializable
+        def _serialize_row(r):
+            for k, v in list(r.items()):
+                if isinstance(v, (date, datetime)):
+                    r[k] = v.isoformat()
+            return r
+
+        return [_serialize_row(r) for r in result.data]
     except Exception as exc:
         logger.exception("Failed to retrieve patients: %s", exc)
         raise HTTPException(
@@ -74,7 +83,7 @@ async def get_all_patients():
 
 
 @router.get("/{patient_id}", response_model=Patient, summary="Get patient by id")
-async def get_patient(patient_id: str):
+async def get_patient(patient_id: str, user: CurrentUser):
     logger.info("get_patient called for patient_id: %s", patient_id)
     try:
         result = (
@@ -90,6 +99,14 @@ async def get_patient(patient_id: str):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Patient with id {patient_id} not found",
             )
+
+        # Serialize date/datetime fields to ISO strings
+        for k, v in list(result.data.items()):
+            if isinstance(v, (date, datetime)):
+                result.data[k] = v.isoformat()
+
+        # Log the view action
+        await log_patient_action(user["id"], patient_id, "view")
 
         return result.data
     except HTTPException:
@@ -108,10 +125,14 @@ async def get_patient(patient_id: str):
     summary="Create a new patient",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_patient(patient: PatientCreate):
+async def create_patient(patient: PatientCreate, user: CurrentUser):
     try:
         # Convert patient data to dict for database insertion
         patient_data = patient.model_dump()
+
+        # Ensure date fields are JSON serializable before sending to Supabase
+        if isinstance(patient_data.get("dob"), (date, datetime)):
+            patient_data["dob"] = patient_data["dob"].isoformat()
 
         result = supabase.table("patients").insert(patient_data).execute()
 
@@ -121,7 +142,14 @@ async def create_patient(patient: PatientCreate):
                 detail="Failed to create patient",
             )
 
-        return result.data[0]
+        created = result.data[0]
+        for k, v in list(created.items()):
+            if isinstance(v, (date, datetime)):
+                created[k] = v.isoformat()
+
+        await log_patient_action(user["id"], created["id"], "create", metadata=patient_data)
+
+        return created
     except HTTPException:
         raise
     except Exception as exc:
@@ -133,7 +161,7 @@ async def create_patient(patient: PatientCreate):
 
 
 @router.patch("/{patient_id}", response_model=Patient, summary="Update patient by id")
-async def update_patient(patient_id: str, patient: PatientUpdate):
+async def update_patient(patient_id: str, patient: PatientUpdate, user: CurrentUser):
     try:
         # Get only the fields that were actually provided
         updated_values = patient.model_dump(exclude_unset=True)
@@ -143,6 +171,10 @@ async def update_patient(patient_id: str, patient: PatientUpdate):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No data provided for update",
             )
+
+        # Convert date fields to serializable strings and add updated timestamp
+        if isinstance(updated_values.get("dob"), (date, datetime)):
+            updated_values["dob"] = updated_values["dob"].isoformat()
 
         # Add updated timestamp
         updated_values["updated_at"] = datetime.utcnow().isoformat()
@@ -160,7 +192,15 @@ async def update_patient(patient_id: str, patient: PatientUpdate):
                 detail=f"Patient with id {patient_id} not found",
             )
 
-        return result.data[0]
+        updated = result.data[0]
+        for k, v in list(updated.items()):
+            if isinstance(v, (date, datetime)):
+                updated[k] = v.isoformat()
+
+        # Log the update action
+        await log_patient_action(user["id"], patient_id, "update", metadata=updated_values)
+
+        return updated
     except HTTPException:
         raise
     except Exception as exc:
@@ -176,7 +216,7 @@ async def update_patient(patient_id: str, patient: PatientUpdate):
     summary="Delete patient by id",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_patient(patient_id: str):
+async def delete_patient(patient_id: str, user: CurrentUser):
     try:
         # First check if patient exists
         check_result = (
@@ -191,6 +231,12 @@ async def delete_patient(patient_id: str):
 
         # Delete the patient
         _ = supabase.table("patients").delete().eq("id", patient_id).execute()
+
+        # Log the delete action; don't block the response if logging fails
+        try:
+            await log_patient_action(user["id"], patient_id, "delete")
+        except Exception as e:
+            logger.exception("Failed to write delete audit log for patient %s: %s", patient_id, e)
 
         return {"message": "Patient deleted successfully"}
     except HTTPException:

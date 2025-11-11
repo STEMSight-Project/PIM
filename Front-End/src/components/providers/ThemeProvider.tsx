@@ -12,7 +12,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Set localStorage to prevent theme switching
     try {
       localStorage.setItem("theme", "light");
-    } catch (e) {
+    } catch {
       // Ignore localStorage errors
     }
   }, []);

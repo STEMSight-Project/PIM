@@ -13,13 +13,13 @@ import type { MedicalHistory } from "@/services/medicalHistoryService";
 import type { Patient } from "@/types/medical";
 import { formatDate } from "@/utils/cn";
 import {
-    ArrowLeftIcon,
-    CalendarIcon,
-    DocumentTextIcon,
-    PencilIcon,
-    PlusIcon,
-    TrashIcon,
-    UserIcon,
+  ArrowLeftIcon,
+  CalendarIcon,
+  DocumentTextIcon,
+  PencilIcon,
+  PlusIcon,
+  TrashIcon,
+  UserIcon,
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -155,7 +155,13 @@ export default function MedicalHistoryPage() {
   }) => {
     if (!editingRecord) return;
 
-    const result = await updateMedicalHistory(editingRecord.id, formData);
+    // Include patient_id in the update request
+    const updateData = {
+      ...formData,
+      patient_id: patientId
+    };
+
+    const result = await updateMedicalHistory(editingRecord.id, updateData);
     
     if (result) {
       setEditingRecord(null);
@@ -198,21 +204,21 @@ export default function MedicalHistoryPage() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between bg-gradient-to-r from-purple-600 to-violet-600 p-6 rounded-lg shadow-lg">
           <div>
             <div className="flex items-center space-x-4 mb-2">
               <Button
                 variant="ghost"
                 onClick={() => router.push(`/patients/${patientId}`)}
-                className="p-2"
+                className="p-2 text-white hover:bg-purple-500 hover:bg-opacity-20"
               >
                 <ArrowLeftIcon className="h-5 w-5" />
               </Button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="text-2xl font-bold text-white">
                   Medical History
                 </h1>
-                <p className="text-gray-600">
+                <p className="text-purple-100">
                   {patient.first_name} {patient.last_name}
                 </p>
               </div>
@@ -221,7 +227,11 @@ export default function MedicalHistoryPage() {
           <Button
             onClick={() => setShowAddForm(!showAddForm)}
             variant={showAddForm ? "outline" : "primary"}
-            className="flex items-center"
+            className={`flex items-center ${
+              showAddForm 
+                ? "bg-white text-purple-600 border-white hover:bg-purple-50" 
+                : "bg-purple-800 hover:bg-purple-900 text-white border-purple-800"
+            }`}
           >
             <PlusIcon className="h-4 w-4 mr-2" />
             {showAddForm ? "Cancel" : "Add New Record"}
@@ -229,18 +239,18 @@ export default function MedicalHistoryPage() {
         </div>
 
         {/* Patient Info Summary */}
-        <Card className="p-4">
+        <Card className="p-4 bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200">
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <UserIcon className="h-6 w-6 text-blue-600" />
+            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center ring-2 ring-purple-200">
+              <UserIcon className="h-6 w-6 text-purple-600" />
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">
                 {patient.first_name} {patient.last_name}
               </h3>
-              <div className="flex items-center space-x-4 text-sm text-gray-600">
+              <div className="flex items-center space-x-4 text-sm text-purple-700">
                 <div className="flex items-center">
-                  <CalendarIcon className="h-4 w-4 mr-1" />
+                  <CalendarIcon className="h-4 w-4 mr-1 text-purple-500" />
                   Born {formatDate(patient.date_of_birth)}
                 </div>
                 <div>Gender: {patient.gender}</div>
@@ -266,8 +276,9 @@ export default function MedicalHistoryPage() {
 
         {/* Add Form */}
         {showAddForm && (
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <Card className="p-6 bg-gradient-to-br from-purple-50 to-violet-50 border-purple-200 shadow-lg">
+            <h3 className="text-lg font-semibold text-purple-900 mb-4 flex items-center">
+              <PlusIcon className="h-5 w-5 mr-2 text-purple-600" />
               Add New Medical Record
             </h3>
             <EnhancedMedicalHistoryForm
@@ -285,25 +296,25 @@ export default function MedicalHistoryPage() {
         )}
 
         {/* Medical History Records */}
-        <Card className="p-6">
+        <Card className="p-6 border-purple-200 shadow-lg">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <DocumentTextIcon className="h-5 w-5 mr-2" />
+            <h3 className="text-lg font-semibold text-purple-900 flex items-center">
+              <DocumentTextIcon className="h-5 w-5 mr-2 text-purple-600" />
               Medical History Records
             </h3>
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-purple-600 bg-purple-50 px-3 py-1 rounded-full">
               {filteredRecords.length} of {medicalHistories.length} record{medicalHistories.length !== 1 ? 's' : ''}
               {filteredRecords.length !== medicalHistories.length && " (filtered)"}
             </div>
           </div>
 
           {filteredRecords.length === 0 ? (
-            <div className="text-center py-12">
-              <DocumentTextIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">
+            <div className="text-center py-12 bg-purple-25">
+              <DocumentTextIcon className="mx-auto h-12 w-12 text-purple-400" />
+              <h3 className="mt-2 text-sm font-medium text-purple-900">
                 {medicalHistories.length === 0 ? "No medical history" : "No matching records"}
               </h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-purple-600">
                 {medicalHistories.length === 0 
                   ? "No medical history records available for this patient." 
                   : "Try adjusting your filters to see more results."}
@@ -315,8 +326,9 @@ export default function MedicalHistoryPage() {
                 <div key={record.id}>
                   {editingRecord?.id === record.id ? (
                     /* Edit Form */
-                    <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                      <h4 className="font-medium text-gray-900 mb-4">
+                    <div className="border border-purple-300 rounded-lg p-4 bg-gradient-to-br from-purple-50 to-violet-50 shadow-md">
+                      <h4 className="font-medium text-purple-900 mb-4 flex items-center">
+                        <PencilIcon className="h-4 w-4 mr-2 text-purple-600" />
                         Edit Medical Record
                       </h4>
                       <EnhancedMedicalHistoryForm
@@ -333,11 +345,11 @@ export default function MedicalHistoryPage() {
                     </div>
                   ) : (
                     /* Display Record */
-                    <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="border border-purple-200 rounded-lg p-4 hover:shadow-lg hover:border-purple-300 transition-all duration-200 bg-gradient-to-r from-white to-purple-25">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex justify-between items-start mb-2">
-                            <h4 className="font-semibold text-gray-900 text-lg">
+                            <h4 className="font-semibold text-purple-900 text-lg">
                               {record.diagnosis}
                             </h4>
                             <div className="flex items-center space-x-2">
@@ -345,7 +357,7 @@ export default function MedicalHistoryPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setEditingRecord(record)}
-                                className="p-2"
+                                className="p-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
                               >
                                 <PencilIcon className="h-4 w-4" />
                               </Button>
@@ -353,7 +365,7 @@ export default function MedicalHistoryPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleDeleteRecord(record.id)}
-                                className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                className="p-2 text-purple-700 hover:text-purple-800 hover:bg-purple-100"
                               >
                                 <TrashIcon className="h-4 w-4" />
                               </Button>
@@ -362,15 +374,15 @@ export default function MedicalHistoryPage() {
                           
                           {record.note && (
                             <div className="mb-3">
-                              <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md">
+                              <p className="text-sm text-purple-800 bg-purple-50 p-3 rounded-md border border-purple-200">
                                 {record.note}
                               </p>
                             </div>
                           )}
                           
-                          <div className="flex items-center justify-between text-xs text-gray-500">
+                          <div className="flex items-center justify-between text-xs text-purple-600">
                             <div>
-                              Doctor: <span className="font-medium">{record.doctor_id}</span>
+                              Doctor: <span className="font-medium text-purple-700">{record.doctor_id}</span>
                             </div>
                             <div className="flex items-center">
                               <CalendarIcon className="h-3 w-3 mr-1" />

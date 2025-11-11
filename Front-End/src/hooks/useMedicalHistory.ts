@@ -56,7 +56,6 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
           ? err.message
           : "Failed to fetch medical histories";
       setError(message);
-      console.error("Error fetching medical histories:", err);
     } finally {
       setLoading(false);
     }
@@ -76,7 +75,6 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
       const message =
         err instanceof Error ? err.message : "Failed to fetch medical history";
       setError(message);
-      console.error("Error fetching medical history:", err);
     } finally {
       setLoading(false);
     }
@@ -95,7 +93,6 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
             ? err.message
             : "Failed to fetch patient medical histories";
         setError(message);
-        console.error("Error fetching patient medical histories:", err);
       } finally {
         setLoading(false);
       }
@@ -122,7 +119,6 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
             ? err.message
             : "Failed to create medical history";
         setError(message);
-        console.error("Error creating medical history:", err);
         return null;
       } finally {
         setLoading(false);
@@ -158,7 +154,6 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
             ? err.message
             : "Failed to update medical history";
         setError(message);
-        console.error("Error updating medical history:", err);
         return null;
       } finally {
         setLoading(false);
@@ -189,7 +184,6 @@ export function useMedicalHistory(): UseMedicalHistoryReturn {
             ? err.message
             : "Failed to delete medical history";
         setError(message);
-        console.error("Error deleting medical history:", err);
         return false;
       } finally {
         setLoading(false);

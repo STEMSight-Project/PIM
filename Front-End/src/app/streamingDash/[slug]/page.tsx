@@ -1,467 +1,561 @@
 "use client";
 
-import { ConnectionStatus } from "@/components/ConnectionStatus";
+import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
+import { MovementDetectionPanel } from "@/components/MovementDetectionPanel";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
-import { useStreaming } from "@/hooks/useStreaming";
-import { patientService, streamingService } from "@/services";
-import type { Patient, StreamingSession } from "@/types";
+import { useRealtimeAmbulanceSessions } from "@/hooks/useRealtime";
+import type { AmbulanceSession, CameraRoom } from "@/types";
 import {
   ArrowLeftIcon,
-  ExclamationTriangleIcon,
-  PlayIcon,
   SignalIcon,
-  StopIcon,
+  TruckIcon,
   VideoCameraIcon,
+  WifiIcon,
+  XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-// Simple Badge component
-const Badge = ({
-  children,
-  variant = "default",
-  className = "",
-}: {
-  children: React.ReactNode;
-  variant?: "default" | "secondary" | "outline";
-  className?: string;
-}) => {
-  const baseClasses =
-    "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
-  const variantClasses = {
-    default: "bg-blue-100 text-blue-800",
-    secondary: "bg-gray-100 text-gray-800",
-    outline: "border border-gray-300 text-gray-800",
-  };
-
-  return (
-    <span className={`${baseClasses} ${variantClasses[variant]} ${className}`}>
-      {children}
-    </span>
-  );
-};
-
-export default function PatientStreamingPage() {
+export default function AmbulanceStreamingPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const patientId = params.slug as string;
-  const roomId = searchParams.get("room"); // Get room ID from URL params
+  const ambulanceId = params.slug as string;
+  const roomIdFromUrl = searchParams.get("room");
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(
+    roomIdFromUrl
+  );
 
-  const [patient, setPatient] = useState<Patient | null>(null);
-  const [sessions, setSessions] = useState<StreamingSession[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(roomId);
+  /**
+   * Data Flow:
+   * 1. Get ambulanceId from URL params (e.g., /streamingDash/AMB-001)
+   * 2. Get optional roomId from URL query (e.g., ?room=AMB-001-ROOM-001)
+   * 3. Fetch ALL sessions for this ambulance (active or inactive)
+   * 4. Extract ALL rooms from sessions (online or offline)
+   * 5. Auto-select room from URL when it becomes available
+   * 6. Real-time updates handle connected/disconnected status changes
+   */
 
+  // Real-time sessions data - get ALL sessions for this ambulance (active or not)
+  // We need all sessions to see all rooms, regardless of connection status
   const {
-    isConnected: isStreaming,
-    isConnecting,
-    isReconnecting,
-    error: streamingError,
-    connectionQuality,
-    reconnectionAttempts: reconnectAttempts,
-    maxReconnectionAttempts,
+    sessions: allSessions,
+    isConnected: realtimeConnected,
+    isLoading,
+    error: realtimeError,
+  } = useRealtimeAmbulanceSessions({
+    enabled: true,
+    ambulanceId: ambulanceId, // Filter by ambulance ID from URL
+    isActive: true,
+  });
 
-    // Enhanced UX properties
-    reconnectionCountdown,
-    reconnectionProgress,
-    userFriendlyStatus,
-    canManualRetry,
-    isUserCancelledReconnection,
+  // Extract ALL rooms for this ambulance (online or offline)
+  // Deduplicate by camera_id to prevent duplicate keys in React rendering
+  const availableRooms = useMemo(() => {
+    const rooms = allSessions.flatMap(
+      (session: AmbulanceSession) => session.camera_rooms || []
+    );
 
-    currentSession,
-    videoRef,
-    startStreaming,
-    stopStreaming,
-    clearError: clearStreamingError,
-    reconnect,
-    cancelReconnection,
-  } = useStreaming();
+    // Deduplicate by camera_id - keep the most recent/connected one
+    const roomMap = new Map<string, CameraRoom>();
+    for (const room of rooms) {
+      const existing = roomMap.get(room.camera_id);
+      if (!existing) {
+        roomMap.set(room.camera_id, room);
+      } else {
+        // Prioritize: 1) connected rooms, 2) more recent updates
+        if (room.connected && !existing.connected) {
+          roomMap.set(room.camera_id, room);
+        } else if (
+          room.connected === existing.connected &&
+          room.updated_at > existing.updated_at
+        ) {
+          roomMap.set(room.camera_id, room);
+        }
+      }
+    }
 
+    return Array.from(roomMap.values());
+  }, [allSessions]);
+
+  // Compute stats for this ambulance
+  const ambulanceStats = useMemo(() => {
+    const liveRooms = availableRooms.filter(
+      (room: CameraRoom) => room.connected === true
+    );
+    return {
+      totalRooms: availableRooms.length,
+      liveRooms: liveRooms.length,
+      totalSessions: allSessions.length,
+    };
+  }, [availableRooms, allSessions]);
+
+  // Auto-select room from URL when it becomes available
   useEffect(() => {
-    if (patientId) {
-      fetchPatientData();
-      fetchPatientSessions();
-    }
-  }, [patientId]);
-
-  const fetchPatientData = async () => {
-    try {
-      const response = await patientService.getById(patientId);
-      if (response.error || !response.data) {
-        setError("Patient not found");
-        return;
+    if (roomIdFromUrl && availableRooms.length > 0) {
+      const roomExists = availableRooms.some(
+        (room: CameraRoom) => room.id === roomIdFromUrl
+      );
+      if (roomExists && selectedRoomId !== roomIdFromUrl) {
+        setSelectedRoomId(roomIdFromUrl);
       }
-      setPatient(response.data);
-    } catch (err) {
-      setError("Failed to load patient data");
+    } else if (!roomIdFromUrl && !selectedRoomId && availableRooms.length > 0) {
+      // Auto-select first available room if no room specified
+      console.log("[StreamingDash] Auto-selecting first available room");
+      setSelectedRoomId(availableRooms[0].id);
     }
+  }, [roomIdFromUrl, availableRooms, selectedRoomId]);
+
+  // Monitor selected room's connection status
+  const selectedRoom = useMemo(() => {
+    return availableRooms.find(
+      (room: CameraRoom) => room.id === selectedRoomId
+    );
+  }, [availableRooms, selectedRoomId]);
+
+  const handleRoomSelect = (roomId: string) => {
+    setSelectedRoomId(roomId);
+    // Update URL with room.id (UUID)
+    const url = new URL(window.location.href);
+    url.searchParams.set("room", roomId);
+    window.history.replaceState({}, "", url.toString());
   };
 
-  const fetchPatientSessions = async () => {
-    try {
-      setLoading(true);
-      const response = await streamingService.getSessions({
-        patient_id: patientId,
-        is_live: true,
-      });
-
-      if (response.error) {
-        setError(response.error);
-        return;
-      }
-
-      setSessions(response.data || []);
-    } catch (err) {
-      setError("Failed to load streaming sessions");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleStartStream = () => {
-    clearStreamingError();
-    startStreaming(patientId);
-  };
-
-  const handleStopStream = () => {
-    stopStreaming();
-  };
-
-  const handleReconnect = () => {
-    clearStreamingError();
-    reconnect();
-  };
-
-  const getConnectionStatus = () => {
-    if (isConnecting || isReconnecting) return "Connecting...";
-    if (isStreaming) return "Connected";
-    if (streamingError) return "Error";
-    return "Disconnected";
-  };
-
-  const getStatusColor = () => {
-    if (isConnecting || isReconnecting) return "text-yellow-600";
-    if (isStreaming) return "text-green-600";
-    if (streamingError) return "text-red-600";
-    return "text-gray-600";
-  };
-
-  if (loading) {
+  // Loading state
+  if (isLoading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading patient stream...</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="relative mx-auto w-16 h-16 mb-8">
+            <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
+            <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
           </div>
+          <h3 className="text-xl font-semibold text-slate-800 mb-2">
+            Loading Camera Feed
+          </h3>
+          <p className="text-slate-600">Connecting to ambulance...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6">
-      {/* Navigation Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Button
-          onClick={() => router.push("/streamingDash")}
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-2"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back to Dashboard
-        </Button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="container mx-auto p-6 max-w-7xl">
+        {/* Modern Header with Glassmorphism */}
+        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg border border-white/20 p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={() => router.push("/streamingDash")}
+                variant="outline"
+                className="flex items-center gap-2 hover:bg-blue-50 transition-colors"
+              >
+                <ArrowLeftIcon className="h-4 w-4" />
+                Back
+              </Button>
 
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <VideoCameraIcon className="h-8 w-8 text-blue-600" />
-            {patient
-              ? `${patient.first_name} ${patient.last_name}`
-              : "Patient Stream"}
-          </h1>
-          <p className="text-gray-600 mt-1">
-            Live streaming session with enhanced reconnection
-            {selectedRoomId && (
-              <span className="ml-2 text-blue-600 font-medium">
-                • Room: {selectedRoomId.split("-")[0]}...
-              </span>
-            )}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <SignalIcon className={`h-5 w-5 ${getStatusColor()}`} />
-          <span className={`text-sm font-medium ${getStatusColor()}`}>
-            {getConnectionStatus()}
-          </span>
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-          <ExclamationTriangleIcon className="h-5 w-5 text-red-500 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-red-700">{error}</p>
-            <Button
-              onClick={() => {
-                setError(null);
-                fetchPatientData();
-                fetchPatientSessions();
-              }}
-              variant="outline"
-              size="sm"
-              className="mt-2"
-            >
-              Retry
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Video Stream */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Live Video Stream</h3>
-                <div className="flex items-center gap-2">
-                  {isStreaming && (
-                    <Badge className="bg-red-500 text-white animate-pulse">
-                      ● LIVE
-                    </Badge>
-                  )}
-                  {isReconnecting && (
-                    <Badge variant="outline">
-                      Reconnecting... ({reconnectAttempts}/5)
-                    </Badge>
-                  )}
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
+                  <TruckIcon className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900">
+                    {ambulanceId.substring(0, 7).toUpperCase()}
+                  </h1>
+                  <p className="text-sm text-slate-600">
+                    {ambulanceStats.liveRooms}/{ambulanceStats.totalRooms}{" "}
+                    cameras online
+                  </p>
                 </div>
               </div>
-            </CardHeader>
+            </div>
 
-            <CardContent>
-              <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-contain"
-                  autoPlay
-                  playsInline
-                  controls={false}
-                />
+            {/* Status Badges */}
+            <div className="flex items-center gap-3">
+              {/* Real-time Connection Badge */}
+              <div
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm ${
+                  realtimeConnected
+                    ? "bg-green-100 text-green-700 border border-green-200"
+                    : "bg-red-100 text-red-700 border border-red-200"
+                }`}
+              >
+                <WifiIcon className="h-4 w-4" />
+                {realtimeConnected ? "Connected" : "Disconnected"}
+              </div>
 
-                {!isStreaming && !isConnecting && !isReconnecting && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
-                    <div className="text-center text-white">
-                      <VideoCameraIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium">Camera Ready</p>
-                      <p className="text-sm opacity-75">
-                        Start streaming to begin monitoring
-                      </p>
+              {/* Camera Status Badge */}
+              {selectedRoom && (
+                <div
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm ${
+                    selectedRoom.connected
+                      ? "bg-blue-100 text-blue-700 border border-blue-200"
+                      : "bg-gray-100 text-gray-700 border border-gray-200"
+                  }`}
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      selectedRoom.connected
+                        ? "bg-blue-600 animate-pulse"
+                        : "bg-gray-400"
+                    }`}
+                  />
+                  {selectedRoom.connected ? "Camera Live" : "Camera Offline"}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Error Alerts */}
+        {realtimeError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 shadow-sm">
+            <XCircleIcon className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-red-800 mb-1">Connection Error</p>
+              <p className="text-sm text-red-700">{realtimeError}</p>
+            </div>
+          </div>
+        )}
+
+        {!realtimeConnected && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 shadow-sm">
+            <SignalIcon className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-amber-800 mb-1">
+                Real-time Updates Paused
+              </p>
+              <p className="text-sm text-amber-700">
+                Reconnecting to live data stream...
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          {/* Video Stream - HybridStreamPlayer */}
+          <div className="xl:col-span-2">
+            <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <VideoCameraIcon className="h-5 w-5 text-blue-600" />
                     </div>
-                  </div>
-                )}
-
-                {(isConnecting || isReconnecting) && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
-                    <div className="text-center text-white">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
-                      <p className="text-lg font-medium">
-                        {isReconnecting
-                          ? "Reconnecting to camera"
-                          : "Connecting to camera"}
-                        ...
-                      </p>
-                      {isReconnecting && (
-                        <p className="text-sm opacity-75 mt-2">
-                          Attempt {reconnectAttempts} of{" "}
-                          {maxReconnectionAttempts}
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        Live Camera Feed
+                      </h3>
+                      {selectedRoomId && (
+                        <p className="text-xs text-slate-500 font-mono mt-0.5">
+                          {selectedRoomId}
                         </p>
                       )}
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Enhanced Connection Status */}
-              <ConnectionStatus
-                isConnected={isStreaming}
-                isConnecting={isConnecting}
-                isReconnecting={isReconnecting}
-                error={streamingError}
-                connectionQuality={connectionQuality}
-                reconnectionAttempts={reconnectAttempts}
-                maxReconnectionAttempts={maxReconnectionAttempts}
-                reconnectionCountdown={reconnectionCountdown}
-                reconnectionProgress={reconnectionProgress}
-                userFriendlyStatus={userFriendlyStatus}
-                canManualRetry={canManualRetry}
-                isUserCancelledReconnection={isUserCancelledReconnection}
-                onReconnect={reconnect}
-                onCancelReconnection={cancelReconnection}
-                onStopStreaming={handleStopStream}
-              />
-
-              {/* Stream Controls */}
-              <div className="flex items-center justify-center gap-4 mt-4">
-                {!isStreaming ? (
-                  <Button
-                    onClick={handleStartStream}
-                    disabled={isConnecting}
-                    className="flex items-center gap-2"
-                  >
-                    <PlayIcon className="h-4 w-4" />
-                    Start Stream
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleStopStream}
-                    variant="outline"
-                    className="flex items-center gap-2"
-                  >
-                    <StopIcon className="h-4 w-4" />
-                    Stop Stream
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Side Panel */}
-        <div className="space-y-6">
-          {/* Patient Info */}
-          {patient && (
-            <Card>
-              <CardHeader>
-                <h3 className="text-lg font-semibold">Patient Information</h3>
+                  {selectedRoom?.connected && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white rounded-full text-xs font-bold">
+                      <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                      LIVE
+                    </div>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Name
-                  </label>
-                  <p className="text-gray-900">
-                    {patient.first_name} {patient.last_name}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Date of Birth
-                  </label>
-                  <p className="text-gray-900">
-                    {new Date(patient.date_of_birth).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Gender
-                  </label>
-                  <p className="text-gray-900 capitalize">{patient.gender}</p>
-                </div>
-                {patient.email && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">
-                      Email
-                    </label>
-                    <p className="text-gray-900">{patient.email}</p>
+
+              <CardContent className="p-0">
+                {selectedRoomId ? (
+                  <HybridStreamPlayer
+                    key={`${ambulanceId}-${selectedRoomId}`}
+                    ambulanceId={ambulanceId}
+                    roomId={selectedRoomId}
+                    showAdvancedControls={true}
+                    debug={false}
+                  />
+                ) : (
+                  <div className="aspect-video bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                    <div className="text-center text-slate-600 p-8">
+                      <div className="w-20 h-20 mx-auto mb-6 bg-slate-300/50 rounded-full flex items-center justify-center">
+                        <VideoCameraIcon className="h-10 w-10 text-slate-400" />
+                      </div>
+                      <p className="text-xl font-semibold mb-2">
+                        No Camera Selected
+                      </p>
+                      <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                        Select a camera from the list to start viewing live
+                        stream or playback recordings
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info Banner */}
+                {selectedRoomId && (
+                  <div className="m-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
+                        <SignalIcon className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div className="text-sm text-blue-900">
+                        <p className="font-semibold mb-2">
+                          Hybrid Stream Player
+                        </p>
+                        <ul className="text-xs space-y-1.5 text-blue-700">
+                          <li className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-1.5 flex-shrink-0" />
+                            <span>
+                              <strong>Live Mode:</strong> Real-time WebRTC
+                              streaming with ultra-low latency
+                            </span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-1.5 flex-shrink-0" />
+                            <span>
+                              <strong>Playback Mode:</strong> Click pause or
+                              drag timeline to review recordings
+                            </span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-1.5 flex-shrink-0" />
+                            <span>
+                              <strong>Go Live:</strong> Jump back to real-time
+                              with one click
+                            </span>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
                   </div>
                 )}
               </CardContent>
             </Card>
-          )}
+          </div>
 
-          {/* Active Sessions */}
-          <Card>
-            <CardHeader>
-              <h3 className="text-lg font-semibold">Active Sessions</h3>
-            </CardHeader>
-            <CardContent>
-              {sessions.length === 0 ? (
-                <p className="text-gray-500 text-sm">No active sessions</p>
-              ) : (
-                <div className="space-y-3">
-                  {sessions.map((session) => (
-                    <div
-                      key={session.id}
-                      className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                        selectedRoomId === session.room_id
-                          ? "bg-blue-50 border-2 border-blue-200"
-                          : "bg-gray-50 hover:bg-gray-100"
-                      }`}
-                      onClick={() => setSelectedRoomId(session.room_id)}
-                      title="Click to select this room for streaming"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">
-                          Session {session.id.split("-")[0]}
-                          {selectedRoomId === session.room_id && (
-                            <span className="ml-2 text-blue-600">
-                              ● Selected
-                            </span>
-                          )}
-                        </span>
-                        <Badge
-                          variant={
-                            session.status === "active"
-                              ? "default"
-                              : "secondary"
-                          }
-                          className={
-                            session.status === "active"
-                              ? "bg-green-500 text-white"
-                              : ""
-                          }
-                        >
-                          {session.status}
-                        </Badge>
-                      </div>
-                      <div className="text-xs text-gray-600 space-y-1">
-                        <p>Room: {session.room_id}</p>
-                        <p>
-                          Started:{" "}
-                          {new Date(session.started_at).toLocaleString()}
-                        </p>
-                        {session.device_name && (
-                          <p>Device: {session.device_name}</p>
-                        )}
-                      </div>
+          {/* Camera Rooms List - Modern Design */}
+          <div className="space-y-6">
+            <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Camera Rooms
+                  </h3>
+                  <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                    {ambulanceStats.liveRooms} Live
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4">
+                {availableRooms.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
+                      <VideoCameraIcon className="h-8 w-8 text-slate-400" />
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <p className="text-slate-600 font-medium mb-1">
+                      No Cameras Available
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Waiting for cameras to connect...
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {availableRooms.map((room: CameraRoom) => {
+                      const isSelected = selectedRoomId === room.id;
+                      const isLive =
+                        room.connected && !room.connection_ended_at;
 
-          {/* Connection Info */}
-          <Card>
-            <CardHeader>
-              <h3 className="text-lg font-semibold">Connection Status</h3>
-            </CardHeader>
-            <CardContent className="text-sm space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Status:</span>
-                <span className={getStatusColor()}>
-                  {getConnectionStatus()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Reconnect Attempts:</span>
-                <span>{reconnectAttempts}/5</span>
-              </div>
-              {currentSession && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Session ID:</span>
-                  <span className="font-mono text-xs">
-                    {currentSession.id.split("-")[0]}...
-                  </span>
+                      return (
+                        <button
+                          key={room.id}
+                          className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-50 shadow-md"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+                          }`}
+                          onClick={() => handleRoomSelect(room.id)}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`p-2 rounded-lg ${
+                                  isLive ? "bg-red-100" : "bg-slate-100"
+                                }`}
+                              >
+                                <VideoCameraIcon
+                                  className={`h-5 w-5 ${
+                                    isLive ? "text-red-600" : "text-slate-500"
+                                  }`}
+                                />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {room.camera_name || "Camera"}
+                                </p>
+                                <p className="text-xs text-slate-500 font-mono">
+                                  {room.room_name}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2">
+                              {isLive && (
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-red-500 text-white rounded-md text-xs font-bold">
+                                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                                  LIVE
+                                </div>
+                              )}
+                              {isSelected && (
+                                <div className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs font-semibold">
+                                  Active
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs">
+                            <span
+                              className={`px-2 py-1 rounded-md font-medium ${
+                                isLive
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {isLive ? "● Online" : "○ Offline"}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Connection Status Card - Modern Design */}
+            <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  System Status
+                </h3>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="space-y-3">
+                  {/* Real-time Connection */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <WifiIcon
+                        className={`h-5 w-5 ${
+                          realtimeConnected ? "text-green-600" : "text-red-600"
+                        }`}
+                      />
+                      <span className="text-sm font-medium text-slate-700">
+                        Real-time Data
+                      </span>
+                    </div>
+                    <span
+                      className={`text-sm font-semibold ${
+                        realtimeConnected ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      {realtimeConnected ? "Connected" : "Disconnected"}
+                    </span>
+                  </div>
+
+                  {/* Active Sessions */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <SignalIcon className="h-5 w-5 text-blue-600" />
+                      <span className="text-sm font-medium text-slate-700">
+                        Active Sessions
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {ambulanceStats.totalSessions}
+                    </span>
+                  </div>
+
+                  {/* Camera Statistics */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <VideoCameraIcon className="h-5 w-5 text-purple-600" />
+                      <span className="text-sm font-medium text-slate-700">
+                        Cameras Online
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {ambulanceStats.liveRooms}/{ambulanceStats.totalRooms}
+                    </span>
+                  </div>
+
+                  {/* Selected Camera Info */}
+                  {selectedRoom && (
+                    <>
+                      <div className="border-t border-slate-200 my-3"></div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                          Selected Camera
+                        </p>
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <p className="text-sm font-mono text-blue-900 mb-1">
+                            {selectedRoom.room_name}
+                          </p>
+                          <p className="text-xs text-blue-700">
+                            Status:{" "}
+                            <span className="font-semibold">
+                              {selectedRoom.connected ? "Live" : "Offline"}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Movement Detection Panel */}
+          <div className="space-y-6">
+            <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
+              <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-orange-50">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <span className="text-2xl">🎯</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      Movement Detection
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Real-time AI detection
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4">
+                {selectedRoomId ? (
+                  <MovementDetectionPanel
+                    roomId={selectedRoomId}
+                    showValidationButtons={true}
+                    maxDetections={15}
+                  />
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 mx-auto mb-3 bg-slate-100 rounded-full flex items-center justify-center">
+                      <span className="text-3xl">🎯</span>
+                    </div>
+                    <p className="text-slate-600 font-medium mb-1">
+                      No Camera Selected
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Select a camera to view detections
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

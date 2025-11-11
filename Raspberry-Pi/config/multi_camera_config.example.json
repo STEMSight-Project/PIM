@@ -1,0 +1,21 @@
+{
+  "ambulance_number": "001",
+  "server_url": "http://your-backend-server:8000",
+  "cameras": [
+    {
+      "device": "/dev/video0",
+      "enabled": true,
+      "description": "Front camera - Patient view"
+    },
+    {
+      "device": "/dev/video1",
+      "enabled": true,
+      "description": "Side camera - Equipment view"
+    },
+    {
+      "device": "/dev/video2",
+      "enabled": false,
+      "description": "Rear camera - Reserved"
+    }
+  ]
+}

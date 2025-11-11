@@ -1,5 +1,9 @@
 import logging
-from supabase_settings.create_client import SUPABASE, SUPABASE_AUTH
+from supabase_settings.create_client import (
+    SUPABASE,
+    SUPABASE_AUTH,
+    create_supabase_async_client,
+)
 from supabase_settings.create_admin import (
     SUPABASE_ADMIN,
 )  # Used by patient.py and auth.py
@@ -13,5 +17,5 @@ if not logger.handlers:
 
 supabase = SUPABASE
 supabase_auth = SUPABASE_AUTH
-admin_supabase = SUPABASE_ADMIN
+admin_supabase = SUPABASE_ADMIN 
 # admin_supabase is available for import

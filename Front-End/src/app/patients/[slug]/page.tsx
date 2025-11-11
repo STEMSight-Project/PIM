@@ -107,31 +107,36 @@ export default function PatientDetailPage() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between bg-gradient-to-r from-purple-600 to-violet-600 p-6 rounded-lg shadow-lg">
           <div className="flex items-center space-x-4">
             <Button
               variant="ghost"
               onClick={() => router.push("/patients")}
-              className="p-2"
+              className="p-2 text-white hover:bg-purple-500 hover:bg-opacity-20"
             >
               <ArrowLeftIcon className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-2xl font-bold text-white">
                 {patient.first_name} {patient.last_name}
               </h1>
-              <p className="text-gray-600">Subject ID: {patient.id}</p>
+              <p className="text-purple-100">Subject ID: {patient.id}</p>
             </div>
           </div>
           <div className="flex space-x-3">
-            <Button 
+            <Button
               variant="outline"
               onClick={() => router.push(`/medical-history/${patientId}`)}
+              className="bg-white text-purple-600 border-white hover:bg-purple-50"
             >
               <DocumentTextIcon className="h-4 w-4 mr-2" />
               Full Medical History
             </Button>
-            <Button variant="outline">
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/patient-edit/${patient.id}/edit`)}
+              className="bg-purple-800 hover:bg-purple-900 text-white border-purple-800"
+            >
               <PencilIcon className="h-4 w-4 mr-2" />
               Edit Subject
             </Button>
@@ -139,16 +144,20 @@ export default function PatientDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
+        <div className="bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200 rounded-lg">
+          <nav className="flex space-x-8 p-2">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`group inline-flex items-center py-2 px-1 border-b-2 font-medium text-sm ${
+                onClick={() =>
+                  setActiveTab(
+                    tab.id as "overview" | "history" | "detections" | "videos"
+                  )
+                }
+                className={`group inline-flex items-center py-3 px-4 rounded-md font-medium text-sm transition-all ${
                   activeTab === tab.id
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    ? "bg-purple-600 text-white shadow-md"
+                    : "text-purple-700 hover:text-purple-900 hover:bg-purple-100"
                 }`}
               >
                 <tab.icon className="h-5 w-5 mr-2" />
@@ -160,96 +169,272 @@ export default function PatientDetailPage() {
 
         {/* Tab Content */}
         {activeTab === "overview" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Personal Information */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <UserIcon className="h-5 w-5 mr-2" />
-                Personal Information
-              </h3>
-              <div className="space-y-4">
+          <div className="space-y-6">
+            {/* Quick Stats Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="p-4 bg-gradient-to-br from-purple-50 to-violet-50 border-purple-200">
                 <div className="flex items-center">
-                  <CalendarIcon className="h-5 w-5 text-gray-400 mr-3" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      Date of Birth
+                  <div className="p-3 rounded-lg bg-gradient-to-br from-purple-500 to-violet-500">
+                    <DocumentTextIcon className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-purple-700">
+                      Medical Records
                     </p>
-                    <p className="text-sm text-gray-600">
-                      {formatDate(patient.date_of_birth)}
+                    <p className="text-2xl font-bold text-purple-900">
+                      {medicalHistories.length}
                     </p>
                   </div>
                 </div>
+              </Card>
+              <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
                 <div className="flex items-center">
-                  <UserIcon className="h-5 w-5 text-gray-400 mr-3" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Gender</p>
-                    <p className="text-sm text-gray-600 capitalize">
-                      {patient.gender}
+                  <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500">
+                    <VideoCameraIcon className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-blue-700">
+                      Sessions
                     </p>
+                    <p className="text-2xl font-bold text-blue-900">12</p>
                   </div>
                 </div>
-                {patient.email && (
-                  <div className="flex items-center">
-                    <EnvelopeIcon className="h-5 w-5 text-gray-400 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Email</p>
-                      <p className="text-sm text-gray-600">{patient.email}</p>
-                    </div>
+              </Card>
+              <Card className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+                <div className="flex items-center">
+                  <div className="p-3 rounded-lg bg-gradient-to-br from-green-500 to-emerald-500">
+                    <EyeIcon className="h-6 w-6 text-white" />
                   </div>
-                )}
-                {patient.phone && (
-                  <div className="flex items-center">
-                    <PhoneIcon className="h-5 w-5 text-gray-400 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Phone</p>
-                      <p className="text-sm text-gray-600">{patient.phone}</p>
-                    </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-green-700">
+                      Detections
+                    </p>
+                    <p className="text-2xl font-bold text-green-900">156</p>
                   </div>
-                )}
-                {patient.address && (
-                  <div className="flex items-center">
-                    <MapPinIcon className="h-5 w-5 text-gray-400 mr-3" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        Address
-                      </p>
-                      <p className="text-sm text-gray-600">{patient.address}</p>
-                    </div>
+                </div>
+              </Card>
+              <Card className="p-4 bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200">
+                <div className="flex items-center">
+                  <div className="p-3 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500">
+                    <ChartBarIcon className="h-6 w-6 text-white" />
                   </div>
-                )}
-              </div>
-            </Card>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-orange-700">
+                      Avg Confidence
+                    </p>
+                    <p className="text-2xl font-bold text-orange-900">94.2%</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
 
-            {/* Monitoring Statistics */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <ChartBarIcon className="h-5 w-5 mr-2" />
-                Monitoring Statistics
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <p className="text-2xl font-bold text-blue-600">12</p>
-                  <p className="text-sm text-gray-600">Total Sessions</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Personal Information */}
+              <Card className="p-6 bg-gradient-to-br from-purple-50 to-violet-50 border-purple-200 shadow-lg">
+                <h3 className="text-lg font-semibold text-purple-900 mb-4 flex items-center">
+                  <UserIcon className="h-5 w-5 mr-2 text-purple-600" />
+                  Personal Information
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-center p-3 bg-white rounded-lg border border-purple-100">
+                    <CalendarIcon className="h-5 w-5 text-purple-500 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-purple-900">
+                        Date of Birth
+                      </p>
+                      <p className="text-sm text-purple-700">
+                        {formatDate(patient.date_of_birth)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center p-3 bg-white rounded-lg border border-purple-100">
+                    <UserIcon className="h-5 w-5 text-purple-500 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-purple-900">
+                        Gender
+                      </p>
+                      <p className="text-sm text-purple-700 capitalize">
+                        {patient.gender}
+                      </p>
+                    </div>
+                  </div>
+                  {patient.email && (
+                    <div className="flex items-center p-3 bg-white rounded-lg border border-purple-100">
+                      <EnvelopeIcon className="h-5 w-5 text-purple-500 mr-3" />
+                      <div>
+                        <p className="text-sm font-medium text-purple-900">
+                          Email
+                        </p>
+                        <p className="text-sm text-purple-700">
+                          {patient.email}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {patient.phone && (
+                    <div className="flex items-center p-3 bg-white rounded-lg border border-purple-100">
+                      <PhoneIcon className="h-5 w-5 text-purple-500 mr-3" />
+                      <div>
+                        <p className="text-sm font-medium text-purple-900">
+                          Phone
+                        </p>
+                        <p className="text-sm text-purple-700">
+                          {patient.phone}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {patient.address && (
+                    <div className="flex items-center p-3 bg-white rounded-lg border border-purple-100">
+                      <MapPinIcon className="h-5 w-5 text-purple-500 mr-3" />
+                      <div>
+                        <p className="text-sm font-medium text-purple-900">
+                          Address
+                        </p>
+                        <p className="text-sm text-purple-700">
+                          {patient.address}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <p className="text-2xl font-bold text-green-600">156</p>
-                  <p className="text-sm text-gray-600">Detection Events</p>
+              </Card>
+
+              {/* Monitoring Statistics */}
+              <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow-lg">
+                <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+                  <ChartBarIcon className="h-5 w-5 mr-2 text-blue-600" />
+                  Monitoring Statistics
+                </h3>
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="text-center p-4 bg-white rounded-lg border border-blue-100">
+                    <p className="text-2xl font-bold text-blue-600">12</p>
+                    <p className="text-sm text-blue-700">Total Sessions</p>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-green-100">
+                    <p className="text-2xl font-bold text-green-600">156</p>
+                    <p className="text-sm text-green-700">Detection Events</p>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-purple-100">
+                    <p className="text-2xl font-bold text-purple-600">94.2%</p>
+                    <p className="text-sm text-purple-700">Avg Confidence</p>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-orange-100">
+                    <p className="text-2xl font-bold text-orange-600">2.3h</p>
+                    <p className="text-sm text-orange-700">Total Monitored</p>
+                  </div>
                 </div>
-                <div className="text-center p-4 bg-purple-50 rounded-lg">
-                  <p className="text-2xl font-bold text-purple-600">94.2%</p>
-                  <p className="text-sm text-gray-600">Avg Confidence</p>
+                <div className="bg-white p-4 rounded-lg border border-blue-100">
+                  <p className="text-sm text-blue-700 text-center">
+                    Subject added on {formatDate(patient.created_at)}
+                  </p>
                 </div>
-                <div className="text-center p-4 bg-orange-50 rounded-lg">
-                  <p className="text-2xl font-bold text-orange-600">2.3h</p>
-                  <p className="text-sm text-gray-600">Total Monitored</p>
+              </Card>
+            </div>
+
+            {/* Recent Activity Summary */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Recent Medical History */}
+              <Card className="p-6 bg-gradient-to-br from-purple-50 to-violet-50 border-purple-200 shadow-lg">
+                <h3 className="text-lg font-semibold text-purple-900 mb-4 flex items-center">
+                  <DocumentTextIcon className="h-5 w-5 mr-2 text-purple-600" />
+                  Recent Medical History
+                </h3>
+                {medicalHistories.slice(0, 3).length === 0 ? (
+                  <div className="text-center py-6">
+                    <DocumentTextIcon className="mx-auto h-8 w-8 text-purple-400" />
+                    <p className="mt-2 text-sm text-purple-600">
+                      No medical records yet
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {medicalHistories.slice(0, 3).map((record) => (
+                      <div
+                        key={record.id}
+                        className="bg-white p-3 rounded-lg border border-purple-100"
+                      >
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-medium text-purple-900 text-sm">
+                            {record.diagnosis}
+                          </h4>
+                          <span className="text-xs text-purple-600">
+                            {formatDate(record.created_at)}
+                          </span>
+                        </div>
+                        {record.note && (
+                          <p className="text-xs text-purple-700 mt-1 truncate">
+                            {record.note}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        router.push(`/medical-history/${patientId}`)
+                      }
+                      className="w-full mt-3 text-purple-700 border-purple-300 hover:bg-purple-100"
+                    >
+                      View All Medical Records
+                    </Button>
+                  </div>
+                )}
+              </Card>
+
+              {/* Recent Detections */}
+              <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200 shadow-lg">
+                <h3 className="text-lg font-semibold text-green-900 mb-4 flex items-center">
+                  <EyeIcon className="h-5 w-5 mr-2 text-green-600" />
+                  Recent Detections
+                </h3>
+                <div className="space-y-3">
+                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                        <span className="text-sm font-medium text-green-900">
+                          Normal Posture
+                        </span>
+                      </div>
+                      <span className="text-xs text-green-600">96.4%</span>
+                    </div>
+                    <p className="text-xs text-green-700 mt-1">2 hours ago</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg border border-orange-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
+                        <span className="text-sm font-medium text-orange-900">
+                          Forward Head
+                        </span>
+                      </div>
+                      <span className="text-xs text-orange-600">89.1%</span>
+                    </div>
+                    <p className="text-xs text-orange-700 mt-1">3 hours ago</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg border border-red-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                        <span className="text-sm font-medium text-red-900">
+                          Slouching
+                        </span>
+                      </div>
+                      <span className="text-xs text-red-600">92.7%</span>
+                    </div>
+                    <p className="text-xs text-red-700 mt-1">5 hours ago</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setActiveTab("detections")}
+                    className="w-full mt-3 text-green-700 border-green-300 hover:bg-green-100"
+                  >
+                    View All Detections
+                  </Button>
                 </div>
-              </div>
-              <div className="mt-4">
-                <p className="text-sm text-gray-600">
-                  Subject added on {formatDate(patient.created_at)}
-                </p>
-              </div>
-            </Card>
+              </Card>
+            </div>
           </div>
         )}
 
@@ -299,11 +484,11 @@ export default function PatientDetailPage() {
                 ))}
               </div>
             )}
-            
+
             {medicalHistories.length > 0 && (
               <div className="mt-6 text-center">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => router.push(`/medical-history/${patientId}`)}
                   className="w-full"
                 >

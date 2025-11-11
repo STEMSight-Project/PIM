@@ -4,7 +4,7 @@ import csv
 from io import StringIO
 from fastapi.responses import StreamingResponse
 from datetime import datetime
-from core.common import get_supabase_client
+from core.common import supabase, logger
 from models.recent_session import RecentSession
 from pydantic import BaseModel
 
@@ -30,24 +30,24 @@ router = APIRouter()
 async def get_recent_sessions():
     """Get all recent live monitoring sessions."""
     try:
-        supabase = get_supabase_client()
-        response = supabase.table('monitoring_sessions').select('*').execute()
+        response = supabase.table("monitoring_sessions").select("*").execute()
         return response.data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Failed to fetch recent sessions: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to fetch recent sessions") from e
 
 @router.get("/recent-sessions/{session_id}")
 async def get_session_details(session_id: str):
     """Get detailed information about a specific session."""
     try:
-        supabase = get_supabase_client()
         # Get session data with patient information
-        response = supabase.table('monitoring_sessions')\
+        response = (
+            supabase.table("monitoring_sessions")
             .select('*, patients!inner(*)')\
             .eq('id', session_id)\
             .single()\
             .execute()
-            
+        )
         if not response.data:
             raise HTTPException(status_code=404, detail="Session not found")
             
@@ -75,88 +75,99 @@ async def get_session_details(session_id: str):
         
         return detailed_response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Failed to fetch session details for %s: %s", session_id, e)
+        raise HTTPException(status_code=500, detail="Failed to fetch session details") from e
 
 @router.get("/patient/{patient_id}")
 async def get_patient_details(patient_id: str):
     """Get patient information by ID."""
     try:
-        supabase = get_supabase_client()
-        response = supabase.table('patients').select('*').eq('id', patient_id).single().execute()
+        response = (
+            supabase.table("patients")
+            .select("*")
+            .eq("id", patient_id)
+            .single()
+            .execute()
+        )
         if not response.data:
             raise HTTPException(status_code=404, detail="Patient not found")
         return response.data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Failed to fetch patient %s: %s", patient_id, e)
+        raise HTTPException(status_code=500, detail="Failed to fetch patient details") from e
+
 
 @router.get("/export-report")
 async def export_sessions_report():
     """Export recent sessions data as CSV with detailed metrics."""
     try:
-        supabase = get_supabase_client()
         # Get sessions with patient information
-        sessions = supabase.table('monitoring_sessions')\
-            .select('*, patients!inner(name, id, medical_record_number)')\
+        sessions = (
+            supabase.table("monitoring_sessions")
+            .select("*, patients!inner(name, id, medical_record_number)")
             .execute()
-        
+        )
+
         # Create CSV string
         output = StringIO()
         writer = csv.writer(output)
-        
+
         # Write headers
         headers = [
-            'Session ID',
-            'Patient Name',
-            'Patient ID',
-            'Medical Record Number',
-            'Session Date',
-            'Session Time',
-            'Duration (minutes)',
-            'Total Detections',
-            'Detections/Minute',
-            'Total Alerts',
-            'Alerts/Minute',
-            'Confidence Score',
-            'Camera Module',
-            'Session Status'
+            "Session ID",
+            "Patient Name",
+            "Patient ID",
+            "Medical Record Number",
+            "Session Date",
+            "Session Time",
+            "Duration (minutes)",
+            "Total Detections",
+            "Detections/Minute",
+            "Total Alerts",
+            "Alerts/Minute",
+            "Confidence Score",
+            "Camera Module",
+            "Session Status",
         ]
         writer.writerow(headers)
-        
+
         # Write data rows
         for session in sessions.data:
             # Calculate metrics
-            duration = session.get('duration', 0)
-            detections = session.get('total_detections', 0)
-            alerts = session.get('total_alerts', 0)
-            
+            duration = session.get("duration", 0)
+            detections = session.get("total_detections", 0)
+            alerts = session.get("total_alerts", 0)
+
             detection_rate = round(detections / duration if duration > 0 else 0, 2)
             alert_rate = round(alerts / duration if duration > 0 else 0, 2)
-            
+
             # Format timestamp
-            timestamp = datetime.fromisoformat(session.get('timestamp'))
+            timestamp = datetime.fromisoformat(session.get("timestamp"))
             date_str = timestamp.strftime("%Y-%m-%d")
             time_str = timestamp.strftime("%I:%M %p")
-            
+
             # Get patient info
-            patient = session.get('patients', {})
-            
-            writer.writerow([
-                session.get('id'),
-                patient.get('name', 'N/A'),
-                patient.get('id', 'N/A'),
-                patient.get('medical_record_number', 'N/A'),
-                date_str,
-                time_str,
-                duration,
-                detections,
-                detection_rate,
-                alerts,
-                alert_rate,
-                f"{session.get('confidence_score', 0):.1f}%",
-                session.get('camera_module', 'N/A'),
-                session.get('status', 'Completed')
-            ])
-        
+            patient = session.get("patients", {})
+
+            writer.writerow(
+                [
+                    session.get("id"),
+                    patient.get("name", "N/A"),
+                    patient.get("id", "N/A"),
+                    patient.get("medical_record_number", "N/A"),
+                    date_str,
+                    time_str,
+                    duration,
+                    detections,
+                    detection_rate,
+                    alerts,
+                    alert_rate,
+                    f"{session.get('confidence_score', 0):.1f}%",
+                    session.get("camera_module", "N/A"),
+                    session.get("status", "Completed"),
+                ]
+            )
+
         # Create response with CSV file
         response = StreamingResponse(
             iter([output.getvalue()]),
@@ -183,13 +194,14 @@ async def get_video_predictions(video_id: str):
     ```
     """
     try:
-        supabase = get_supabase_client()
-        response = supabase.table('session_predictions')\
-            .select('*')\
-            .eq('video_id', video_id)\
-            .order('timestamp')\
+        response = (
+            supabase.table('session_predictions')
+            .select('*')
+            .eq('video_id', video_id)
+            .order('timestamp')
             .execute()
-        
+        )
+
         if not response.data:
             return []
             
@@ -205,7 +217,8 @@ async def get_video_predictions(video_id: str):
             
         return predictions
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Failed to fetch predictions for %s: %s", video_id, e)
+        raise HTTPException(status_code=500, detail="Failed to fetch predictions") from e
 
 @router.post("/video/{video_id}/predictions")
 async def add_video_prediction(video_id: str, prediction_data: PredictionData):
@@ -220,40 +233,30 @@ async def add_video_prediction(video_id: str, prediction_data: PredictionData):
     
     """
     try:
-        supabase = get_supabase_client()
-        
-        # Insert prediction data
         prediction = {
             'video_id': video_id,
             'timestamp': prediction_data.timestamp,
             'prediction': prediction_data.prediction,
-            'confidence': prediction_data.confidence
+            'confidence': prediction_data.confidence,
         }
-        
+
         response = supabase.table('session_predictions').insert(prediction).execute()
-        
         return response.data[0]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Failed to add prediction for %s: %s", video_id, e)
+        raise HTTPException(status_code=500, detail="Failed to add prediction") from e
+
 
 @router.get("/video/{video_id}/predictions/summary")
 async def get_predictions_summary(video_id: str):
     """Get a summary of predictions for a video session.
     
     Frontend Implementation Guide:
-    1. Use this endpoint to show session overview statistics
-    2. Create visualization components for the summary data
-    
-    
-    
-    2. Visualization Components:
-    - Bar chart showing prediction type distribution
-    - Confidence score gauge
-    - Timeline heatmap of prediction density
-    - Export functionality for detailed analysis
+    - Fetch predictions for the video when the page loads
+    - Render charts showing prediction distribution and confidence
+    - Provide export tools for deeper analysis of the session
     """
     try:
-        supabase = get_supabase_client()
         predictions = supabase.table('session_predictions')\
             .select('prediction, confidence')\
             .eq('video_id', video_id)\
@@ -283,4 +286,5 @@ async def get_predictions_summary(video_id: str):
         
         return summary
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Failed to fetch prediction summary for %s: %s", video_id, e)
+        raise HTTPException(status_code=500, detail="Failed to fetch prediction summary") from e

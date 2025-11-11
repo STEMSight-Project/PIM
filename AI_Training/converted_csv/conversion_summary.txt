@@ -1,0 +1,75 @@
+======================================================================
+PIM RECORDINGS CONVERSION SUMMARY REPORT
+Generated: 2025-10-12 03:55:17
+======================================================================
+
+📊 OVERALL STATISTICS
+----------------------------------------------------------------------
+Total Entries:        768
+Unique Videos:        24
+Training Entries:     608 (79.2%)
+Validation Entries:   160 (20.8%)
+
+🏷️  MOVEMENT LABEL DISTRIBUTION
+----------------------------------------------------------------------
+Label                     Total      Train      Val       
+----------------------------------------------------------------------
+versive_head              96         76         20        
+fencer_posture            96         76         20        
+ballistic                 96         76         20        
+chorea                    96         76         20        
+tremor                    96         76         20        
+dystonia                  96         76         20        
+myoclonus                 96         76         20        
+decorticate               48         38         10        
+decerebrate               48         38         10        
+
+🦴 BODY PART DISTRIBUTION (Top 10)
+----------------------------------------------------------------------
+  upper extremity                :   240
+  lower extremity                :   192
+  head                           :    48
+
+↔️  SIDE DISTRIBUTION
+----------------------------------------------------------------------
+  right                          :   336
+  left                           :   336
+
+🛏️  HEAD OF BED (HOB) DISTRIBUTION
+----------------------------------------------------------------------
+  30 degrees                     :   624
+  flat                           :   144
+
+🎥 VIDEO FILES
+----------------------------------------------------------------------
+  [VAL  ] 2025-08-04 17-34-10                           :  32 entries
+  [TRAIN] 2025-08-04 18-24-06                           :  32 entries
+  [TRAIN] 2025-08-21 17-24-03                           :  32 entries
+  [TRAIN] 2025-08-21 16-25-57                           :  32 entries
+  [TRAIN] 2025-08-20 18-21-38                           :  32 entries
+  [TRAIN] 2025-08-17 08-25-25                           :  32 entries
+  [VAL  ] 2025-08-14 16-43-23                           :  32 entries
+  [TRAIN] 2025-08-14 16-03-10                           :  32 entries
+  [VAL  ] 2025-08-14 15-12-45                           :  32 entries
+  [TRAIN] 2025-08-11 12-54-27                           :  32 entries
+  [TRAIN] 2025-08-11 11-42-42                           :  32 entries
+  [TRAIN] 2025-08-11 10-56-03                           :  32 entries
+  [TRAIN] 2025 08-08 13-46-40                           :  32 entries
+  [VAL  ] 2025-08-08 12-41-40                           :  32 entries
+  [TRAIN] 2025-08-08 11-29-38                           :  32 entries
+  [TRAIN] 2025-08-07 14-53-35                           :  32 entries
+  [VAL  ] 2025-08-07 14-08-51                           :  32 entries
+  [TRAIN] 2025-08-05 16-01-09                           :  32 entries
+  [TRAIN] 2025-08-05 14-34-57                           :  32 entries
+  [TRAIN] 2025-08-05- 12-11-09                          :  32 entries
+  [TRAIN] 2025-08-05 12-11-09                           :  32 entries
+  [TRAIN] 2025-08-05 11-28-54                           :  32 entries
+  [TRAIN] 2025-08-04 19-15-27                           :  32 entries
+  [TRAIN] 2025-09-01 16-44-45                           :  32 entries
+
+📄 SOURCE EXCEL FILES
+----------------------------------------------------------------------
+  PIM Recordings Database Week 1 -  08042025.xlsx    :   416 entries
+  PIM Recordings Database Week 2 - 08112025.xlsx     :   224 entries
+  PIM Recordings Database Week 3 - 08182025.xlsx     :    96 entries
+  PIM Recordings Database Week 5 - 09012025.xlsx     :    32 entries

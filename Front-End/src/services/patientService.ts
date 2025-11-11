@@ -27,7 +27,7 @@ export interface PatientCreateRequest {
   emergency_contact?: string;
 }
 
-export interface PatientUpdateRequest extends Partial<PatientCreateRequest> {}
+export type PatientUpdateRequest = Partial<PatientCreateRequest>;
 
 // Patient Service Functions
 export const patientService = {
@@ -41,14 +41,36 @@ export const patientService = {
   },
 
   async create(data: PatientCreateRequest): Promise<ApiResponse<Patient>> {
-    return api.post<Patient>("/patients/", data);
+    // Backend validation expects `dob` and `primary_phone` field names. Throws an error code 500 and 244 otherwise
+    // Map our front-end shape (date_of_birth, phone) to the backend contract.
+    const payload: any = {
+      ...data,
+      dob: data.date_of_birth,
+      primary_phone: data.phone,
+    };
+    // Remove originals inputted values if backend does not accept them alongside mapped keys
+    delete payload.date_of_birth;
+    delete payload.phone;
+
+    return api.post<Patient>("/patients/", payload);
   },
 
   async update(
     id: string,
     data: PatientUpdateRequest
   ): Promise<ApiResponse<Patient>> {
-    return api.patch<Patient>(`/patients/${id}`, data);
+    // Map optional fields for update as well, and will do the same as was done with create (remove originals)
+    const payload: any = { ...data };
+    if (payload.date_of_birth !== undefined) {
+      payload.dob = (payload as any).date_of_birth;
+      delete payload.date_of_birth;
+    }
+    if (payload.phone !== undefined) {
+      payload.primary_phone = (payload as any).phone;
+      delete payload.phone;
+    }
+
+    return api.patch<Patient>(`/patients/${id}`, payload);
   },
 
   async delete(id: string): Promise<ApiResponse<void>> {

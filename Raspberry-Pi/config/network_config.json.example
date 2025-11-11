@@ -1,14 +1,21 @@
 {
-  "device_id": "pi-001",
-  "server_url": "https://your-backend-server.com",
+  "device_id": "rpi-ambulance-001",
+  "device_name": "Raspberry Pi Camera - Ambulance 001",
+  "server_url": "http://localhost:8000",
   "api_version": "v1",
+  "ambulance_number": "001",
+  "room_number": "001",
+  "auto_start": true,
+  "reconnect_interval": 5,
   "upload_interval": 30,
   "retry_attempts": 3,
   "timeout": 10,
-  "ssl_verify": true,
+  "ssl_verify": false,
   "compression": true,
   "log_level": "INFO",
   "max_video_length": 300,
   "auto_upload": true,
-  "storage_path": "/home/pi/stemsight/data"
+  "storage_path": "/home/pi/stemsight/data",
+  "heartbeat_interval": 30,
+  "status_report_interval": 60
 }

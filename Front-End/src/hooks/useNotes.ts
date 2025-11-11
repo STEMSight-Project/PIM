@@ -63,7 +63,6 @@ export function useNotes(): UseNotesReturn {
       const message =
         err instanceof Error ? err.message : "Failed to fetch patient notes";
       setError(message);
-      console.error("Error fetching patient notes:", err);
     } finally {
       setLoading(false);
     }
@@ -79,7 +78,6 @@ export function useNotes(): UseNotesReturn {
       const message =
         err instanceof Error ? err.message : "Failed to fetch video notes";
       setError(message);
-      console.error("Error fetching video notes:", err);
     } finally {
       setLoading(false);
     }
@@ -100,7 +98,6 @@ export function useNotes(): UseNotesReturn {
         const message =
           err instanceof Error ? err.message : "Failed to create note";
         setError(message);
-        console.error("Error creating note:", err);
         return null;
       } finally {
         setLoading(false);
@@ -129,7 +126,6 @@ export function useNotes(): UseNotesReturn {
         const message =
           err instanceof Error ? err.message : "Failed to update note";
         setError(message);
-        console.error("Error updating note:", err);
         return null;
       } finally {
         setLoading(false);
@@ -156,7 +152,6 @@ export function useNotes(): UseNotesReturn {
         const message =
           err instanceof Error ? err.message : "Failed to delete note";
         setError(message);
-        console.error("Error deleting note:", err);
         return false;
       } finally {
         setLoading(false);

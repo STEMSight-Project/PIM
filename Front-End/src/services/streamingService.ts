@@ -1,227 +1,331 @@
-import type { ApiResponse } from "@/types";
+import type {
+  AmbulanceCamera,
+  AmbulanceSession,
+  AmbulanceSessionCreate,
+  AmbulanceSessionUpdate,
+  AmbulanceStreamingStatus,
+  ApiResponse,
+  CameraRoom,
+  CameraRoomCreate,
+  SDPData,
+  StreamResponse,
+} from "@/types";
 import { api } from "./api";
 
-// Streaming Types - Updated to match backend streaming.py
-export interface RoomInfo {
-  room_id: string;
-  session_id?: string;
-  created?: boolean;
-  reconnected?: boolean;
-  already_exists?: boolean;
-}
+/**
+ * AMBULANCE STREAMING SERVICE
+ *
+ * Handles live streaming operations for ambulance emergency response:
+ * - WebRTC signaling (SDP exchange) for camera feeds
+ * - Ambulance session management
+ * - Camera room management for multi-camera support
+ * - Real-time emergency response streaming
+ *
+ * Use this service for:
+ * - Managing ambulance streaming sessions
+ * - Connecting to ambulance camera feeds
+ * - Monitoring emergency response activities
+ * - Real-time dashboard operations
+ *
+ * Updated to match backend ambulance_streaming.py API (September 2025)
+ */
 
-export interface SDPData {
-  sdp: string;
-  type: "offer" | "answer" | "pranswer" | "rollback";
-}
+// ============================================================================
+// AMBULANCE STREAMING SERVICE
+// ============================================================================
 
-export interface StreamResponse {
-  sdp: string;
-  type: "offer" | "answer" | "pranswer" | "rollback";
-}
+export const ambulanceStreamingService = {
+  // ============================================================================
+  // AMBULANCE MANAGEMENT
+  // ============================================================================
 
-// Streaming Session Types - Updated to match backend streaming.py
-export interface StreamingSession {
-  id: string;
-  patient_id: string;
-  room_id: string;
-  device_name?: string;
-  is_live: boolean;
-  status: "active" | "ended" | "error" | "disconnected";
-  started_at: string;
-  ended_at?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface StreamingSessionCreate {
-  patient_id: string;
-  room_id: string;
-  device_name?: string;
-}
-
-export interface StreamingSessionUpdate {
-  is_live?: boolean;
-  status?: "active" | "ended" | "error" | "disconnected";
-  device_name?: string;
-}
-
-// Legacy types for backward compatibility (deprecated)
-export interface StreamSession {
-  id: string;
-  patient_id: string;
-  doctor_id?: string;
-  room_id: string;
-  status: "active" | "inactive" | "ended" | "error";
-  stream_url?: string;
-  started_at: string;
-  ended_at?: string;
-  duration_seconds?: number;
-  quality: "low" | "medium" | "high" | "ultra";
-  resolution?: string;
-  frame_rate?: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface StreamCreateRequest {
-  patient_id: string;
-  doctor_id?: string;
-  room_id: string;
-  quality?: "low" | "medium" | "high" | "ultra";
-  resolution?: string;
-  frame_rate?: number;
-}
-
-export interface StreamUpdateRequest {
-  status?: "active" | "inactive" | "ended" | "error";
-  quality?: "low" | "medium" | "high" | "ultra";
-  resolution?: string;
-  frame_rate?: number;
-}
-
-export interface StreamStats {
-  session_id: string;
-  bitrate: number;
-  packet_loss: number;
-  latency_ms: number;
-  frames_per_second: number;
-  bandwidth_usage: number;
-  timestamp: string;
-}
-
-// Streaming Service Functions - Updated to match backend endpoints
-export const streamingService = {
-  // Room Management - Matches backend streaming.py
-  async createRoom(
-    patientId: string,
-    deviceName?: string
-  ): Promise<ApiResponse<RoomInfo>> {
-    const params = deviceName
-      ? `?device_name=${encodeURIComponent(deviceName)}`
-      : "";
-    return api.post<RoomInfo>(`/streaming/create_room/${patientId}${params}`);
-  },
-
-  // WebRTC Signaling - Matches backend streaming.py
-  async publishStreamer(
-    patientId: string,
-    sdpData: SDPData
-  ): Promise<ApiResponse<StreamResponse>> {
-    return api.post<StreamResponse>(
-      `/streaming/rooms/${patientId}/streamer`,
-      sdpData
+  /**
+   * Get streaming status for all ambulances with active sessions
+   */
+  async getAmbulancesStreamingStatus(): Promise<
+    ApiResponse<AmbulanceStreamingStatus[]>
+  > {
+    return api.get<AmbulanceStreamingStatus[]>(
+      "/ambulance-streaming/ambulances/status"
     );
   },
 
-  async publishViewer(
-    patientId: string,
-    sdpData: SDPData
-  ): Promise<ApiResponse<StreamResponse>> {
-    return api.post<StreamResponse>(
-      `/streaming/rooms/${patientId}/viewer`,
-      sdpData
+  /**
+   * Get cameras assigned to a specific ambulance
+   */
+  async getAmbulanceCameras(
+    ambulanceId: string
+  ): Promise<ApiResponse<AmbulanceCamera[]>> {
+    return api.get<AmbulanceCamera[]>(
+      `/ambulance-streaming/ambulances/${ambulanceId}/cameras`
     );
   },
 
-  // Streaming Sessions CRUD - Matches backend streaming.py
-  async createSession(
-    sessionData: StreamingSessionCreate
-  ): Promise<ApiResponse<StreamingSession>> {
-    return api.post<StreamingSession>("/streaming/sessions", sessionData);
-  },
+  // ============================================================================
+  // AMBULANCE SESSION MANAGEMENT
+  // ============================================================================
 
-  async getSessions(filters?: {
-    patient_id?: string;
-    is_live?: boolean;
-  }): Promise<ApiResponse<StreamingSession[]>> {
+  /**
+   * Get all ambulance streaming sessions
+   */
+  async getAmbulanceSessions(filters?: {
+    ambulance_id?: string;
+    session_type?: string;
+    is_active?: boolean;
+    limit?: number;
+  }): Promise<ApiResponse<AmbulanceSession[]>> {
     const params = new URLSearchParams();
-    if (filters?.patient_id) params.append("patient_id", filters.patient_id);
-    if (filters?.is_live !== undefined)
-      params.append("is_live", filters.is_live.toString());
+    if (filters?.ambulance_id)
+      params.append("ambulance_id", filters.ambulance_id);
+    if (filters?.session_type)
+      params.append("session_type", filters.session_type);
+    if (filters?.is_active !== undefined)
+      params.append("is_active", filters.is_active.toString());
+    if (filters?.limit) {
+      params.append("limit", filters.limit.toString());
+    } else {
+      params.append("limit", "100"); // Default limit
+    }
 
     const queryString = params.toString();
     const endpoint = queryString
-      ? `/streaming/sessions?${queryString}`
-      : "/streaming/sessions";
+      ? `/ambulance-streaming/ambulance-sessions?${queryString}`
+      : "/ambulance-streaming/ambulance-sessions";
 
-    return api.get<StreamingSession[]>(endpoint);
+    return api.get<AmbulanceSession[]>(endpoint);
   },
 
-  async getSession(sessionId: string): Promise<ApiResponse<StreamingSession>> {
-    return api.get<StreamingSession>(`/streaming/sessions/${sessionId}`);
+  /**
+   * Create a new ambulance streaming session
+   */
+  async createAmbulanceSession(
+    sessionData: AmbulanceSessionCreate
+  ): Promise<ApiResponse<AmbulanceSession>> {
+    return api.post<AmbulanceSession>(
+      "/ambulance-streaming/ambulance-sessions",
+      sessionData
+    );
   },
 
-  async updateSession(
+  /**
+   * Update an existing ambulance session
+   */
+  async updateAmbulanceSession(
     sessionId: string,
-    updateData: StreamingSessionUpdate
-  ): Promise<ApiResponse<StreamingSession>> {
-    return api.put<StreamingSession>(
-      `/streaming/sessions/${sessionId}`,
+    updateData: AmbulanceSessionUpdate
+  ): Promise<ApiResponse<AmbulanceSession>> {
+    return api.put<AmbulanceSession>(
+      `/ambulance-streaming/ambulance-sessions/${sessionId}`,
       updateData
     );
   },
 
-  async endSession(sessionId: string): Promise<ApiResponse<StreamingSession>> {
-    return api.post<StreamingSession>(`/streaming/sessions/${sessionId}/end`);
-  },
-
-  async getActiveSessionsForPatient(
-    patientId: string
-  ): Promise<ApiResponse<StreamingSession[]>> {
-    return api.get<StreamingSession[]>(
-      `/streaming/sessions/patient/${patientId}/active`
+  /**
+   * End an ambulance streaming session
+   */
+  async endAmbulanceSession(
+    sessionId: string
+  ): Promise<ApiResponse<AmbulanceSession>> {
+    return api.post<AmbulanceSession>(
+      `/ambulance-streaming/ambulance-sessions/${sessionId}/end`
     );
   },
 
-  // Legacy methods for backward compatibility (deprecated - use new session methods above)
-  async getAllSessions(): Promise<ApiResponse<StreamSession[]>> {
-    console.warn("getAllSessions is deprecated. Use getSessions() instead.");
-    const response = await this.getSessions();
-    // Transform new format to legacy format for compatibility
-    if (response.data) {
-      const legacyData: StreamSession[] = response.data.map((session) => ({
-        ...session,
-        doctor_id: undefined,
-        status:
-          session.status === "active"
-            ? ("active" as const)
-            : ("ended" as const),
-        stream_url: undefined,
-        duration_seconds: undefined,
-        quality: "medium" as const,
-        resolution: undefined,
-        frame_rate: undefined,
-      }));
-      return { data: legacyData, error: response.error };
-    }
-    return { data: null, error: response.error };
+  // ============================================================================
+  // CAMERA ROOM MANAGEMENT
+  // ============================================================================
+
+  /**
+   * Create a camera streaming room within a session
+   */
+  async createCameraRoom(
+    sessionId: string,
+    roomData: CameraRoomCreate
+  ): Promise<ApiResponse<CameraRoom>> {
+    const params = new URLSearchParams();
+    params.append("session_id", sessionId);
+
+    return api.post<CameraRoom>(
+      `/ambulance-streaming/camera-rooms?${params.toString()}`,
+      roomData
+    );
   },
 
-  async getSessionsByPatient(
-    patientId: string
-  ): Promise<ApiResponse<StreamSession[]>> {
-    console.warn(
-      "getSessionsByPatient is deprecated. Use getSessions({ patient_id }) instead."
+  /**
+   * Get all camera rooms with optional filters
+   */
+  async getCameraRooms(filters?: {
+    session_id?: string;
+    connected?: boolean;
+    limit?: number;
+  }): Promise<ApiResponse<CameraRoom[]>> {
+    const params = new URLSearchParams();
+    if (filters?.session_id) params.append("session_id", filters.session_id);
+    if (filters?.connected !== undefined)
+      params.append("connected", filters.connected.toString());
+    if (filters?.limit) params.append("limit", filters.limit.toString());
+
+    const queryString = params.toString();
+    const endpoint = queryString
+      ? `/ambulance-streaming/camera-rooms?${queryString}`
+      : "/ambulance-streaming/camera-rooms";
+
+    return api.get<CameraRoom[]>(endpoint);
+  },
+
+  /**
+   * Get camera room details by room ID
+   */
+  async getCameraRoom(roomId: string): Promise<ApiResponse<CameraRoom>> {
+    return api.get<CameraRoom>(`/ambulance-streaming/camera-rooms/${roomId}`);
+  },
+
+  /**
+   * Disconnect a camera room
+   */
+  async disconnectCameraRoom(roomId: string): Promise<ApiResponse<CameraRoom>> {
+    return api.put<CameraRoom>(
+      `/ambulance-streaming/camera-rooms/${roomId}/disconnect`
     );
-    const response = await this.getSessions({ patient_id: patientId });
-    // Transform new format to legacy format for compatibility
-    if (response.data) {
-      const legacyData: StreamSession[] = response.data.map((session) => ({
-        ...session,
-        doctor_id: undefined,
-        status:
-          session.status === "active"
-            ? ("active" as const)
-            : ("ended" as const),
-        stream_url: undefined,
-        duration_seconds: undefined,
-        quality: "medium" as const,
-        resolution: undefined,
-        frame_rate: undefined,
-      }));
-      return { data: legacyData, error: response.error };
+  },
+
+  // ============================================================================
+  // WEBRTC STREAMING
+  // ============================================================================
+
+  /**
+   * Connect as a camera streamer (for Raspberry Pi devices)
+   *
+   * @param cameraId - Actually the room_id (e.g., "AMB-001-ROOM-001")
+   *                   In our system, room_id IS the camera identifier
+   */
+  async connectCameraStreamer(
+    cameraId: string,
+    sdpData: SDPData
+  ): Promise<ApiResponse<StreamResponse>> {
+    return api.post<StreamResponse>(
+      `/ambulance-streaming/camera/${cameraId}/streamer`,
+      sdpData
+    );
+  },
+
+  /**
+   * Connect as a camera viewer (for dashboard monitoring)
+   *
+   * @param cameraId - Actually the room_id (e.g., "AMB-001-ROOM-001")
+   *                   In our system, room_id IS the camera identifier
+   */
+  async connectCameraViewer(
+    cameraId: string,
+    sdpData: SDPData
+  ): Promise<ApiResponse<StreamResponse>> {
+    return api.post<StreamResponse>(
+      `/ambulance-streaming/camera/${cameraId}/viewer`,
+      sdpData
+    );
+  },
+
+  // ============================================================================
+  // REAL-TIME MONITORING
+  // ============================================================================
+
+  /**
+   * Get real-time ambulance sessions stream (Server-Sent Events)
+   */
+  getRealtimeAmbulanceSessions(): EventSource {
+    const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+    return new EventSource(`${baseURL}/realtime/ambulance-sessions`);
+  },
+
+  /**
+   * Get real-time camera rooms stream (Server-Sent Events)
+   */
+  getRealtimeCameraRooms(): EventSource {
+    const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+    return new EventSource(`${baseURL}/realtime/camera-rooms`);
+  },
+
+  // ============================================================================
+  // MAINTENANCE
+  // ============================================================================
+
+  /**
+   * Cleanup inactive camera rooms
+   */
+  async cleanupInactiveRooms(
+    thresholdMinutes: number = 30
+  ): Promise<ApiResponse<{ cleaned_rooms: number }>> {
+    const params = new URLSearchParams();
+    params.append("threshold_minutes", thresholdMinutes.toString());
+
+    return api.post<{ cleaned_rooms: number }>(
+      `/ambulance-streaming/maintenance/cleanup-inactive-rooms?${params.toString()}`
+    );
+  },
+
+  // ============================================================================
+  // HELPER METHODS
+  // ============================================================================
+
+  /**
+   * Check if an ambulance has any active streaming sessions
+   */
+  async hasActiveSession(ambulanceId: string): Promise<boolean> {
+    try {
+      const response = await this.getAmbulanceSessions({
+        ambulance_id: ambulanceId,
+        is_active: true,
+      });
+      return response.data ? response.data.length > 0 : false;
+    } catch (error) {
+      console.error("Error checking for active ambulance sessions:", error);
+      return false;
     }
-    return { data: null, error: response.error };
+  },
+
+  /**
+   * Get active sessions for a specific ambulance
+   */
+  async getActiveSessionsForAmbulance(
+    ambulanceId: string
+  ): Promise<ApiResponse<AmbulanceSession[]>> {
+    return this.getAmbulanceSessions({
+      ambulance_id: ambulanceId,
+      is_active: true,
+    });
   },
 };
+
+// ============================================================================
+// LEGACY COMPATIBILITY LAYER (DEPRECATED)
+// ============================================================================
+
+/**
+ * @deprecated Use ambulanceStreamingService instead
+ * Legacy streaming service maintained for backward compatibility
+ * Will be removed in future versions
+ */
+export const streamingService = {
+  /**
+   * @deprecated Use ambulanceStreamingService.getAmbulanceSessions() instead
+   */
+  async getSessions(): Promise<ApiResponse<any[]>> {
+    console.warn(
+      "streamingService.getSessions() is deprecated. Use ambulanceStreamingService.getAmbulanceSessions() instead."
+    );
+    return ambulanceStreamingService.getAmbulanceSessions();
+  },
+
+  /**
+   * @deprecated Use ambulanceStreamingService.createAmbulanceSession() instead
+   */
+  async createSession(sessionData: any): Promise<ApiResponse<any>> {
+    console.warn(
+      "streamingService.createSession() is deprecated. Use ambulanceStreamingService.createAmbulanceSession() instead."
+    );
+    return ambulanceStreamingService.createAmbulanceSession(sessionData);
+  },
+};
+
+// Export the new ambulance streaming service as default
+export default ambulanceStreamingService;

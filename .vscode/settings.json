@@ -1,9 +1,27 @@
 {
+  // Disable auto "Organize Imports" on save to stop removal of unused imports
+  "editor.codeActionsOnSave": {
+    // Do not auto-organize imports (prevents auto-removal of unused imports like `import React`)
+    "source.organizeImports": "never",
+    // Only run fix-alls when explicitly requested (not on every save)
+    "source.fixAll": "explicit",
+    "source.fixAll.eslint": "explicit"
+  },
+  // Keep ESLint from auto-fixing (removing) things on save; still shows problems
+  "eslint.codeActionsOnSave.mode": "problems",
+  // Optional: if an extension is auto-sorting imports, disable at workspace level
+  "typescript.preferences.autoImportFileExcludePatterns": [],
+  "javascript.preferences.autoImportFileExcludePatterns": [],
+  // Existing workspace settings preserved below
   "typescript.preferences.importModuleSpecifier": "relative",
   "typescript.suggest.autoImports": true,
-  "eslint.workingDirectories": ["Front-End"],
+  "eslint.workingDirectories": [
+    "Front-End"
+  ],
   "python.defaultInterpreterPath": "./Back-End/venv/Scripts/python.exe",
-  "python.analysis.extraPaths": ["./Back-End"],
+  "python.analysis.extraPaths": [
+    "./Back-End"
+  ],
   "python.terminal.activateEnvironment": true,
   "files.associations": {
     "*.tsx": "typescriptreact",
@@ -13,10 +31,6 @@
     "typescriptreact": "html"
   },
   "editor.formatOnSave": true,
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit",
-    "source.organizeImports": "explicit"
-  },
   "files.exclude": {
     "**/node_modules": true,
     "**/.git": true,
