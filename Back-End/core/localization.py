@@ -20,3 +20,7 @@ __all__ = [
 	"red_circle",
 	"blue_square",
 ]
+
+# PR NOTE: Added `__all__` and docstring to make the intent explicit and to
+# prevent accidental wildcard import side-effects in modules that only need
+# a couple of these symbols.

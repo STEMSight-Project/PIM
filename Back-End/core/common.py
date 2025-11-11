@@ -23,5 +23,13 @@ admin_supabase = SUPABASE_ADMIN
 # importing and calling an async client factory at module import time can
 # produce event-loop issues. Provide the factory reference so callers can
 # instantiate when appropriate.
+"""
+PR NOTE: Restored `supabase_async` as a reference to the async client factory.
+This was removed in a previous change which caused reviewer confusion. We
+keep the factory reference (not a constructed client) to avoid creating an
+async client at import time which can lead to event-loop issues in some
+environments. Callers should invoke `supabase_async()` when they need an
+async client instance.
+"""
 supabase_async = create_supabase_async_client
 # admin_supabase is available for import

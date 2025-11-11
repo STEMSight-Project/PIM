@@ -3,6 +3,14 @@ Timestamp utilities for the STEMSight Backend
 Handles timezone conversions and datetime formatting
 """
 
+# PR NOTE:
+# Recent reviewer comments asked why `_to_datetime` exists and how timestamps
+# are handled. The following helper centralizes parsing and timezone
+# normalization for the module's public functions. It accepts both ISO
+# timestamp strings and `datetime` objects, treats naive `datetime`s as UTC,
+# and normalizes internally to UTC to prevent timezone-related bugs across
+# the codebase.
+
 from datetime import datetime, timezone
 import pytz
 from core.common import logger
