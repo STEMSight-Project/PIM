@@ -18,4 +18,10 @@ if not logger.handlers:
 supabase = SUPABASE
 supabase_auth = SUPABASE_AUTH
 admin_supabase = SUPABASE_ADMIN 
+# Async client factory (keep as a function reference rather than calling it here).
+# Some parts of the codebase create an async client per-task or per-request;
+# importing and calling an async client factory at module import time can
+# produce event-loop issues. Provide the factory reference so callers can
+# instantiate when appropriate.
+supabase_async = create_supabase_async_client
 # admin_supabase is available for import

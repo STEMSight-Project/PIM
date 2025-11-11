@@ -30,6 +30,14 @@ def _to_datetime(value: Union[str, datetime]) -> datetime:
     # Convert to UTC for internal normalization
     return dt.astimezone(timezone.utc)
 
+# NOTE: _to_datetime is an internal helper used by the public timestamp
+# functions in this module (e.g. `format_timestamp_for_display`,
+# `timestamp_to_sao_paulo`, `parse_timestamp`). It centralizes parsing and
+# timezone-normalization logic so callers elsewhere in the codebase can use
+# the public helpers without duplicating parsing code. Keeping it private
+# (leading underscore) makes it clear it's not part of the module's public
+# API.
+
 
 def get_current_timestamp() -> str:
     """Get current timestamp in ISO format (UTC)."""
