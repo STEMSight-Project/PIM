@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
-import { useRecordings } from "@/hooks";
+import { useRecordings, useMovementDetections } from "@/hooks";
 import {
   formatDate,
   formatDuration,
@@ -11,8 +11,10 @@ import {
   formatTime,
 } from "@/lib/utils";
 import type { RecordingResponse } from "@/services/videoService";
+import type { MovementDetection } from "@/types/movementDetection";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { movementDetectionService } from "@/services/movementDetectionService";
 
 export default function SessionDetailPage() {
   const params = useParams();
@@ -26,6 +28,57 @@ export default function SessionDetailPage() {
     useState<RecordingResponse | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Detection state
+  const [sessionDetections, setSessionDetections] = useState<MovementDetection[]>([]);
+  const [totalSessionDetections, setTotalSessionDetections] = useState(0);
+  // Polling state: when a recording has no detections we keep retrying for a while
+  const [isPollingDetections, setIsPollingDetections] = useState(false);
+
+  // Development mock detections (
+  const devMockDetections: MovementDetection[] = [
+    {
+      id: 9001,
+      timestamp: 3.2,
+      name: "tremor",
+      confidence: 0.87,
+      validation_status: "pending",
+      room_id: "dev-room",
+      recording_id: "dev-rec",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 9002,
+      timestamp: 12.5,
+      name: "myoclonus",
+      confidence: 0.78,
+      validation_status: "confirmed",
+      room_id: "dev-room",
+      recording_id: "dev-rec",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 9003,
+      timestamp: 30.1,
+      name: "fencer_posture",
+      confidence: 0.65,
+      validation_status: "pending",
+      room_id: "dev-room",
+      recording_id: "dev-rec",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  ];
+
+  const {
+    detections: recordingDetections,
+    isLoading: detectionsLoading,
+    fetchDetectionsByRecording,
+  } = useMovementDetections({
+    enableRealtime: false, // No realtime for playback
+  });
+
   useEffect(() => {
     if (sessionId) {
       fetchRecordingsBySession(sessionId);
@@ -38,6 +91,100 @@ export default function SessionDetailPage() {
       setSelectedRecording(recordings[0]);
     }
   }, [recordings, selectedRecording]);
+
+  // Fetch detections for all recordings when recordings load
+  useEffect(() => {
+    const fetchAllDetections = async () => {
+      if (recordings.length === 0) return;
+
+      const allDetections: MovementDetection[] = [];
+
+      for (const recording of recordings) {
+        try {
+          const resp = await movementDetectionService.getDetectionsByRecording(
+            recording.id
+          );
+          if (resp && resp.data) {
+            allDetections.push(...resp.data);
+          }
+        } catch (err) {
+          console.error(
+            `Failed to fetch detections for recording ${recording.id}:`,
+            err
+          );
+        }
+      }
+
+      setSessionDetections(allDetections);
+      setTotalSessionDetections(allDetections.length);
+    };
+
+    fetchAllDetections();
+  }, [recordings]);
+
+  // Fetch detections for selected recording
+  useEffect(() => {
+    if (selectedRecording) {
+      fetchDetectionsByRecording(selectedRecording.id);
+    }
+  }, [selectedRecording, fetchDetectionsByRecording]);
+
+  // If there are no detections for the selected recording, keep polling for a short time
+  useEffect(() => {
+    const POLLING_INTERVAL = 5000; // ms
+    const MAX_POLLING_ATTEMPTS = 12; // ~1 minute
+    let cancelled = false;
+
+    const isUsingDevMock =
+      process.env.NODE_ENV === "development" && recordingDetections.length === 0;
+
+    // If we're showing dev mock data, don't start polling for real detections
+    if (isUsingDevMock) {
+      setIsPollingDetections(false);
+      return;
+    }
+
+    const startPolling = async (attempt = 0) => {
+      if (cancelled) return;
+      if (!selectedRecording) return;
+      // If detections have appeared, stop polling
+      if (recordingDetections.length > 0) {
+        setIsPollingDetections(false);
+        return;
+      }
+      // If already loading from the hook, wait for that to finish before calling
+      if (detectionsLoading) {
+        // schedule next check
+        setTimeout(() => startPolling(attempt), POLLING_INTERVAL);
+        return;
+      }
+      if (attempt >= MAX_POLLING_ATTEMPTS) {
+        setIsPollingDetections(false);
+        return;
+      }
+
+      setIsPollingDetections(true);
+
+      try {
+        await fetchDetectionsByRecording(selectedRecording.id);
+      } catch (err) {
+        console.error("Polling detections failed:", err);
+      }
+
+      // schedule next poll
+      setTimeout(() => startPolling(attempt + 1), POLLING_INTERVAL);
+    };
+
+    // Only start polling when a recording is selected and there are no detections
+    if (selectedRecording && recordingDetections.length === 0) {
+      startPolling(0);
+    }
+
+    return () => {
+      cancelled = true;
+      setIsPollingDetections(false);
+    };
+  }, [selectedRecording, recordingDetections.length, detectionsLoading, fetchDetectionsByRecording]);
 
   const handleRecordingSelect = (recording: RecordingResponse) => {
     setSelectedRecording(recording);
@@ -213,7 +360,7 @@ export default function SessionDetailPage() {
             </div>
 
             {/* Session Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="flex items-center p-4 bg-gray-50 rounded-lg">
                 <svg
                   className="w-8 h-8 text-blue-600 mr-3"
@@ -279,6 +426,28 @@ export default function SessionDetailPage() {
                       .split(" ")
                       .slice(0, 3)
                       .join(" ")}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center p-4 bg-gray-50 rounded-lg">
+                <svg
+                  className="w-8 h-8 text-orange-600 mr-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+                <div>
+                  <p className="text-sm text-gray-600">Total Detections</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    {totalSessionDetections}
                   </p>
                 </div>
               </div>
@@ -357,8 +526,9 @@ export default function SessionDetailPage() {
               </Card>
             </div>
 
-            {/* Recording List - Takes 1/3 width on large screens */}
-            <div className="lg:col-span-1">
+            {/* Recording List and Detections - Takes 1/3 width on large screens */}
+            <div className="lg:col-span-1 space-y-6">
+              {/* Recordings Card */}
               <Card>
                 <CardHeader>
                   <h2 className="text-xl font-semibold text-gray-900">
@@ -370,7 +540,7 @@ export default function SessionDetailPage() {
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
                     {recordings.map((recording, index) => (
                       <button
                         key={recording.id}
@@ -425,6 +595,137 @@ export default function SessionDetailPage() {
                       </button>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Detections Card */}
+              <Card>
+                <CardHeader>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Movement Detections
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    {totalSessionDetections}{" "}
+                    {totalSessionDetections === 1 ? "detection" : "detections"} in session
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {detectionsLoading && recordingDetections.length > 0 ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      <span className="ml-2 text-sm text-gray-600">Loading detections...</span>
+                    </div>
+                  ) : recordingDetections.length > 0 ? (
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                      {recordingDetections.slice(0, 10).map((detection) => (
+                        <div
+                          key={detection.id}
+                          className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-900 capitalize">
+                              {detection.name.replace("_", " ")}
+                            </span>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              detection.validation_status === "confirmed"
+                                ? "bg-green-100 text-green-800"
+                                : detection.validation_status === "rejected"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-yellow-100 text-yellow-800"
+                            }`}>
+                              {detection.validation_status}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-600">
+                            <span>Confidence: {(detection.confidence * 100).toFixed(1)}%</span>
+                            <span>{detection.timestamp}s</span>
+                          </div>
+                        </div>
+                      ))}
+                      {recordingDetections.length > 10 && (
+                        <p className="text-xs text-gray-500 text-center py-2">
+                          And {recordingDetections.length - 10} more...
+                        </p>
+                      )}
+                    </div>
+                  ) : isPollingDetections ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      <span className="ml-2 text-sm text-gray-600">Searching for detections...</span>
+                    </div>
+                  ) : process.env.NODE_ENV === "development" && recordingDetections.length === 0 ? (
+                    // mock detections UI
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                      <div className="text-sm text-gray-600 mb-2">
+                        Showing mock AI detections {devMockDetections.length}
+                      </div>
+                      {devMockDetections.map((detection) => (
+                        <div
+                          key={detection.id}
+                          className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-900 capitalize">
+                              {detection.name.replace("_", " ")}
+                            </span>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              detection.validation_status === "confirmed"
+                                ? "bg-green-100 text-green-800"
+                                : detection.validation_status === "rejected"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-yellow-100 text-yellow-800"
+                            }`}>
+                              {detection.validation_status}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-600">
+                            <span>Confidence: {(detection.confidence * 100).toFixed(1)}%</span>
+                            <span>{detection.timestamp}s</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Simple timeline - horizontal markers */}
+                      <div className="pt-4">
+                        <div className="text-xs text-gray-600 mb-2">Timeline (seconds)</div>
+                        <div className="w-full h-8 bg-gray-100 rounded-full relative">
+                          {devMockDetections.map((d) => {
+                            // For visualization only: map timestamp to a percent position (assume 60s window)
+                            const pos = Math.min(100, (d.timestamp / 60) * 100);
+                            return (
+                              <div
+                                key={`marker-${d.id}`}
+                                title={`${d.name} @ ${d.timestamp}s`}
+                                className="absolute top-1/2 transform -translate-y-1/2 w-1 h-4 bg-blue-600 rounded"
+                                style={{ left: `${pos}%` }}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <svg
+                        className="w-8 h-8 mx-auto mb-2 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                        />
+                      </svg>
+                      <p className="text-sm text-gray-500">
+                        {selectedRecording
+                          ? "No detections found for this recording"
+                          : "Select a recording to view detections"}
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
