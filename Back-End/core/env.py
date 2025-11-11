@@ -1,4 +1,17 @@
-from pydantic_settings import BaseSettings
+"""Environment configuration for the backend.
+
+This module attempts to import BaseSettings from the newer `pydantic-settings`
+package (pydantic v2 / settings management). If that's not available we fall
+back to pydantic v1's `pydantic.BaseSettings` for compatibility. This is a
+low-risk change to improve compatibility across environments.
+"""
+
+try:
+    from pydantic_settings import BaseSettings
+except Exception:
+    # Fall back to pydantic v1 compatible import
+    from pydantic import BaseSettings
+
 
 class Env(BaseSettings):
     SUPABASE_URL: str
@@ -18,4 +31,7 @@ class Env(BaseSettings):
         case_sensitive = False
 
 
+# Instantiate once for import by other modules. If environment variables are
+# missing this will raise during application start which is the desired
+# behavior for a misconfigured environment.
 ENVIRONMENT = Env()
