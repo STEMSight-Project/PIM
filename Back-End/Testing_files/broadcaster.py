@@ -5,12 +5,37 @@ import logging
 import platform
 import subprocess
 import re
+import json
+import time
+import sys
+from pathlib import Path
+from collections import deque
 from typing import Optional, List, Tuple
 
 import aiohttp
 from aiortc import RTCPeerConnection, RTCSessionDescription
 import aiortc
 from aiortc.contrib.media import MediaPlayer
+import cv2
+import numpy as np
+import mediapipe as mp
+import torch
+from av import VideoFrame
+
+# Add parent directory to path to import pose-tcn_single_view
+parent_dir = Path(__file__).parent.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
+# Import model architecture and normalization from existing training code
+# Note: Python can't import files with hyphens directly, so we use importlib
+import importlib.util
+spec = importlib.util.spec_from_file_location("pose_tcn_single_view", parent_dir / "pose-tcn_single_view.py")
+pose_tcn_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(pose_tcn_module)
+PoseTCNSingleView = pose_tcn_module.PoseTCNSingleView
+normalize_single_view = pose_tcn_module.normalize_single_view
+NUM_POSE_LANDMARKS = pose_tcn_module.NUM_POSE_LANDMARKS
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("publisher")
@@ -309,6 +334,234 @@ async def check_room_status(base_url: str, room_id: str) -> None:
             print(f"❌ Error checking room status: {e}")
 
 
+class MediaPipePoseProcessor:
+    """
+    Process video frames with MediaPipe Pose and extract landmarks.
+    Includes PoseTCN classifier for real-time movement detection.
+    Processes every Nth frame to reduce CPU load.
+    """
+    
+    def __init__(self, process_every_n_frames: int = 2, enable_classifier: bool = True):
+        self.mp_pose = mp.solutions.pose
+        self.pose = self.mp_pose.Pose(
+            static_image_mode=False,
+            model_complexity=2,  # Best accuracy
+            min_detection_confidence=0.7,
+            min_tracking_confidence=0.7
+        )
+        self.frame_count = 0
+        self.process_every_n_frames = process_every_n_frames
+        self.last_landmarks = None
+        LOGGER.info("📊 MediaPipe Pose initialized (model_complexity=2)")
+        
+        # Initialize PoseTCN classifier using existing training code
+        self.model = None
+        self.classes = None
+        self.temperature = 1.0
+        self.window_size = 120
+        self.buffer = deque(maxlen=120)
+        self.last_prediction = None
+        self.infer_every_n_frames = 30  # Run inference every 30 frames (~1 per second at 30fps)
+        
+        if enable_classifier:
+            try:
+                checkpoint_path = Path(__file__).parent.parent / "ai_models" / "best_single_view_f1_bn_t120_gamma175.pt"
+                self._load_checkpoint(str(checkpoint_path))
+                LOGGER.info("🤖 PoseTCN classifier initialized (T=%d frames)", self.window_size)
+            except Exception as e:
+                LOGGER.error(f"❌ Failed to load PoseTCN classifier: {e}")
+                LOGGER.info("⚠️  Continuing without movement classification")
+    
+    def _load_checkpoint(self, path: str):
+        """Load checkpoint using existing training code patterns."""
+        ckpt = torch.load(path, map_location="cpu")
+        
+        # Extract metadata
+        self.classes = ckpt.get("classes", [
+            "normal", "decorticate", "dystonia", "chorea", "myoclonus",
+            "decerebrate", "fencer posture", "ballistic", "tremor", "versive head"
+        ])
+        self.temperature = float(ckpt.get("best_temperature", 1.0) or 1.0)
+        if not np.isfinite(self.temperature) or self.temperature <= 0:
+            self.temperature = 1.0
+        
+        cfg = ckpt.get("args", {}) or {}
+        state = ckpt["model_state_dict"]
+        
+        # Build model using existing architecture
+        width = int(cfg.get("width", 384))
+        drop = float(cfg.get("dropout", 0.1))
+        dilations = self._parse_dilations(cfg) or [1, 2, 4, 8, 16, 32]
+        t_heads = int(cfg.get("t_heads", 4))
+        attn_dropout = float(cfg.get("attn_dropout", 0.0))
+        
+        self.model = PoseTCNSingleView(
+            num_classes=len(self.classes),
+            width=width,
+            drop=drop,
+            stochastic_depth=0.0,  # No stochastic depth at inference
+            dilations=dilations,
+            in_features=NUM_POSE_LANDMARKS * 3,
+            t_heads=t_heads,
+            attn_dropout=attn_dropout
+        )
+        
+        self.model.load_state_dict(state, strict=True)
+        
+        # Setup device
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device).eval()
+        
+        # GPU optimizations
+        if self.device.type == "cuda":
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+        
+        LOGGER.info(f"Loaded checkpoint: {path}")
+        LOGGER.info(f"Classes: {self.classes}")
+        LOGGER.info(f"Temperature: {self.temperature:.4f}")
+        LOGGER.info(f"Device: {self.device}")
+    
+    @staticmethod
+    def _parse_dilations(cfg: dict) -> Optional[List[int]]:
+        """Parse dilations from config."""
+        if not isinstance(cfg, dict) or "dilations" not in cfg:
+            return None
+        try:
+            v = cfg["dilations"]
+            if isinstance(v, str):
+                out = [int(x.strip()) for x in v.split(",") if x.strip()]
+                return out or None
+            if isinstance(v, (list, tuple)):
+                return [int(x) for x in v]
+        except Exception:
+            return None
+        return None
+    
+    def process_frame(self, frame: VideoFrame) -> Optional[Tuple[List[dict], Optional[dict]]]:
+        """
+        Process a video frame and extract pose landmarks.
+        Also runs PoseTCN classifier if enabled.
+        
+        Returns:
+            Tuple of (landmarks, prediction) where:
+            - landmarks: List of landmark dicts or None if no pose detected
+            - prediction: Dict with classification results or None
+        """
+        self.frame_count += 1
+        
+        # Only process every Nth frame to reduce CPU load
+        if self.frame_count % self.process_every_n_frames != 0:
+            return self.last_landmarks, self.last_prediction
+        
+        try:
+            # Convert frame to numpy array in RGB format directly
+            # This avoids the BGR->RGB conversion issue
+            img_rgb = frame.to_ndarray(format="rgb24")
+            
+            # Verify image is valid
+            if img_rgb is None or img_rgb.size == 0:
+                LOGGER.warning("⚠️ Invalid frame received (empty or None)")
+                return self.last_landmarks, self.last_prediction
+            
+            # Run MediaPipe (expects RGB)
+            results = self.pose.process(img_rgb)
+            
+            # Extract landmarks if detected
+            if results.pose_landmarks:
+                landmarks = []
+                for lm in results.pose_landmarks.landmark:
+                    landmarks.append({
+                        "x": float(lm.x),
+                        "y": float(lm.y),
+                        "z": float(lm.z),
+                        "visibility": float(lm.visibility)
+                    })
+                self.last_landmarks = landmarks
+                
+                # Feed landmarks to classifier buffer
+                if self.model is not None:
+                    # Convert to (33, 3) array
+                    frame_landmarks = np.array([
+                        [lm["x"], lm["y"], lm["z"]] 
+                        for lm in landmarks
+                    ], dtype=np.float32)
+                    self.buffer.append(frame_landmarks)
+                    
+                    # Run inference periodically when buffer is full
+                    if len(self.buffer) >= self.window_size and self.frame_count % self.infer_every_n_frames == 0:
+                        prediction = self._predict()
+                        if prediction:
+                            self.last_prediction = prediction
+                            LOGGER.info(
+                                f"🤖 [PREDICTION] {prediction['predicted_class']} "
+                                f"({prediction['confidence']:.2%} confidence)"
+                            )
+                
+                return landmarks, self.last_prediction
+            else:
+                self.last_landmarks = None
+                return None, self.last_prediction
+                
+        except Exception as e:
+            LOGGER.error("❌ Error processing frame for pose detection: %s", e)
+            # Return last known good landmarks to avoid breaking the stream
+            return self.last_landmarks, self.last_prediction
+    
+    def _predict(self) -> Optional[dict]:
+        """Run inference on buffered frames using existing training code patterns."""
+        try:
+            # Get buffered sequence
+            seq = np.stack(list(self.buffer), axis=0)  # (T, 33, 3)
+            
+            # Normalize using existing function
+            seq = normalize_single_view(seq)
+            
+            # Reshape to (T, 99) - flatten landmarks
+            x_np = seq.reshape(self.window_size, -1)
+            
+            # Convert to tensor
+            x = torch.from_numpy(x_np).unsqueeze(0).to(self.device)  # (1, T, 99)
+            
+            # Inference
+            with torch.no_grad():
+                logits = self.model(x)
+                
+                # Temperature scaling
+                logits = logits.float()
+                scaled = logits / float(self.temperature)
+                
+                # Get prediction
+                probs = torch.softmax(scaled, dim=1)
+                pred_idx = int(scaled.argmax(1).item())
+                confidence = float(probs[0, pred_idx].item())
+                
+                # Get top 3 predictions
+                top3_probs, top3_preds = torch.topk(probs[0], k=min(3, len(self.classes)))
+                top3 = [
+                    {
+                        "class": self.classes[int(top3_preds[i])],
+                        "confidence": float(top3_probs[i])
+                    }
+                    for i in range(len(top3_preds))
+                ]
+                
+                return {
+                    "predicted_class": self.classes[pred_idx],
+                    "confidence": confidence,
+                    "top3": top3,
+                    "buffer_size": len(self.buffer)
+                }
+        except Exception as e:
+            LOGGER.error(f"❌ Error during prediction: {e}")
+            return None
+    
+    def close(self):
+        """Clean up MediaPipe resources"""
+        if self.pose:
+            self.pose.close()
+
+
 async def publish(
     ambulance_number: str,
     room_number: str,
@@ -357,6 +610,10 @@ async def publish(
 
     player = get_media_player(media_src)
 
+    # Initialize MediaPipe pose processor
+    pose_processor = MediaPipePoseProcessor(process_every_n_frames=2)
+    LOGGER.info("🦴 MediaPipe skeleton overlay enabled")
+
     # Create peer connection with STUN servers for better connectivity
     from aiortc import RTCConfiguration, RTCIceServer
 
@@ -368,13 +625,93 @@ async def publish(
     )
     pc = RTCPeerConnection(configuration=config)
 
+    # Create data channel for pose landmarks
+    data_channel = pc.createDataChannel("pose_landmarks")
+    LOGGER.info("📡 Created data channel: pose_landmarks (readyState: %s)", data_channel.readyState)
+    
+    @data_channel.on("open")
+    def on_datachannel_open():
+        LOGGER.info("📡 Data channel opened for pose landmarks (readyState: %s)", data_channel.readyState)
+    
+    @data_channel.on("close")
+    def on_datachannel_close():
+        LOGGER.info("📡 Data channel closed")
+    
+    @data_channel.on("error")
+    def on_datachannel_error(error):
+        LOGGER.error("❌ Data channel error: %s", error)
+
+    # Create video track transformer to process frames
+    from aiortc.mediastreams import MediaStreamTrack
+    
+    class VideoTransformTrack(MediaStreamTrack):
+        """
+        A video stream track that transforms frames with MediaPipe.
+        """
+        kind = "video"
+        
+        def __init__(self, track, processor, data_channel):
+            super().__init__()
+            self.track = track
+            self.processor = processor
+            self.data_channel = data_channel
+        
+        async def recv(self):
+            frame = await self.track.recv()
+            
+            # Process frame with MediaPipe and PoseTCN
+            landmarks, prediction = self.processor.process_frame(frame)
+            
+            # Debug: Log landmark detection status
+            if not hasattr(self, '_logged_detection'):
+                if landmarks:
+                    LOGGER.info("✅ MediaPipe detected pose! (%d landmarks)", len(landmarks))
+                else:
+                    LOGGER.warning("⚠️ No pose detected in frame (frame %d)", self.processor.frame_count)
+                if self.processor.frame_count > 20:  # Only log once after some frames
+                    self._logged_detection = True
+            
+            # Send landmarks and predictions via data channel if available
+            if landmarks:
+                if self.data_channel.readyState == "open":
+                    try:
+                        message = json.dumps({
+                            "type": "pose_landmarks",
+                            "landmarks": landmarks,
+                            "prediction": prediction,  # Include PoseTCN prediction
+                            "timestamp": time.time()
+                        })
+                        self.data_channel.send(message)
+                        # Debug: Log first successful send
+                        if not hasattr(self, '_logged_first_send'):
+                            LOGGER.info("📡 Successfully sent pose landmarks (%d joints) via data channel", len(landmarks))
+                            if prediction:
+                                LOGGER.info("📡 Including movement prediction: %s (%.2f%%)", 
+                                          prediction['predicted_class'], 
+                                          prediction['confidence'] * 100)
+                            self._logged_first_send = True
+                    except Exception as e:
+                        if not hasattr(self, '_logged_send_error'):
+                            LOGGER.error("❌ Error sending landmarks: %s", e)
+                            self._logged_send_error = True
+                else:
+                    if not hasattr(self, '_logged_channel_not_open'):
+                        LOGGER.warning("⚠️ Data channel not open (readyState: %s), cannot send landmarks", self.data_channel.readyState)
+                        self._logged_channel_not_open = True
+            
+            # Return original frame (no visual modification)
+            return frame
+
     if player.video:
-        pc.addTrack(player.video)
+        # Wrap video track with transformer
+        video_track = VideoTransformTrack(player.video, pose_processor, data_channel)
+        pc.addTrack(video_track)
         if player.audio:
             pc.addTrack(player.audio)
     else:
         LOGGER.error("No video track found on device %s", media_src)
         safe_close_player(player)
+        pose_processor.close()
         return
 
     await pc.setLocalDescription(await pc.createOffer())
@@ -383,6 +720,13 @@ async def publish(
         await asyncio.sleep(0.1)
 
     offer_payload = {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+    
+    # Debug: Log SDP offer to verify data channel is included
+    LOGGER.info("📝 [SDP] Generated offer SDP (first 500 chars):\n%s", pc.localDescription.sdp[:500])
+    if "m=application" in pc.localDescription.sdp:
+        LOGGER.info("✅ [SDP] Data channel IS included in offer (found m=application)")
+    else:
+        LOGGER.warning("⚠️ [SDP] Data channel NOT found in offer SDP!")
 
     async with aiohttp.ClientSession() as session:
         # Step 1: Create/connect to ambulance session - try ambulance streaming first, fallback to regular streaming
@@ -770,6 +1114,7 @@ async def publish(
     finally:
         # Note: We do NOT end the session here - that's only done via frontend
         safe_close_player(player)
+        pose_processor.close()
         await pc.close()
         LOGGER.info("🧹 Broadcaster cleanup completed")
         LOGGER.info("📋 Session Status: ACTIVE (can reconnect)")
