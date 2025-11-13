@@ -28,7 +28,7 @@ model: model.classifier.Model
 model_args:
   num_class: 10 # Updated from 9 to 10 (added normal class) # 9 movement classes
   num_joints: 33 # MediaPipe has 33 landmarks
-  num_person: 2 # Feeder automatically adds 2nd person (zeros)
+  num_person: 1 # Feeder automatically adds 2nd person (zeros)
   tau: 1 # Temporal window size
   num_heads: 3 # Number of attention heads
   in_channels: 3 # x, y, visibility coordinates

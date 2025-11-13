@@ -75,6 +75,7 @@ origins = [
     "http://localhost:8000",
     "https://localhost:3000",
     "https://main.d3nf33ntk31bcv.amplifyapp.com",
+    "*",  # Allow all origins (for local HTML file testing)
 ]
 
 app.add_middleware(

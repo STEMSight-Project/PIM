@@ -3,8 +3,7 @@
 import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
 import { MovementDetectionPanel } from "@/components/MovementDetectionPanel";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
-import { useRealtimeAmbulanceSessions } from "@/hooks/useRealtime";
-import type { AmbulanceSession, CameraRoom } from "@/types";
+import type { CameraRoom } from "@/types";
 import {
   ArrowLeftIcon,
   SignalIcon,
@@ -14,7 +13,7 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function AmbulanceStreamingPage() {
   const params = useParams();
@@ -26,92 +25,45 @@ export default function AmbulanceStreamingPage() {
     roomIdFromUrl
   );
 
+  // 🔥 Hard refresh on first load to clear stale state
+  useEffect(() => {
+    const hasRefreshed = sessionStorage.getItem(
+      `streaming-refreshed-${ambulanceId}`
+    );
+
+    if (!hasRefreshed) {
+      console.log("🔄 [FIRST-LOAD] Performing hard refresh to clear state...");
+      sessionStorage.setItem(`streaming-refreshed-${ambulanceId}`, "true");
+      window.location.reload();
+    }
+  }, [ambulanceId]);
+
   /**
-   * Data Flow:
-   * 1. Get ambulanceId from URL params (e.g., /streamingDash/AMB-001)
-   * 2. Get optional roomId from URL query (e.g., ?room=AMB-001-ROOM-001)
-   * 3. Fetch ALL sessions for this ambulance (active or inactive)
-   * 4. Extract ALL rooms from sessions (online or offline)
-   * 5. Auto-select room from URL when it becomes available
-   * 6. Real-time updates handle connected/disconnected status changes
+   * 🔥 DIRECT CONNECTION - NO REALTIME HOOKS:
+   * 1. Get ambulanceId from URL params
+   * 2. Get roomId from URL query (REQUIRED)
+   * 3. Pass roomId directly to HybridStreamPlayer
+   * 4. HybridStreamPlayer uses useStreaming hook which connects directly to viewer endpoint
+   * 5. NO session fetching, NO room fetching, NO realtime updates
    */
 
-  // Real-time sessions data - get ALL sessions for this ambulance (active or not)
-  // We need all sessions to see all rooms, regardless of connection status
-  const {
-    sessions: allSessions,
-    isConnected: realtimeConnected,
-    isLoading,
-    error: realtimeError,
-  } = useRealtimeAmbulanceSessions({
-    enabled: true,
-    ambulanceId: ambulanceId, // Filter by ambulance ID from URL
-    isActive: true,
-  });
+  // 🔥 BYPASS ALL REALTIME HOOKS - Direct connection only
+  const isLoading = false;
+  const realtimeError = null;
+  const realtimeConnected = true; // Always show as connected since we bypass realtime
+  const availableRooms: CameraRoom[] = []; // No room list needed
+  const ambulanceStats = { totalRooms: 0, liveRooms: 0, totalSessions: 0 };
 
-  // Extract ALL rooms for this ambulance (online or offline)
-  // Deduplicate by camera_id to prevent duplicate keys in React rendering
-  const availableRooms = useMemo(() => {
-    const rooms = allSessions.flatMap(
-      (session: AmbulanceSession) => session.camera_rooms || []
-    );
-
-    // Deduplicate by camera_id - keep the most recent/connected one
-    const roomMap = new Map<string, CameraRoom>();
-    for (const room of rooms) {
-      const existing = roomMap.get(room.camera_id);
-      if (!existing) {
-        roomMap.set(room.camera_id, room);
-      } else {
-        // Prioritize: 1) connected rooms, 2) more recent updates
-        if (room.connected && !existing.connected) {
-          roomMap.set(room.camera_id, room);
-        } else if (
-          room.connected === existing.connected &&
-          room.updated_at > existing.updated_at
-        ) {
-          roomMap.set(room.camera_id, room);
-        }
-      }
-    }
-
-    return Array.from(roomMap.values());
-  }, [allSessions]);
-
-  // Compute stats for this ambulance
-  const ambulanceStats = useMemo(() => {
-    const liveRooms = availableRooms.filter(
-      (room: CameraRoom) => room.connected === true
-    );
-    return {
-      totalRooms: availableRooms.length,
-      liveRooms: liveRooms.length,
-      totalSessions: allSessions.length,
-    };
-  }, [availableRooms, allSessions]);
-
-  // Auto-select room from URL when it becomes available
+  // 🔥 SIMPLIFIED: Auto-select logic - only run when room ID is provided in URL
   useEffect(() => {
-    if (roomIdFromUrl && availableRooms.length > 0) {
-      const roomExists = availableRooms.some(
-        (room: CameraRoom) => room.id === roomIdFromUrl
-      );
-      if (roomExists && selectedRoomId !== roomIdFromUrl) {
-        setSelectedRoomId(roomIdFromUrl);
-      }
-    } else if (!roomIdFromUrl && !selectedRoomId && availableRooms.length > 0) {
-      // Auto-select first available room if no room specified
-      console.log("[StreamingDash] Auto-selecting first available room");
-      setSelectedRoomId(availableRooms[0].id);
+    if (roomIdFromUrl && roomIdFromUrl !== selectedRoomId) {
+      console.log("🎯 [StreamingDash] Setting room from URL:", roomIdFromUrl);
+      setSelectedRoomId(roomIdFromUrl);
     }
-  }, [roomIdFromUrl, availableRooms, selectedRoomId]);
+  }, [roomIdFromUrl, selectedRoomId]);
 
-  // Monitor selected room's connection status
-  const selectedRoom = useMemo(() => {
-    return availableRooms.find(
-      (room: CameraRoom) => room.id === selectedRoomId
-    );
-  }, [availableRooms, selectedRoomId]);
+  // 🔥 No room list in direct mode - selectedRoom is always null
+  const selectedRoom = null;
 
   const handleRoomSelect = (roomId: string) => {
     setSelectedRoomId(roomId);
@@ -164,8 +116,7 @@ export default function AmbulanceStreamingPage() {
                     {ambulanceId.substring(0, 7).toUpperCase()}
                   </h1>
                   <p className="text-sm text-slate-600">
-                    {ambulanceStats.liveRooms}/{ambulanceStats.totalRooms}{" "}
-                    cameras online
+                    Direct Connection Mode
                   </p>
                 </div>
               </div>
@@ -184,26 +135,6 @@ export default function AmbulanceStreamingPage() {
                 <WifiIcon className="h-4 w-4" />
                 {realtimeConnected ? "Connected" : "Disconnected"}
               </div>
-
-              {/* Camera Status Badge */}
-              {selectedRoom && (
-                <div
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm ${
-                    selectedRoom.connected
-                      ? "bg-blue-100 text-blue-700 border border-blue-200"
-                      : "bg-gray-100 text-gray-700 border border-gray-200"
-                  }`}
-                >
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      selectedRoom.connected
-                        ? "bg-blue-600 animate-pulse"
-                        : "bg-gray-400"
-                    }`}
-                  />
-                  {selectedRoom.connected ? "Camera Live" : "Camera Offline"}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -254,13 +185,6 @@ export default function AmbulanceStreamingPage() {
                       )}
                     </div>
                   </div>
-
-                  {selectedRoom?.connected && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white rounded-full text-xs font-bold">
-                      <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                      LIVE
-                    </div>
-                  )}
                 </div>
               </CardHeader>
 
@@ -341,7 +265,7 @@ export default function AmbulanceStreamingPage() {
                     Camera Rooms
                   </h3>
                   <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                    {ambulanceStats.liveRooms} Live
+                    Direct Mode
                   </div>
                 </div>
               </CardHeader>
@@ -462,54 +386,31 @@ export default function AmbulanceStreamingPage() {
                     </span>
                   </div>
 
-                  {/* Active Sessions */}
+                  {/* Connection Mode */}
                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                     <div className="flex items-center gap-3">
                       <SignalIcon className="h-5 w-5 text-blue-600" />
                       <span className="text-sm font-medium text-slate-700">
-                        Active Sessions
+                        Connection Mode
                       </span>
                     </div>
                     <span className="text-sm font-semibold text-slate-900">
-                      {ambulanceStats.totalSessions}
+                      Direct
                     </span>
                   </div>
 
-                  {/* Camera Statistics */}
+                  {/* Selected Room */}
                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                     <div className="flex items-center gap-3">
                       <VideoCameraIcon className="h-5 w-5 text-purple-600" />
                       <span className="text-sm font-medium text-slate-700">
-                        Cameras Online
+                        Room ID
                       </span>
                     </div>
-                    <span className="text-sm font-semibold text-slate-900">
-                      {ambulanceStats.liveRooms}/{ambulanceStats.totalRooms}
+                    <span className="text-xs font-semibold text-slate-900 font-mono">
+                      {selectedRoomId || "None"}
                     </span>
                   </div>
-
-                  {/* Selected Camera Info */}
-                  {selectedRoom && (
-                    <>
-                      <div className="border-t border-slate-200 my-3"></div>
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                          Selected Camera
-                        </p>
-                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                          <p className="text-sm font-mono text-blue-900 mb-1">
-                            {selectedRoom.room_name}
-                          </p>
-                          <p className="text-xs text-blue-700">
-                            Status:{" "}
-                            <span className="font-semibold">
-                              {selectedRoom.connected ? "Live" : "Offline"}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    </>
-                  )}
                 </div>
               </CardContent>
             </Card>

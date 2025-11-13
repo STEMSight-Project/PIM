@@ -202,7 +202,7 @@ class PoseLandmarkerExtractor:
                     landmarks = [[lm.x, lm.y, lm.visibility] for lm in pose]
                     all_landmarks.append(landmarks)
                     extracted_count += 1
-
+                    
                     if extracted_count % 50 == 0:
                         if target_frames is None:
                             logger.info(f"   Extracted: {extracted_count} frames...")
