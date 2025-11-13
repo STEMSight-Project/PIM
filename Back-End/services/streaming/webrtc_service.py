@@ -400,6 +400,22 @@ class WebRTCService:
             )  # Mark as streamer connection
 
             # Set up event handlers
+            @pc.on("datachannel")
+            def on_datachannel(channel):
+                """Capture data channel from streamer and store in room for relay."""
+                logger.info(
+                    f"📡 [DATA-CHANNEL] Captured data channel from streamer: {channel.label} (room: {room_id})"
+                )
+                
+                # Store data channel in room for relay to viewers
+                if not hasattr(room, 'data_channels'):
+                    room.data_channels = {}
+                room.data_channels[channel.label] = channel
+                
+                logger.info(
+                    f"✅ [DATA-CHANNEL] Stored {channel.label} channel in room {room_id} for relay"
+                )
+            
             @pc.on("connectionstatechange")
             async def on_connectionstatechange():
                 """Handle streamer connection state changes with 10-second reconnection."""
@@ -539,6 +555,22 @@ class WebRTCService:
             await pc.setRemoteDescription(
                 RTCSessionDescription(sdp=sdp_body.sdp, type=sdp_body.type)
             )
+            
+            # CRITICAL DEBUG: Check if data channel was captured after setRemoteDescription
+            await asyncio.sleep(0.2)  # Wait for ondatachannel events to fire
+            if hasattr(room, 'data_channels') and room.data_channels:
+                logger.info(
+                    f"✅ [DATA-CHANNEL-CHECK] Room {room_id} has {len(room.data_channels)} data channel(s): {list(room.data_channels.keys())}"
+                )
+            else:
+                logger.warning(
+                    f"⚠️ [DATA-CHANNEL-CHECK] Room {room_id} has NO data channels after setRemoteDescription!"
+                )
+                logger.warning(f"⚠️ [DATA-CHANNEL-CHECK] Checking SDP for m=application line...")
+                if "m=application" in sdp_body.sdp:
+                    logger.warning(f"✅ [SDP] Found m=application in streamer's offer - data channel SHOULD be negotiated")
+                else:
+                    logger.error(f"❌ [SDP] No m=application line in streamer's offer - data channel NOT in SDP!")
 
             # Create answer
             answer = await pc.createAnswer()
@@ -562,6 +594,47 @@ class WebRTCService:
             # Create peer connection
             pc = RTCPeerConnection()
             room.add_peer_connection(pc, is_streamer=False)  # Mark as viewer connection
+            
+            # Set up data channel relay when viewer's data channel is detected
+            @pc.on("datachannel")
+            def on_viewer_datachannel(viewer_channel):
+                logger.info(
+                    f"📡 [VIEWER-DATACHANNEL] Received data channel from viewer: {viewer_channel.label} in room {room_id}"
+                )
+                
+                # Find matching streamer data channel to relay from
+                if hasattr(room, 'data_channels') and viewer_channel.label in room.data_channels:
+                    streamer_channel = room.data_channels[viewer_channel.label]
+                    logger.info(
+                        f"✅ [DATA-CHANNEL-RELAY] Found matching streamer channel: {viewer_channel.label}"
+                    )
+                    
+                    # Set up bidirectional relay
+                    @streamer_channel.on("message")
+                    def relay_to_viewer(message):
+                        try:
+                            if viewer_channel.readyState == "open":
+                                viewer_channel.send(message)
+                                logger.debug(f"📤 [RELAY] Forwarded message from streamer to viewer: {viewer_channel.label}")
+                        except Exception as e:
+                            logger.debug(f"Error relaying to viewer: {e}")
+                    
+                    @viewer_channel.on("message")
+                    def relay_to_streamer(message):
+                        try:
+                            if streamer_channel.readyState == "open":
+                                streamer_channel.send(message)
+                                logger.debug(f"📤 [RELAY] Forwarded message from viewer to streamer: {viewer_channel.label}")
+                        except Exception as e:
+                            logger.debug(f"Error relaying to streamer: {e}")
+                    
+                    logger.info(
+                        f"✅ [DATA-CHANNEL-RELAY] Set up bidirectional relay for '{viewer_channel.label}' in room {room_id}"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️ [DATA-CHANNEL-RELAY] No matching streamer channel found for '{viewer_channel.label}' in room {room_id}"
+                    )
 
             # Set up event handlers
             @pc.on("connectionstatechange")
