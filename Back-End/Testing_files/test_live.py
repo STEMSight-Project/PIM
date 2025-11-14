@@ -16,12 +16,27 @@ Key points:
 import argparse, time
 from collections import deque, Counter
 from typing import Optional, Tuple
+from datetime import datetime
+import uuid
 
 import numpy as np
 import cv2
 import torch
 import torch.nn as nn
 import mediapipe as mp
+
+# Database imports (optional - will check if available)
+try:
+    import sys
+    from pathlib import Path
+    parent_dir = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(parent_dir))
+    from core.common import supabase, logger
+    DATABASE_AVAILABLE = True
+except ImportError:
+    DATABASE_AVAILABLE = False
+    supabase = None
+    logger = None
 
 # ---------------- Constants ----------------
 ALL_CLASSES = ["normal","decorticate","dystonia","chorea","myoclonus",
@@ -367,6 +382,124 @@ class PredSmoother:
         top = Counter(self.q_pred).most_common(1)[0][0]
         return top, float(np.mean(self.q_conf))
 
+# ---------------- Database Storage ----------------
+
+class DetectionStorage:
+    """Store AI detections to database during live streaming."""
+    
+    def __init__(self, session_id: str = None, camera_id: str = None, 
+                 room_id: str = None, model_name: str = "PoseTCN"):
+        self.enabled = DATABASE_AVAILABLE
+        self.session_id = session_id or str(uuid.uuid4())
+        self.camera_id = camera_id or str(uuid.uuid4())
+        self.room_id = room_id
+        self.model_name = model_name
+        self.sequence_number = 0
+        self.last_store_time = 0
+        self.store_interval = 2.0  # Store every 2 seconds to avoid overwhelming DB
+        
+        if self.enabled:
+            logger.info(f"✅ Detection storage enabled - Session: {self.session_id[:8]}...")
+        else:
+            print("⚠️  Database not available - detections will not be stored")
+    
+    def should_store(self) -> bool:
+        """Check if enough time has passed to store another detection."""
+        current_time = time.time()
+        if current_time - self.last_store_time >= self.store_interval:
+            self.last_store_time = current_time
+            return True
+        return False
+    
+    def store_detection(self, predicted_class: str, confidence: float, 
+                       all_probs: dict, temperature: float, 
+                       frame_count: int = 60, processing_time_ms: int = None):
+        """
+        Store a single detection to the database.
+        
+        Args:
+            predicted_class: Predicted movement class
+            confidence: Confidence score (0-1)
+            all_probs: Dict of all class probabilities
+            temperature: Model temperature used
+            frame_count: Number of frames in the sequence
+            processing_time_ms: Inference time in milliseconds
+        """
+        if not self.enabled or not self.should_store():
+            return
+        
+        try:
+            detection_data = {
+                'predicted_class': predicted_class,
+                'confidence': confidence,
+                'all_probabilities': all_probs,
+                'frame_count': frame_count,
+                'temperature': temperature,
+                'model_name': self.model_name,
+                'inference_mode': 'live_stream'
+            }
+            
+            supabase.table('ai_detections').insert({
+                'session_id': self.session_id,
+                'camera_id': self.camera_id,
+                'room_id': self.room_id,
+                'detection_type': predicted_class,
+                'confidence_score': float(confidence),
+                'detection_data': detection_data,
+                'frame_timestamp': datetime.now().isoformat(),
+                'sequence_number': self.sequence_number,
+                'model_used': self.model_name,
+                'processing_time_ms': processing_time_ms,
+                'processed_on': 'edge'  # Live inference on edge device
+            }).execute()
+            
+            self.sequence_number += 1
+            
+            if self.sequence_number % 10 == 0:
+                logger.info(f"📊 Stored {self.sequence_number} detections")
+                
+        except Exception as e:
+            if logger:
+                logger.error(f"Failed to store detection: {e}")
+            else:
+                print(f"❌ Failed to store detection: {e}")
+    
+    def store_batch_summary(self, detection_counts: dict, avg_confidence: float,
+                           total_frames: int, duration_seconds: float):
+        """Store a summary of detection session."""
+        if not self.enabled:
+            return
+        
+        try:
+            summary_data = {
+                'detection_counts': detection_counts,
+                'avg_confidence': avg_confidence,
+                'total_frames': total_frames,
+                'duration_seconds': duration_seconds,
+                'detections_per_second': total_frames / duration_seconds if duration_seconds > 0 else 0
+            }
+            
+            supabase.table('ai_detections').insert({
+                'session_id': self.session_id,
+                'camera_id': self.camera_id,
+                'room_id': self.room_id,
+                'detection_type': 'session_summary',
+                'confidence_score': avg_confidence,
+                'detection_data': summary_data,
+                'frame_timestamp': datetime.now().isoformat(),
+                'sequence_number': self.sequence_number,
+                'model_used': self.model_name,
+                'processed_on': 'edge'
+            }).execute()
+            
+            logger.info(f"✅ Stored session summary: {len(detection_counts)} unique detections")
+            
+        except Exception as e:
+            if logger:
+                logger.error(f"Failed to store session summary: {e}")
+            else:
+                print(f"❌ Failed to store summary: {e}")
+
 # ---------------- Main loop ----------------
 
 def run(args):
@@ -382,9 +515,33 @@ def run(args):
     tag = f"{model_type}-pose(V={num_views})"
     print(f"Model type: {model_type}, Views: {num_views}, Temperature: {temperature:.4f}")
     
+    # Initialize database storage if enabled
+    storage = None
+    if args.store_db:
+        import uuid
+        # Generate UUIDs if not provided
+        session_id = args.session_id if args.session_id else str(uuid.uuid4())
+        camera_id = args.camera_id if args.camera_id else str(uuid.uuid4())
+        room_id = args.room_id  # Can be None
+        
+        storage = DetectionStorage(
+            session_id=session_id,
+            camera_id=camera_id,
+            room_id=room_id,
+            model_name=f"{model_type}-T{temperature:.2f}"
+        )
+        print(f"🔑 Session ID: {session_id}")
+        print(f"📷 Camera ID: {camera_id}")
+        if room_id:
+            print(f"🚪 Room ID: {room_id}")
+    
     # Simple argmax prediction (matches train.py logic)
     print(f"Using temperature scaling: T={temperature:.2f}")
     print("Prediction method: argmax(softmax(logits/T))")
+    if storage and storage.enabled:
+        print(f"📊 Database storage: ENABLED (storing every {storage.store_interval}s)")
+    else:
+        print("📊 Database storage: DISABLED")
 
     T = args.T
     buffer = deque(maxlen=T)
@@ -401,6 +558,9 @@ def run(args):
 
     last_landmarks = None
     frame_i = 0
+    start_time = time.time()
+    detection_counts = Counter()
+    all_confidences = []
 
     # Prealloc scratch for early-fusion tiling when V>1
     per_view_feat = 3 * landmarks_per_view  # 3*33
@@ -422,6 +582,8 @@ def run(args):
                 buffer.append(last_landmarks)
 
             if len(buffer) == T and (frame_i % args.infer_every == 0):
+                infer_start = time.time()
+                
                 seq = np.stack(buffer, 0).astype(np.float32)          # (T, 33, 3)
                 seq = normalize_pose(seq)                              # (T, 33, 3)
                 x_np = seq.reshape(T, -1)                              # (T, 99)
@@ -456,6 +618,27 @@ def run(args):
                     
                     pred_idx = int(pred[0].item())
                     conf_val = float(conf.item())
+                    pred_class = classes[pred_idx]
+                    
+                    # Calculate inference time
+                    infer_time_ms = int((time.time() - infer_start) * 1000)
+                    
+                    # Store to database if enabled
+                    if storage:
+                        all_probs = {classes[i]: float(probs[0, i].item()) 
+                                    for i in range(len(classes))}
+                        storage.store_detection(
+                            predicted_class=pred_class,
+                            confidence=conf_val,
+                            all_probs=all_probs,
+                            temperature=temperature,
+                            frame_count=T,
+                            processing_time_ms=infer_time_ms
+                        )
+                    
+                    # Track statistics
+                    detection_counts[pred_class] += 1
+                    all_confidences.append(conf_val)
                     
                     # Debug: Print raw predictions every 30 frames
                     if frame_i % 30 == 0:
@@ -467,7 +650,8 @@ def run(args):
                         top3_confs, top3_preds = torch.topk(probs[0], k=min(3, len(classes)))
                         for i in range(len(top3_preds)):
                             print(f"    {i+1}. {classes[top3_preds[i]]:20s} {top3_confs[i].item():.4f}")
-                        print(f"  Final prediction: {classes[pred_idx]} ({conf_val:.4f})")
+                        print(f"  Final prediction: {pred_class} ({conf_val:.4f})")
+                        print(f"  Inference time: {infer_time_ms}ms")
                     
                     smoother.push(pred_idx, conf_val)
 
@@ -481,13 +665,38 @@ def run(args):
             cv2.putText(frame, f"T: {len(buffer)}/{T} | Pose every {args.pose_every} | Infer every {args.infer_every}",
                         (20, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
             cv2.putText(frame, f"Cam FPS (cap): {fps:.1f}", (20, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+            
+            # Show DB storage status
+            if storage and storage.enabled:
+                db_status = f"DB: {storage.sequence_number} stored"
+                cv2.putText(frame, db_status, (20, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            
             color = (0, 255, 255) if s_conf >= 0.7 else (0, 165, 255) if s_conf >= 0.5 else (0, 0, 255)
-            cv2.putText(frame, f"Pred: {label}  ({s_conf:.2f})", (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            cv2.putText(frame, f"Pred: {label}  ({s_conf:.2f})", (20, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
             cv2.imshow(f"PoseTCN Live ({tag})", frame)
             if (cv2.waitKey(1) & 0xFF) == ord('q'):
                 break
     finally:
+        # Store session summary before closing
+        if storage and storage.enabled and all_confidences:
+            duration = time.time() - start_time
+            storage.store_batch_summary(
+                detection_counts=dict(detection_counts),
+                avg_confidence=float(np.mean(all_confidences)),
+                total_frames=frame_i,
+                duration_seconds=duration
+            )
+            print(f"\n📊 Session Summary:")
+            print(f"  Total frames: {frame_i}")
+            print(f"  Duration: {duration:.1f}s")
+            print(f"  Detections stored: {storage.sequence_number}")
+            print(f"  Avg confidence: {np.mean(all_confidences):.3f}")
+            print(f"  Detection distribution:")
+            for cls, count in detection_counts.most_common():
+                pct = 100 * count / sum(detection_counts.values())
+                print(f"    {cls:20s}: {count:4d} ({pct:5.1f}%)")
+        
         cap.release()
         cv2.destroyAllWindows()
 
@@ -506,6 +715,13 @@ def parse_args():
     ap.add_argument("--pose_every", type=int, default=1, help="Run MediaPipe every N frames")
     ap.add_argument("--infer_every", type=int, default=1, help="Run model every N frames")
     ap.add_argument("--pose_short", type=int, default=256, help="Short side for pose downscale")
+    
+    # Database storage options
+    ap.add_argument("--store_db", action="store_true", help="Store detections to database")
+    ap.add_argument("--session_id", type=str, default=None, help="Ambulance session ID (auto-generated if not provided)")
+    ap.add_argument("--camera_id", type=str, default=None, help="Camera ID (auto-generated if not provided)")
+    ap.add_argument("--room_id", type=str, default=None, help="WebRTC room ID (optional)")
+    
     return ap.parse_args()
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from api_router.router import api_router
 from api_router.pim_classifier_api import router as pim_router
+from api_router.ai_detections import router as ai_detections_router
 from core.common import logger, supabase
 import os
 import sys
@@ -156,3 +157,4 @@ app.mount("/recordings", StaticFiles(directory=str(RECORDINGS_PATH)), name="reco
 # Include routers
 app.include_router(api_router)
 app.include_router(pim_router)
+app.include_router(ai_detections_router)
