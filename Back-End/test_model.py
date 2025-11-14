@@ -690,6 +690,7 @@ class ModelTester:
         confidences = []
         matches = []
         true_labels = []
+        prediction_details = []  # Store full prediction info for database
         
         for seq_info in sequences:
             sequence = seq_info['sequence']
@@ -715,6 +716,20 @@ class ModelTester:
             confidences.append(conf.item())
             true_labels.append(true_label)
             matches.append(pred_class == true_label)
+            
+            # Store detailed prediction for database
+            all_probs = {
+                classes[i]: float(probs[0, i].item()) 
+                for i in range(min(len(classes), probs.size(1)))
+            }
+            prediction_details.append({
+                'predicted_class': pred_class,
+                'true_label': true_label,
+                'confidence': conf.item(),
+                'correct': pred_class == true_label,
+                'probabilities': all_probs,
+                'file': str(seq_info['file'].name) if 'file' in seq_info else 'unknown'
+            })
         
         # Analysis
         counter = Counter(predictions)
@@ -741,7 +756,8 @@ class ModelTester:
             'avg_confidence': np.mean(confidences),
             'collapse_ratio': counter.most_common(1)[0][1] / len(predictions),
             'per_class_accuracy': per_class_acc,
-            'per_class_total': dict(per_class_total)
+            'per_class_total': dict(per_class_total),
+            'prediction_details': prediction_details  # Add for database storage
         }
 
 
@@ -992,7 +1008,9 @@ class TestModelRealData:
             results[rel_path] = {
                 'status': verdict,
                 'accuracy': test_results['accuracy'],
-                'collapse_ratio': test_results['collapse_ratio']
+                'collapse_ratio': test_results['collapse_ratio'],
+                'model_info': model_info,
+                'predictions': test_results.get('predictions', [])
             }
         
         print(f"\n{'='*80}")

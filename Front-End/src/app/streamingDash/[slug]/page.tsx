@@ -1,7 +1,7 @@
 "use client";
 
 import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
-import { MovementDetectionPanel } from "@/components/MovementDetectionPanel";
+import LiveAIDetectionPanel from "@/components/LiveAIDetectionPanel";
 import { Button, Card, CardContent, CardHeader } from "@/components/ui";
 import type { CameraRoom } from "@/types";
 import {
@@ -436,10 +436,11 @@ export default function AmbulanceStreamingPage() {
               </CardHeader>
               <CardContent className="p-4">
                 {selectedRoomId ? (
-                  <MovementDetectionPanel
+                  <LiveAIDetectionPanel
                     roomId={selectedRoomId}
-                    showValidationButtons={true}
+                    showStatistics={true}
                     maxDetections={15}
+                    enableSound={true}
                   />
                 ) : (
                   <div className="text-center py-8">

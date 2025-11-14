@@ -9,8 +9,9 @@ import json
 import time
 import sys
 from pathlib import Path
-from collections import deque
+from collections import deque, Counter
 from typing import Optional, List, Tuple
+from datetime import datetime
 
 import aiohttp
 from aiortc import RTCPeerConnection, RTCSessionDescription
@@ -21,6 +22,33 @@ import numpy as np
 import mediapipe as mp
 import torch
 from av import VideoFrame
+
+# Database imports (optional - graceful fallback)
+try:
+    # Add parent directory to Python path for core imports
+    parent_dir_str = str(Path(__file__).parent.parent)
+    if parent_dir_str not in sys.path:
+        sys.path.insert(0, parent_dir_str)
+    
+    # Change working directory to Back-End so .env file is found
+    import os
+    original_cwd = os.getcwd()
+    backend_dir = Path(__file__).parent.parent
+    os.chdir(backend_dir)
+    
+    from core.common import supabase, logger as db_logger
+    
+    # Restore original working directory
+    os.chdir(original_cwd)
+    
+    DATABASE_AVAILABLE = True
+    print("✅ Database imports successful - predictions will be stored")
+except Exception as e:
+    DATABASE_AVAILABLE = False
+    db_logger = None
+    print(f"⚠️  Database not available: {e}")
+    print("   Predictions will NOT be stored to database")
+    print("   (This is normal if running from Testing_files/ without .env file)")
 
 # Add parent directory to path to import pose-tcn_single_view
 parent_dir = Path(__file__).parent.parent
@@ -39,6 +67,118 @@ NUM_POSE_LANDMARKS = pose_tcn_module.NUM_POSE_LANDMARKS
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("publisher")
+
+
+class DetectionStorage:
+    """
+    Handles storing AI detection predictions to the database.
+    Throttles storage to avoid database overload (default: every 2 seconds).
+    """
+    
+    def __init__(self, session_id: str, camera_id: str, room_id: Optional[str],
+                 model_name: str, store_interval: float = 2.0):
+        self.enabled = DATABASE_AVAILABLE
+        if not self.enabled:
+            LOGGER.warning("📊 Database not available - predictions will not be stored")
+            return
+        
+        self.session_id = session_id
+        self.camera_id = camera_id
+        self.room_id = room_id
+        self.model_name = model_name
+        self.store_interval = store_interval
+        self.last_store_time = 0
+        self.sequence_number = 0
+        
+        LOGGER.info(f"📊 Database storage initialized (interval={store_interval}s)")
+    
+    def should_store(self) -> bool:
+        """Check if enough time has elapsed since last storage."""
+        if not self.enabled:
+            return False
+        
+        current_time = time.time()
+        if current_time - self.last_store_time >= self.store_interval:
+            self.last_store_time = current_time
+            return True
+        return False
+    
+    def store_detection(self, predicted_class: str, confidence: float,
+                       all_probs: dict, temperature: float = 1.0,
+                       frame_count: int = 120, processing_time_ms: int = 0):
+        """Store a single detection to the database."""
+        if not self.enabled:
+            return
+        
+        try:
+            self.sequence_number += 1
+            
+            detection_data = {
+                'all_probabilities': all_probs,
+                'temperature': temperature,
+                'frame_count': frame_count,
+                'model_architecture': 'PoseTCN-SingleView'
+            }
+            
+            supabase.table('ai_detections').insert({
+                'session_id': self.session_id,
+                'camera_id': self.camera_id,
+                'room_id': self.room_id,
+                'detection_type': predicted_class,
+                'confidence_score': confidence,
+                'detection_data': detection_data,
+                'frame_timestamp': datetime.now().isoformat(),
+                'sequence_number': self.sequence_number,
+                'model_used': self.model_name,
+                'processing_time_ms': processing_time_ms,
+                'processed_on': 'edge'
+            }).execute()
+            
+            if db_logger:
+                db_logger.info(f"✅ Stored detection #{self.sequence_number}: {predicted_class} ({confidence:.2%})")
+            
+        except Exception as e:
+            if db_logger:
+                db_logger.error(f"Failed to store detection: {e}")
+            else:
+                LOGGER.error(f"❌ Failed to store detection: {e}")
+    
+    def store_batch_summary(self, detection_counts: dict, avg_confidence: float,
+                           total_frames: int, duration_seconds: float):
+        """Store a summary of detection session."""
+        if not self.enabled:
+            return
+        
+        try:
+            summary_data = {
+                'detection_counts': detection_counts,
+                'avg_confidence': avg_confidence,
+                'total_frames': total_frames,
+                'duration_seconds': duration_seconds,
+                'detections_per_second': self.sequence_number / duration_seconds if duration_seconds > 0 else 0
+            }
+            
+            supabase.table('ai_detections').insert({
+                'session_id': self.session_id,
+                'camera_id': self.camera_id,
+                'room_id': self.room_id,
+                'detection_type': 'session_summary',
+                'confidence_score': avg_confidence,
+                'detection_data': summary_data,
+                'frame_timestamp': datetime.now().isoformat(),
+                'sequence_number': self.sequence_number,
+                'model_used': self.model_name,
+                'processed_on': 'edge'
+            }).execute()
+            
+            if db_logger:
+                db_logger.info(f"✅ Stored session summary: {len(detection_counts)} unique detections")
+            
+        except Exception as e:
+            if db_logger:
+                db_logger.error(f"Failed to store session summary: {e}")
+            else:
+                LOGGER.error(f"❌ Failed to store summary: {e}")
 
 
 def detect_video_devices() -> List[Tuple[str, str]]:
@@ -341,7 +481,9 @@ class MediaPipePoseProcessor:
     Processes every Nth frame to reduce CPU load.
     """
     
-    def __init__(self, process_every_n_frames: int = 2, enable_classifier: bool = True):
+    def __init__(self, process_every_n_frames: int = 2, enable_classifier: bool = True,
+                 session_id: Optional[str] = None, camera_id: Optional[str] = None,
+                 room_id: Optional[str] = None, enable_db_storage: bool = True):
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(
             static_image_mode=False,
@@ -363,11 +505,31 @@ class MediaPipePoseProcessor:
         self.last_prediction = None
         self.infer_every_n_frames = 30  # Run inference every 30 frames (~1 per second at 30fps)
         
+        # Database storage for predictions
+        self.storage = None
+        self.detection_counts = Counter()
+        self.all_confidences = []
+        self.stream_start_time = time.time()
+        
         if enable_classifier:
             try:
                 checkpoint_path = Path(__file__).parent.parent / "ai_models" / "best_single_view_f1_bn_t120_gamma175.pt"
                 self._load_checkpoint(str(checkpoint_path))
                 LOGGER.info("🤖 PoseTCN classifier initialized (T=%d frames)", self.window_size)
+                
+                # Initialize database storage if context provided
+                if enable_db_storage and session_id and camera_id:
+                    model_name = f"PoseTCN-T{self.temperature:.2f}"
+                    self.storage = DetectionStorage(
+                        session_id=session_id,
+                        camera_id=camera_id,
+                        room_id=room_id,
+                        model_name=model_name
+                    )
+                    LOGGER.info("📊 Database storage enabled for predictions")
+                elif enable_db_storage:
+                    LOGGER.warning("⚠️  Database storage requested but missing session/camera IDs")
+                    
             except Exception as e:
                 LOGGER.error(f"❌ Failed to load PoseTCN classifier: {e}")
                 LOGGER.info("⚠️  Continuing without movement classification")
@@ -490,13 +652,39 @@ class MediaPipePoseProcessor:
                     
                     # Run inference periodically when buffer is full
                     if len(self.buffer) >= self.window_size and self.frame_count % self.infer_every_n_frames == 0:
+                        infer_start = time.time()
                         prediction = self._predict()
+                        infer_time_ms = int((time.time() - infer_start) * 1000)
+                        
                         if prediction:
                             self.last_prediction = prediction
+                            pred_class = prediction['predicted_class']
+                            confidence = prediction['confidence']
+                            
                             LOGGER.info(
-                                f"🤖 [PREDICTION] {prediction['predicted_class']} "
-                                f"({prediction['confidence']:.2%} confidence)"
+                                f"🤖 [PREDICTION] {pred_class} "
+                                f"({confidence:.2%} confidence)"
                             )
+                            
+                            # Track statistics
+                            self.detection_counts[pred_class] += 1
+                            self.all_confidences.append(confidence)
+                            
+                            # Store to database if enabled and throttle allows
+                            if self.storage and self.storage.should_store():
+                                # Build full probability dict from top3
+                                all_probs = {item['class']: item['confidence'] 
+                                           for item in prediction.get('top3', [])}
+                                
+                                self.storage.store_detection(
+                                    predicted_class=pred_class,
+                                    confidence=confidence,
+                                    all_probs=all_probs,
+                                    temperature=self.temperature,
+                                    frame_count=self.window_size,
+                                    processing_time_ms=infer_time_ms
+                                )
+                                LOGGER.info(f"💾 Stored detection #{self.storage.sequence_number} to database")
                 
                 return landmarks, self.last_prediction
             else:
@@ -557,7 +745,32 @@ class MediaPipePoseProcessor:
             return None
     
     def close(self):
-        """Clean up MediaPipe resources"""
+        """Clean up MediaPipe resources and store session summary"""
+        # Store session summary if database storage enabled
+        if self.storage and self.storage.enabled and len(self.detection_counts) > 0:
+            duration = time.time() - self.stream_start_time
+            avg_confidence = sum(self.all_confidences) / len(self.all_confidences) if self.all_confidences else 0.0
+            
+            self.storage.store_batch_summary(
+                detection_counts=dict(self.detection_counts),
+                avg_confidence=avg_confidence,
+                total_frames=self.frame_count,
+                duration_seconds=duration
+            )
+            
+            # Print summary to console
+            LOGGER.info("\n=== 📊 Detection Session Summary ===")
+            LOGGER.info(f"Duration: {duration:.1f}s")
+            LOGGER.info(f"Total frames processed: {self.frame_count}")
+            LOGGER.info(f"Detections stored: {self.storage.sequence_number}")
+            LOGGER.info("\nDetection distribution:")
+            total_detections = sum(self.detection_counts.values())
+            for cls, count in self.detection_counts.most_common():
+                percentage = (count / total_detections) * 100
+                LOGGER.info(f"  {cls}: {count} ({percentage:.1f}%)")
+            LOGGER.info(f"\nAverage confidence: {avg_confidence:.2%}")
+            LOGGER.info("✅ Session summary stored to database\n")
+        
         if self.pose:
             self.pose.close()
 
@@ -610,9 +823,8 @@ async def publish(
 
     player = get_media_player(media_src)
 
-    # Initialize MediaPipe pose processor
-    pose_processor = MediaPipePoseProcessor(process_every_n_frames=2)
-    LOGGER.info("🦴 MediaPipe skeleton overlay enabled")
+    # Initialize pose processor placeholder - will be configured with session context later
+    pose_processor = None
 
     # Create peer connection with STUN servers for better connectivity
     from aiortc import RTCConfiguration, RTCIceServer
@@ -702,31 +914,8 @@ async def publish(
             # Return original frame (no visual modification)
             return frame
 
-    if player.video:
-        # Wrap video track with transformer
-        video_track = VideoTransformTrack(player.video, pose_processor, data_channel)
-        pc.addTrack(video_track)
-        if player.audio:
-            pc.addTrack(player.audio)
-    else:
-        LOGGER.error("No video track found on device %s", media_src)
-        safe_close_player(player)
-        pose_processor.close()
-        return
-
-    await pc.setLocalDescription(await pc.createOffer())
-
-    while pc.iceGatheringState != "complete":
-        await asyncio.sleep(0.1)
-
-    offer_payload = {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
-    
-    # Debug: Log SDP offer to verify data channel is included
-    LOGGER.info("📝 [SDP] Generated offer SDP (first 500 chars):\n%s", pc.localDescription.sdp[:500])
-    if "m=application" in pc.localDescription.sdp:
-        LOGGER.info("✅ [SDP] Data channel IS included in offer (found m=application)")
-    else:
-        LOGGER.warning("⚠️ [SDP] Data channel NOT found in offer SDP!")
+    # Note: Video track setup will happen AFTER session/camera IDs are obtained
+    # This allows pose_processor to be properly initialized with database context
 
     async with aiohttp.ClientSession() as session:
         # Step 1: Create/connect to ambulance session - try ambulance streaming first, fallback to regular streaming
@@ -905,6 +1094,51 @@ async def publish(
 
             if not camera_id:
                 raise Exception("Could not select a camera")
+
+            # Initialize MediaPipe pose processor NOW that we have session/camera IDs
+            pose_processor = MediaPipePoseProcessor(
+                process_every_n_frames=2,
+                enable_classifier=True,
+                session_id=session_id,
+                camera_id=camera_id,
+                room_id=room_name,  # Use room_name as room_id
+                enable_db_storage=True
+            )
+            LOGGER.info("🦴 MediaPipe skeleton overlay enabled")
+            if pose_processor.storage and pose_processor.storage.enabled:
+                LOGGER.info("💾 Database storage ENABLED for AI detections")
+            else:
+                LOGGER.info("⚠️  Database storage DISABLED")
+
+            # Now that pose_processor is initialized, set up video track
+            if player.video:
+                # Wrap video track with transformer
+                video_track = VideoTransformTrack(player.video, pose_processor, data_channel)
+                pc.addTrack(video_track)
+                if player.audio:
+                    pc.addTrack(player.audio)
+            else:
+                LOGGER.error("No video track found on device %s", media_src)
+                safe_close_player(player)
+                if pose_processor:
+                    pose_processor.close()
+                await pc.close()
+                return
+
+            # Create WebRTC offer
+            await pc.setLocalDescription(await pc.createOffer())
+
+            while pc.iceGatheringState != "complete":
+                await asyncio.sleep(0.1)
+
+            offer_payload = {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+            
+            # Debug: Log SDP offer to verify data channel is included
+            LOGGER.info("📝 [SDP] Generated offer SDP (first 500 chars):\n%s", pc.localDescription.sdp[:500])
+            if "m=application" in pc.localDescription.sdp:
+                LOGGER.info("✅ [SDP] Data channel IS included in offer (found m=application)")
+            else:
+                LOGGER.warning("⚠️ [SDP] Data channel NOT found in offer SDP!")
 
             # Step 2b: Check if camera room already exists, create if not
             camera_room_payload = {
@@ -1114,7 +1348,8 @@ async def publish(
     finally:
         # Note: We do NOT end the session here - that's only done via frontend
         safe_close_player(player)
-        pose_processor.close()
+        if pose_processor:
+            pose_processor.close()
         await pc.close()
         LOGGER.info("🧹 Broadcaster cleanup completed")
         LOGGER.info("📋 Session Status: ACTIVE (can reconnect)")
