@@ -142,7 +142,16 @@ export function useAIDetections(
 
         // Add to detections list (limit to maxDetections)
         setDetections((prev) => {
+          // Check if detection already exists (by ID)
+          const exists = prev.some((d) => d.id === newDetection.id);
+          if (exists) {
+            console.log("⚠️ Detection already exists, skipping:", newDetection.id);
+            return prev;
+          }
+
+          // Add to beginning and limit
           const updated = [newDetection, ...prev];
+          console.log(`📊 Updated detections: ${updated.length} total (added ${newDetection.detection_type})`);
           return updated.slice(0, maxDetections);
         });
 

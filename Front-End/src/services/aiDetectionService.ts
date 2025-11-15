@@ -120,10 +120,18 @@ export function subscribeToAIDetections(
   // For now, use polling as fallback
   console.log("📡 Setting up AI detection subscription for room:", roomId);
 
+  let lastSeenId: string | null = null;
+
   const pollInterval = setInterval(async () => {
     const detections = await fetchAIDetectionsByRoom(roomId, 1);
     if (detections.length > 0) {
-      onDetection(detections[0]);
+      const latestDetection = detections[0];
+      // Only notify if this is a new detection (different ID)
+      if (latestDetection.id !== lastSeenId) {
+        console.log(`🆕 New detection found: ${latestDetection.id} (previous: ${lastSeenId})`);
+        lastSeenId = latestDetection.id;
+        onDetection(latestDetection);
+      }
     }
   }, 2000); // Poll every 2 seconds
 

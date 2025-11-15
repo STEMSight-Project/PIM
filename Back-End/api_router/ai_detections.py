@@ -17,15 +17,15 @@ class AIDetectionResponse(BaseModel):
     id: str
     session_id: str
     camera_id: str
-    room_id: str
+    room_id: Optional[str] = None
     detection_type: str
-    confidence_score: float
+    confidence_score: Optional[float] = None
     detection_data: dict
     frame_timestamp: str
-    sequence_number: int
-    model_used: str
-    processing_time_ms: int
-    processed_on: str
+    sequence_number: Optional[int] = None
+    model_used: Optional[str] = None
+    processing_time_ms: Optional[int] = None
+    processed_on: Optional[str] = "edge"
     created_at: str
 
 

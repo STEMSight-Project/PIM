@@ -98,15 +98,37 @@ class MovementDetectionService {
     recordingId: string
   ): Promise<MovementDetectionResponse<MovementDetection[]>> {
     try {
-      const response = await api.get<MovementDetection[]>(
-        `${this.baseUrl}/recording/${recordingId}`
+      // Fetch from AI detections endpoint instead of movement-detections
+      const response = await api.get<any[]>(
+        `/ai-detections?recording_id=${recordingId}&limit=500`
       );
 
       if (!response.data) {
         return { success: false, data: null, error: "No data returned" };
       }
 
-      return { success: true, data: response.data, error: null };
+      // Filter out session_summary detections and convert to MovementDetection format
+      const detections: MovementDetection[] = response.data
+        .filter((ai: any) => 
+          ai.detection_type !== 'session_summary' && 
+          ai.detection_data?.pose_landmarks
+        )
+        .map((ai: any) => ({
+          id: ai.id,
+          recording_id: ai.recording_id || recordingId,
+          camera_id: ai.camera_id,
+          session_id: ai.session_id,
+          timestamp: 0, // Will be calculated relative to session start
+          name: ai.detection_type || 'unknown',
+          confidence: ai.confidence_score || 0,
+          validation_status: 'pending' as ValidationStatus,
+          created_at: ai.created_at,
+          detection_data: ai.detection_data,
+        }));
+
+      console.log(`📊 Fetched ${detections.length} AI detections for recording ${recordingId}`);
+
+      return { success: true, data: detections, error: null };
     } catch (err) {
       console.error("Exception fetching detections by recording:", err);
       return {
