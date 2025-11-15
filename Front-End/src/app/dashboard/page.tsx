@@ -97,7 +97,7 @@ export default function DashboardPage() {
       description: "Browse historical AI detection events and analysis",
       icon: ChartBarIcon,
       color: "bg-purple-500",
-      onClick: () => router.push("/patients"),
+      onClick: () => console.log("Detection event history - currently disabled"),
     },
     {
       title: "Camera Device Status",
@@ -232,7 +232,7 @@ export default function DashboardPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => router.push("/patients")}
+                  onClick={() => console.log("View all detections - currently disabled")}
                   className="flex items-center space-x-1"
                 >
                   <DocumentTextIcon className="w-4 h-4" />

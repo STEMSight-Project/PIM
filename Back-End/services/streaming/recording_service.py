@@ -64,6 +64,7 @@ class SessionRecorder:
         self.is_recording = False
         self.start_time: Optional[datetime] = None
         self.video_track: Optional[MediaStreamTrack] = None
+        self.recording_id: Optional[str] = None  # Database recording ID
 
         # Frame tracking
         self.frame_count = 0
@@ -150,6 +151,9 @@ class SessionRecorder:
 
             # Start FFmpeg process
             await self._start_ffmpeg_process()
+
+            # Create database entry immediately (before recording starts)
+            await self._create_initial_recording_entry()
 
             # Start frame processing task
             self.is_recording = True
@@ -501,8 +505,8 @@ class SessionRecorder:
 
             LOGGER.info(f"✅ Upload complete: {public_url}")
 
-            # Create database entry to track the recording
-            await self._create_recording_database_entry(
+            # Update database entry with storage URL and final details
+            await self._update_recording_with_storage(
                 storage_url=public_url,
                 storage_path=storage_path,
                 file_size=file_size_bytes,
@@ -515,10 +519,75 @@ class SessionRecorder:
             LOGGER.error(f"❌ Failed to upload to Supabase: {e}", exc_info=True)
             return None
 
+    async def _create_initial_recording_entry(self):
+        """Create initial database entry when recording starts (without storage_url)"""
+        try:
+            recording_data = {
+                "session_id": self.session_id,
+                "camera_id": self.room_id,
+                "recording_path": str(self.recording_path),
+                "storage_url": None,  # Will be updated after upload
+                "file_size": None,
+                "duration": None,
+                "session_start": self.start_time.isoformat() if self.start_time else None,
+                "session_end": None,
+                "status": "recording",  # Initial status
+            }
+
+            result = (
+                SUPABASE_ADMIN.table("ambulance_session_recordings")
+                .insert(recording_data)
+                .execute()
+            )
+
+            if result.data:
+                self.recording_id = result.data[0].get('id')
+                LOGGER.info(f"📝 Initial recording entry created: {self.recording_id}")
+            else:
+                LOGGER.warning(f"⚠️ Database insert returned no data")
+
+        except Exception as e:
+            LOGGER.error(f"❌ Failed to create initial recording entry: {e}", exc_info=True)
+
+    async def _update_recording_with_storage(
+        self, storage_url: str, storage_path: str, file_size: int, duration: int
+    ):
+        """Update database entry with storage URL after successful upload"""
+        if not self.recording_id:
+            LOGGER.error("Cannot update recording: recording_id is None")
+            return
+
+        try:
+            update_data = {
+                "storage_url": storage_url,
+                "file_size": file_size,
+                "duration": duration,
+                "session_end": datetime.utcnow().isoformat(),
+                "status": "completed",
+            }
+
+            result = (
+                SUPABASE_ADMIN.table("ambulance_session_recordings")
+                .update(update_data)
+                .eq("id", self.recording_id)
+                .execute()
+            )
+
+            if result.data:
+                LOGGER.info(f"✅ Recording updated with storage URL: {self.recording_id}")
+                LOGGER.info(
+                    f"📊 Final stats - Duration: {duration}s, Size: {file_size / (1024*1024):.2f} MB"
+                )
+            else:
+                LOGGER.warning(f"⚠️ Database update returned no data")
+
+        except Exception as e:
+            LOGGER.error(f"❌ Failed to update recording with storage: {e}", exc_info=True)
+
     async def _create_recording_database_entry(
         self, storage_url: str, storage_path: str, file_size: int, duration: int
     ):
-        """Create database entry in ambulance_session_recordings table"""
+        """DEPRECATED: Legacy method for backward compatibility"""
         try:
             # Match actual database schema from table
             recording_data = {

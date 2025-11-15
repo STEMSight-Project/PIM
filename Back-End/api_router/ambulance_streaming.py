@@ -351,6 +351,12 @@ async def camera_streamer(camera_id: str, body: SDPBody):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.options("/camera/{camera_id}/viewer")
+async def camera_viewer_options(camera_id: str):
+    """Handle CORS preflight request for camera viewer endpoint."""
+    return {"message": "OK"}
+
+
 @router.post("/camera/{camera_id}/viewer")
 async def camera_viewer(camera_id: str, body: SDPBody):
     """

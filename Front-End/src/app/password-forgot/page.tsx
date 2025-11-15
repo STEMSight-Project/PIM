@@ -1,5 +1,5 @@
 "use client";
-import ForgotPassword from './forgot-password';
+import ForgotPassword from './password-forgot';
 
 export default function App() {
   return <ForgotPassword />;

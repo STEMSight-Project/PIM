@@ -17,12 +17,13 @@ const Navbar = ({ patientId }: { patientId: string | null }) => {
   return (
     <nav className="bg-blue-700 text-white">
       <div className="px-6 py-2 flex space-x-8">
-        <a 
+        {/* Patient Dashboard temporarily hidden */}
+        {/* <a 
           href="/patient-dashboard" 
           className={`px-3 py-2 rounded-md text-sm font-medium ${isActive('/patient-dashboard') ? 'bg-blue-800' : 'hover:bg-blue-800'}`}
         >
           Home
-        </a>
+        </a> */}
         <a 
           href={patientId ? `/streamingDash?patientId=${patientId}` : '#'} 
           className={`px-3 py-2 rounded-md text-sm font-medium ${isActive('/live-monitoring') ? 'bg-blue-800' : 'hover:bg-blue-800'}`}

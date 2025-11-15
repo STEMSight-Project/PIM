@@ -1,6 +1,13 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
 
+# PR NOTE:
+# This project may be run with different pydantic versions across
+# environments. If you see import errors here on some deployments, consider
+# falling back to `from pydantic import BaseSettings` when
+# `pydantic_settings` is not available. We intentionally keep this simple to
+# avoid importing compatibility logic at runtime in the hot path.
+
 
 class Env(BaseSettings):
     SUPABASE_URL: str

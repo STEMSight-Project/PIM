@@ -79,6 +79,8 @@ interface UseStreamingReturn {
   canManualRetry: boolean;
   isUserCancelledReconnection: boolean;
   isWaitingForData: boolean; // NEW: Waiting for video data
+  poseLandmarks: any[] | null; // NEW: MediaPipe pose landmarks
+  prediction: any | null; // NEW: PoseTCN movement prediction
 
   currentSession: AmbulanceSession | null;
 
@@ -113,6 +115,22 @@ export function useStreaming(): UseStreamingReturn {
   >(null);
   const [reconnectionAttempts, setReconnectionAttempts] = useState(0);
   const [isWaitingForData, setIsWaitingForData] = useState(false); // NEW: Track waiting for video data
+  const [poseLandmarks, setPoseLandmarks] = useState<any[] | null>(null); // NEW: MediaPipe pose landmarks
+  const [prediction, setPrediction] = useState<any | null>(null); // NEW: PoseTCN movement prediction
+
+  // Debug: Log when landmarks change
+  useEffect(() => {
+    if (poseLandmarks) {
+      console.log(
+        "🔄 [STATE-UPDATE] poseLandmarks changed:",
+        poseLandmarks.length,
+        "landmarks"
+      );
+      console.log("🦴 [LANDMARKS] Sample landmark:", poseLandmarks[0]);
+    } else {
+      console.log("🔄 [STATE-UPDATE] poseLandmarks cleared (null)");
+    }
+  }, [poseLandmarks]);
 
   // Enhanced UX state for reconnection
   const [reconnectionCountdown, setReconnectionCountdown] = useState<
@@ -765,6 +783,87 @@ export function useStreaming(): UseStreamingReturn {
         }
       };
 
+      // CRITICAL: Create data channel BEFORE creating offer so it's included in SDP
+      console.log("📡 [SETUP] Creating data channel for pose landmarks...");
+      const dataChannel = pc.createDataChannel("pose_landmarks");
+      console.log(
+        "📡 [SETUP] Data channel created:",
+        dataChannel.label,
+        "readyState:",
+        dataChannel.readyState
+      );
+      
+      // Set up data channel handlers
+      dataChannel.onopen = () => {
+        console.log(
+          "✅ [DATA-CHANNEL] Pose landmarks channel opened (readyState:",
+          dataChannel.readyState,
+          ")"
+        );
+      };
+      
+      dataChannel.onclose = () => {
+        console.log("🔒 [DATA-CHANNEL] Pose landmarks channel closed");
+        setPoseLandmarks(null);
+      };
+      
+      dataChannel.onerror = (error) => {
+        console.error("❌ [DATA-CHANNEL] Error:", error);
+      };
+      
+      dataChannel.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("📡 [DATA-CHANNEL] Received message:", data);
+          
+          if (data.type === "pose_landmarks") {
+            console.log(
+              "🦴 [LANDMARKS] Received",
+              data.landmarks?.length,
+              "landmarks from data channel"
+            );
+            console.log(
+              "🦴 [LANDMARKS] First landmark sample:",
+              data.landmarks?.[0]
+            );
+            setPoseLandmarks(data.landmarks);
+            console.log(
+              "✅ [DATA-CHANNEL] Updated poseLandmarks state with",
+              data.landmarks.length,
+              "joints"
+            );
+            
+            // Update prediction if available
+            if (data.prediction) {
+              console.log(
+                "🤖 [PREDICTION] Movement detected:",
+                data.prediction.predicted_class,
+                `(${(data.prediction.confidence * 100).toFixed(1)}% confidence)`
+              );
+              setPrediction(data.prediction);
+            }
+          } else {
+            console.warn(
+              "⚠️ [DATA-CHANNEL] Unknown message type:",
+              data.type
+            );
+          }
+        } catch (err) {
+          console.error("❌ [DATA-CHANNEL] Failed to parse message:", err);
+        }
+      };
+      
+      console.log(
+        "✅ [SETUP] Data channel handlers configured, will be negotiated in offer"
+      );
+      
+      // Keep ondatachannel handler for any additional channels from backend
+      console.log("📡 [SETUP] Registering ondatachannel handler...");
+      pc.ondatachannel = (event) => {
+        console.log("🎉 [DATA-CHANNEL] *** ADDITIONAL DATACHANNEL EVENT FIRED ***");
+        console.log("📡 [DATA-CHANNEL] Received data channel:", event.channel.label);
+      };
+
       pc.onconnectionstatechange = () => {
         const timestamp = new Date().toISOString();
         console.log(
@@ -1013,6 +1112,13 @@ export function useStreaming(): UseStreamingReturn {
           console.log(
             "📝 [SDP] Setting remote description (answer from server)..."
           );
+          console.log(
+            "📝 [SDP] Time before setRemoteDescription:",
+            new Date().toISOString()
+          );
+          console.log("📝 [SDP] SDP type:", responseType);
+          console.log("📝 [SDP] Full answer SDP:\n", response.data.sdp);
+          
           await pc.setRemoteDescription(
             new RTCSessionDescription({
               sdp: response.data.sdp,
@@ -1021,6 +1127,10 @@ export function useStreaming(): UseStreamingReturn {
           );
           console.log(
             "✅ [SDP] Remote description set successfully for ambulance camera"
+          );
+          console.log(
+            "✅ [SDP] Time after setRemoteDescription:",
+            new Date().toISOString()
           );
           console.log(
             "✅ [SDP] Signaling complete, waiting for ICE and media..."
@@ -1471,6 +1581,8 @@ export function useStreaming(): UseStreamingReturn {
     canManualRetry,
     isUserCancelledReconnection,
     isWaitingForData, // NEW: Add the waiting for data state
+    poseLandmarks, // NEW: MediaPipe pose landmarks
+    prediction, // NEW: PoseTCN movement prediction
 
     currentSession,
     videoRef,

@@ -6,6 +6,8 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
+import { SkeletonOverlay } from "@/components/SkeletonOverlay";
+import TimelineSyncedDetectionPanel from "@/components/TimelineSyncedDetectionPanel";
 import { useHLS } from "@/hooks/useHLS";
 import { useHLSSegmentEvents } from "@/hooks/useHLSSegmentEvents";
 import { useStreaming } from "@/hooks/useStreaming";
@@ -13,6 +15,8 @@ import { cn } from "@/utils/cn";
 import {
   ArrowPathIcon,
   BackwardIcon,
+  EyeIcon,
+  EyeSlashIcon,
   ForwardIcon,
   PauseIcon,
   PlayIcon,
@@ -44,6 +48,12 @@ export function HybridStreamPlayer({
   const [duration, setDuration] = useState(0);
   const [timeBehindLive, setTimeBehindLive] = useState(0);
   const [liveEdgeDuration, setLiveEdgeDuration] = useState(0);
+  // Skeleton overlay always enabled for debugging
+  const skeletonEnabled = true;
+  
+  // Playback mode: landmarks and predictions from stored detections
+  const [playbackLandmarks, setPlaybackLandmarks] = useState<any[] | null>(null);
+  const [playbackPrediction, setPlaybackPrediction] = useState<any | null>(null);
 
   // Live streaming hook
   const {
@@ -55,6 +65,8 @@ export function HybridStreamPlayer({
     error: liveError,
     userFriendlyStatus: liveStatus,
     isWaitingForData,
+    poseLandmarks, // NEW: MediaPipe pose landmarks
+    prediction, // NEW: PoseTCN movement prediction
   } = useStreaming();
 
   // HLS playback hook
@@ -339,28 +351,110 @@ export function HybridStreamPlayer({
     <div className={cn("hybrid-stream-player relative", className)}>
       {/* Video Container */}
       <div className="relative bg-black rounded-xl overflow-hidden shadow-2xl">
-        {/* Live Video (WebRTC) */}
-        <video
-          ref={liveVideoRef}
-          className={cn(
-            "w-full h-full object-contain aspect-video",
-            viewMode !== "live" && "hidden"
+        {/* Live Video (WebRTC) with Skeleton Overlay */}
+        <div className={cn("relative", viewMode !== "live" && "hidden")}>
+          <video
+            ref={liveVideoRef}
+            className="w-full h-full object-contain aspect-video"
+            autoPlay
+            playsInline
+            muted={false}
+          />
+          {/* MediaPipe Skeleton Overlay */}
+          <SkeletonOverlay
+            videoRef={liveVideoRef}
+            landmarks={poseLandmarks}
+            enabled={skeletonEnabled}
+          />
+          
+          {/* PoseTCN Prediction Overlay */}
+          {prediction && (
+            <div className="absolute top-3 left-3 z-10">
+              <div className={cn(
+                "px-4 py-3 rounded-lg shadow-xl backdrop-blur-md border-2 transition-all",
+                prediction.confidence >= 0.7
+                  ? "bg-emerald-600/90 border-emerald-400/50"
+                  : prediction.confidence >= 0.5
+                  ? "bg-amber-600/90 border-amber-400/50"
+                  : "bg-red-600/90 border-red-400/50"
+              )}>
+                <div className="text-white">
+                  <p className="text-xs font-semibold uppercase tracking-wider opacity-75 mb-1">
+                    Movement Detected
+                  </p>
+                  <p className="text-lg font-bold leading-tight">
+                    {prediction.predicted_class}
+                  </p>
+                  <p className="text-sm mt-1 font-medium opacity-90">
+                    {(prediction.confidence * 100).toFixed(1)}% confidence
+                  </p>
+                  {prediction.top3 && prediction.top3.length > 1 && (
+                    <div className="mt-2 pt-2 border-t border-white/20">
+                      <p className="text-xs opacity-75 mb-1">Top predictions:</p>
+                      {prediction.top3.slice(0, 3).map((item: any, idx: number) => (
+                        <p key={idx} className="text-xs opacity-90">
+                          {idx + 1}. {item.class} ({(item.confidence * 100).toFixed(1)}%)
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
-          autoPlay
-          playsInline
-          muted={false}
-        />
+        </div>
 
-        {/* HLS Video (Playback) */}
-        <video
-          ref={hlsVideoRef}
-          className={cn(
-            "w-full h-full object-contain aspect-video",
-            viewMode !== "playback" && "hidden"
+        {/* HLS Video (Playback) with Skeleton Overlay */}
+        <div className={cn("relative", viewMode !== "playback" && "hidden")}>
+          <video
+            ref={hlsVideoRef}
+            className="w-full h-full object-contain aspect-video"
+            playsInline
+            muted={false}
+          />
+          {/* MediaPipe Skeleton Overlay for Playback */}
+          <SkeletonOverlay
+            videoRef={hlsVideoRef}
+            landmarks={playbackLandmarks}
+            enabled={skeletonEnabled}
+          />
+          
+          {/* PoseTCN Prediction Overlay for Playback */}
+          {playbackPrediction && (
+            <div className="absolute top-3 left-3 z-10">
+              <div className={cn(
+                "px-4 py-3 rounded-lg shadow-xl backdrop-blur-md border-2 transition-all",
+                playbackPrediction.confidence >= 0.7
+                  ? "bg-emerald-600/90 border-emerald-400/50"
+                  : playbackPrediction.confidence >= 0.5
+                  ? "bg-amber-600/90 border-amber-400/50"
+                  : "bg-red-600/90 border-red-400/50"
+              )}>
+                <div className="text-white">
+                  <p className="text-xs font-semibold uppercase tracking-wider opacity-75 mb-1">
+                    Movement Detected (Playback)
+                  </p>
+                  <p className="text-lg font-bold leading-tight">
+                    {playbackPrediction.predicted_class}
+                  </p>
+                  <p className="text-sm mt-1 font-medium opacity-90">
+                    {(playbackPrediction.confidence * 100).toFixed(1)}% confidence
+                  </p>
+                  {playbackPrediction.top3 && playbackPrediction.top3.length > 1 && (
+                    <div className="mt-2 pt-2 border-t border-white/20">
+                      <p className="text-xs opacity-75 mb-1">Top predictions:</p>
+                      {playbackPrediction.top3.slice(0, 3).map((item: any, idx: number) => (
+                        <p key={idx} className="text-xs opacity-90">
+                          {idx + 1}. {item.class} ({(item.confidence * 100).toFixed(1)}%)
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
-          playsInline
-          muted={false}
-        />
+        </div>
 
         {/* LIVE Badge */}
         {viewMode === "live" && isLiveConnected && (
@@ -607,6 +701,8 @@ export function HybridStreamPlayer({
                   <span>GO LIVE</span>
                 </button>
               )}
+
+              {/* Skeleton overlay always enabled - toggle removed for debugging */}
             </div>
           </div>
         </div>
@@ -656,6 +752,20 @@ export function HybridStreamPlayer({
               </span>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Timeline-Synced AI Detections (Playback Mode Only) */}
+      {viewMode === "playback" && recordingStatus?.session_id && (
+        <div className="mt-4">
+          <TimelineSyncedDetectionPanel
+            recordingId={recordingStatus.session_id}
+            currentTimestamp={currentTime}
+            timeWindow={2}
+            maxDetections={5}
+            onLandmarksChange={setPlaybackLandmarks}
+            onPredictionChange={setPlaybackPrediction}
+          />
         </div>
       )}
     </div>

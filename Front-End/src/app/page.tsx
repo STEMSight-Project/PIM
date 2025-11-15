@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import React from 'react';
 import Image from "next/image";
 import Link from "next/link";
 
@@ -34,19 +35,19 @@ export default function LandingPage() {
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
           <Image
-                src="/STEMSight-Logo.png"
-                alt="STEMSight"
-                width={400}
-                height={400}
-                className="mx-auto"
-              />
+            src="/STEMSight-Logo.png"
+            alt="STEMSight"
+            width={400}
+            height={400}
+            className="mx-auto"
+          />
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
             Advanced Patient Information Management
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
             STEMSight PIM is a Camera AI Service for detecting and tracking
-            postures and movements using computer vision technology. 
-            The system combines real-time streaming from Raspberry Pi 4 devices with advanced machine 
+            postures and movements using computer vision technology.
+            The system combines real-time streaming from Raspberry Pi 4 devices with advanced machine
             learning models to provide AI-powered pose detection and movement analysis capabilities
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -180,7 +181,7 @@ export default function LandingPage() {
             <span className="text-lg font-semibold">STEMSight PIM</span>
           </div>
           <p className="text-gray-400">
-            © 2024 STEMSight.
+            © 2025 STEMSight.
           </p>
         </div>
       </footer>
