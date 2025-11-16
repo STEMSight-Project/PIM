@@ -384,17 +384,30 @@ class SessionRecorder:
             await hls_segment_service.stop_monitoring_room(self.room_id)
 
             # Upload to Supabase (this will also create database entry)
-            storage_url = await self._upload_to_supabase_storage()
+            storage_url = None
+            try:
+                storage_url = await self._upload_to_supabase_storage()
+            except Exception as upload_error:
+                LOGGER.error(f"❌ Upload failed, but will finalize recording anyway: {upload_error}", exc_info=True)
+                # CRITICAL: Even if upload fails, mark recording as completed with local path
+                await self._finalize_recording_on_error()
 
             # Clean up HLS files after successful upload
             if storage_url:
                 await self._cleanup_hls_files()
                 LOGGER.info(f"✅ HLS files cleaned up for room {self.room_id}")
+            else:
+                LOGGER.warning(f"⚠️ Recording finalized without upload - files remain local")
 
             LOGGER.info(f"🎬 Recording stopped for room {self.room_id}")
 
         except Exception as e:
-            LOGGER.error(f"Error stopping recording: {e}", exc_info=True)
+            LOGGER.error(f"❌ Critical error stopping recording: {e}", exc_info=True)
+            # Final fallback - ensure recording is marked as completed
+            try:
+                await self._finalize_recording_on_error()
+            except:
+                LOGGER.error("❌ Failed to finalize recording even after error")
 
     async def _cleanup_on_error(self):
         """Clean up on error"""
@@ -564,6 +577,7 @@ class SessionRecorder:
                 "duration": duration,
                 "session_end": datetime.utcnow().isoformat(),
                 "status": "completed",
+                "updated_at": datetime.utcnow().isoformat(),
             }
 
             result = (
@@ -583,6 +597,52 @@ class SessionRecorder:
 
         except Exception as e:
             LOGGER.error(f"❌ Failed to update recording with storage: {e}", exc_info=True)
+            raise  # Re-raise to trigger fallback
+
+    async def _finalize_recording_on_error(self):
+        """Fallback method to mark recording as completed even if upload fails"""
+        if not self.recording_id:
+            LOGGER.error("Cannot finalize recording: recording_id is None")
+            return
+
+        try:
+            # Calculate file size and duration from local files
+            file_size = 0
+            duration = 0
+            
+            recording_file = self.recording_path / "recording.mp4"
+            if recording_file.exists():
+                file_size = recording_file.stat().st_size
+                # Estimate duration from file size (rough estimate: ~3MB per 10 seconds)
+                duration = int((file_size / (1024 * 1024)) / 0.3)  # Rough estimate
+
+            # Generate local URL as fallback
+            local_url = f"http://localhost:8000/recordings/{self.recording_path.name}/recording.mp4"
+
+            update_data = {
+                "storage_url": local_url,
+                "file_size": file_size,
+                "duration": max(duration, 1),  # At least 1 second
+                "session_end": datetime.utcnow().isoformat(),
+                "status": "completed",
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+
+            result = (
+                SUPABASE_ADMIN.table("ambulance_session_recordings")
+                .update(update_data)
+                .eq("id", self.recording_id)
+                .execute()
+            )
+
+            if result.data:
+                LOGGER.info(f"✅ Recording finalized with local URL (fallback): {self.recording_id}")
+                LOGGER.info(f"📊 Local file stats - Duration: ~{duration}s, Size: {file_size / (1024*1024):.2f} MB")
+            else:
+                LOGGER.error(f"❌ Fallback finalization returned no data")
+
+        except Exception as e:
+            LOGGER.error(f"❌ Critical: Failed to finalize recording on error: {e}", exc_info=True)
 
     async def _create_recording_database_entry(
         self, storage_url: str, storage_path: str, file_size: int, duration: int
