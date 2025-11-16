@@ -118,10 +118,10 @@ class MovementDetectionService {
           recording_id: ai.recording_id || recordingId,
           camera_id: ai.camera_id,
           session_id: ai.session_id,
-          timestamp: 0, // Will be calculated relative to session start
+          timestamp: 0, // Will be calculated relative to recording start
           name: ai.detection_type || 'unknown',
           confidence: ai.confidence_score || 0,
-          validation_status: 'pending' as ValidationStatus,
+          validation_status: 'confirmed' as ValidationStatus, // AI-confirmed detections
           created_at: ai.created_at,
           detection_data: ai.detection_data,
         }));
