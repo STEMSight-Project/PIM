@@ -60,8 +60,8 @@ async def send_password_reset_email(email: str, user_name: str = "User") -> bool
             logger.error(f"Failed to store reset token for {email}")
             return False
         
-        # Create reset URL
-        reset_url = f"{ENV.FRONTEND_URL}/reset-password?token={reset_token}"
+        # Create reset URL (frontend route lives at /password-reset)
+        reset_url = f"{ENV.FRONTEND_URL}/password-reset?token={reset_token}"
         
         # HTML email template
         html_template = f"""

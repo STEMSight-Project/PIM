@@ -15,9 +15,27 @@ import {
 import type { RecordingResponse } from "@/services/videoService";
 import type { MovementDetection } from "@/types/movementDetection";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { movementDetectionService } from "@/services/movementDetectionService";
 import { cn } from "@/utils/cn";
+
+interface PoseLandmark {
+  x: number;
+  y: number;
+  z: number;
+  visibility?: number;
+}
+
+interface DetectionProbabilities {
+  pose_landmarks?: PoseLandmark[];
+  all_probabilities?: Record<string, number>;
+}
+
+interface PredictionSummary {
+  predicted_class: string;
+  confidence: number;
+  top3: Array<{ class: string; confidence: number }>;
+}
 
 export default function SessionDetailPage() {
   const params = useParams();
@@ -32,7 +50,6 @@ export default function SessionDetailPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Detection state
-  const [sessionDetections, setSessionDetections] = useState<MovementDetection[]>([]);
   const [totalSessionDetections, setTotalSessionDetections] = useState(0);
   // Polling state: when a recording has no detections we keep retrying for a while
   const [isPollingDetections, setIsPollingDetections] = useState(false);
@@ -76,8 +93,8 @@ export default function SessionDetailPage() {
 
   // Playback state for skeleton overlay and predictions
   const [currentTime, setCurrentTime] = useState(0);
-  const [playbackLandmarks, setPlaybackLandmarks] = useState<any[] | null>(null);
-  const [playbackPrediction, setPlaybackPrediction] = useState<any | null>(null);
+  const [playbackLandmarks, setPlaybackLandmarks] = useState<PoseLandmark[] | null>(null);
+  const [playbackPrediction, setPlaybackPrediction] = useState<PredictionSummary | null>(null);
 
   // Initialize movement detections hook BEFORE using recordingDetections
   const {
@@ -87,6 +104,93 @@ export default function SessionDetailPage() {
   } = useMovementDetections({
     enableRealtime: false, // No realtime for playback
   });
+
+  const normalizedDetections = useMemo(() => {
+    if (!selectedRecording || recordingDetections.length === 0) {
+      return [] as MovementDetection[];
+    }
+
+    const parseTimestamp = (value?: string | null): number | null => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      const ms = parsed.getTime();
+      return Number.isNaN(ms) ? null : ms;
+    };
+
+    const filtered = recordingDetections.filter((detection) => {
+      if (!selectedRecording.session_id || !detection.session_id) {
+        return true;
+      }
+      return detection.session_id === selectedRecording.session_id;
+    });
+
+    if (filtered.length === 0) {
+      return [] as MovementDetection[];
+    }
+
+    const baselineSource =
+      selectedRecording.session_start || selectedRecording.created_at;
+    let baselineMs = parseTimestamp(baselineSource);
+
+    const detectionsWithAbsolute = filtered.map((detection) => {
+      const absoluteMs =
+        parseTimestamp(detection.created_at) ||
+        parseTimestamp(detection.frame_timestamp);
+
+      const fallbackSeconds =
+        typeof detection.timestamp === "number" &&
+        Number.isFinite(detection.timestamp)
+          ? detection.timestamp
+          : null;
+
+      return { detection, absoluteMs, fallbackSeconds };
+    });
+
+    const absoluteCandidates = detectionsWithAbsolute
+      .map(({ absoluteMs }) => absoluteMs)
+      .filter((value): value is number => typeof value === "number");
+
+    if (baselineMs === null && absoluteCandidates.length > 0) {
+      baselineMs = Math.min(...absoluteCandidates);
+    }
+
+    // If there is a large gap (e.g., timezone mismatch) prefer earliest detection
+    if (
+      baselineMs !== null &&
+      absoluteCandidates.length > 0 &&
+      baselineMs - Math.min(...absoluteCandidates) > 2 * 60 * 60 * 1000
+    ) {
+      baselineMs = Math.min(...absoluteCandidates);
+    }
+
+    return detectionsWithAbsolute
+      .map(({ detection, absoluteMs, fallbackSeconds }) => {
+        let relativeSeconds: number;
+        if (baselineMs !== null && absoluteMs !== null) {
+          relativeSeconds = (absoluteMs - baselineMs) / 1000;
+        } else if (fallbackSeconds !== null) {
+          relativeSeconds = fallbackSeconds;
+        } else {
+          relativeSeconds = 0;
+        }
+
+        const normalized = Math.max(0, relativeSeconds);
+        return {
+          ...detection,
+          timestamp: normalized,
+        };
+      })
+      .sort((a, b) => a.timestamp - b.timestamp);
+  }, [selectedRecording, recordingDetections]);
+
+  const parseDetectionData = (
+    data: MovementDetection["detection_data"]
+  ): DetectionProbabilities | null => {
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+    return data as DetectionProbabilities;
+  };
 
   // Handler to seek video to specific timestamp
   const handleSeekToTime = (timestamp: number) => {
@@ -101,11 +205,11 @@ export default function SessionDetailPage() {
 
   // Sync landmarks and predictions with current playback time
   useEffect(() => {
-    if (recordingDetections.length === 0) return;
+    if (normalizedDetections.length === 0) return;
 
     // Find detections within 2 seconds of current time
     const timeWindow = 2;
-    const relevant = recordingDetections.filter(
+    const relevant = normalizedDetections.filter(
       (d) => Math.abs(d.timestamp - currentTime) < timeWindow
     );
 
@@ -117,24 +221,27 @@ export default function SessionDetailPage() {
           : prev
       );
 
-      const landmarks = closest.detection_data?.pose_landmarks || null;
+      const detectionData = parseDetectionData(closest.detection_data);
+      const landmarks = detectionData?.pose_landmarks || null;
       setPlaybackLandmarks(landmarks);
       
       // Set prediction if available
-      if (closest.detection_data?.all_probabilities) {
+      if (detectionData?.all_probabilities) {
+        const top3 = Object.entries(detectionData.all_probabilities)
+          .map(([cls, conf]) => ({ class: cls, confidence: Number(conf) }))
+          .sort((a, b) => b.confidence - a.confidence)
+          .slice(0, 3);
+
         setPlaybackPrediction({
           predicted_class: closest.name,
           confidence: closest.confidence,
-          top3: Object.entries(closest.detection_data.all_probabilities)
-            .map(([cls, conf]) => ({ class: cls, confidence: conf as number }))
-            .sort((a, b) => b.confidence - a.confidence)
-            .slice(0, 3)
+          top3,
         });
       } else {
         setPlaybackPrediction({
           predicted_class: closest.name,
           confidence: closest.confidence,
-          top3: []
+          top3: [],
         });
       }
     } else {
@@ -142,7 +249,7 @@ export default function SessionDetailPage() {
       setPlaybackLandmarks(null);
       setPlaybackPrediction(null);
     }
-  }, [currentTime, recordingDetections]);
+  }, [currentTime, normalizedDetections]);
 
   useEffect(() => {
     if (sessionId) {
@@ -166,7 +273,7 @@ export default function SessionDetailPage() {
     const fetchAllDetections = async () => {
       if (recordings.length === 0) return;
 
-      const allDetections: MovementDetection[] = [];
+      let totalCount = 0;
 
       for (const recording of recordings) {
         try {
@@ -174,7 +281,7 @@ export default function SessionDetailPage() {
             recording.id
           );
           if (resp && resp.data) {
-            allDetections.push(...resp.data);
+            totalCount += resp.data.length;
           }
         } catch (err) {
           console.error(
@@ -184,8 +291,7 @@ export default function SessionDetailPage() {
         }
       }
 
-      setSessionDetections(allDetections);
-      setTotalSessionDetections(allDetections.length);
+      setTotalSessionDetections(totalCount);
     };
 
     fetchAllDetections();
@@ -202,51 +308,20 @@ export default function SessionDetailPage() {
   // Debug log when recordingDetections changes
   useEffect(() => {
     console.log("📊 Recording detections updated:", {
-      count: recordingDetections.length,
-      detections: recordingDetections.slice(0, 3).map(d => ({
-        id: d.id,
-        timestamp: d.timestamp,
-        hasLandmarks: !!d.detection_data?.pose_landmarks,
-        landmarkCount: d.detection_data?.pose_landmarks?.length || 0
-      }))
+      count: normalizedDetections.length,
+      detections: normalizedDetections.slice(0, 3).map((d) => {
+        const data = parseDetectionData(d.detection_data);
+        return {
+          id: d.id,
+          timestamp: d.timestamp,
+          hasLandmarks: !!data?.pose_landmarks,
+          landmarkCount: data?.pose_landmarks?.length || 0,
+        };
+      }),
     });
-  }, [recordingDetections]);
+  }, [normalizedDetections]);
 
-  // Calculate relative timestamps when detections or recording changes
-  useEffect(() => {
-    if (!selectedRecording || recordingDetections.length === 0) return;
-
-    // Use recording's created_at as the baseline (when THIS recording started)
-    // NOT session_start (which is when the entire session started)
-    const recordingStartTime = new Date(selectedRecording.created_at);
-    
-    // Update timestamps to be relative to THIS recording's start
-    const updatedDetections = recordingDetections.map(detection => {
-      // Use created_at (UTC) for consistent timing
-      const detectionTime = new Date(detection.created_at);
-      const relativeSeconds = (detectionTime.getTime() - recordingStartTime.getTime()) / 1000;
-      
-      return {
-        ...detection,
-        timestamp: Math.max(0, relativeSeconds) // Ensure non-negative
-      };
-    });
-
-    console.log("⏱️ Calculated relative timestamps:", {
-      recordingStart: recordingStartTime.toISOString(),
-      firstDetection: updatedDetections[0]?.timestamp,
-      lastDetection: updatedDetections[updatedDetections.length - 1]?.timestamp,
-      count: updatedDetections.length,
-      videoDuration: videoRef.current?.duration || 'unknown'
-    });
-
-    // Update the detections in the hook's state
-    // This is a bit hacky but necessary since we're modifying after fetch
-    if (JSON.stringify(recordingDetections) !== JSON.stringify(updatedDetections)) {
-      // Force update by creating new array reference
-      recordingDetections.splice(0, recordingDetections.length, ...updatedDetections);
-    }
-  }, [selectedRecording, recordingDetections]);
+  // no direct mutation of hook state; timestamps normalized via useMemo
 
   // Update current time from video element
   useEffect(() => {
@@ -268,7 +343,7 @@ export default function SessionDetailPage() {
     let cancelled = false;
 
     const isUsingDevMock =
-      process.env.NODE_ENV === "development" && recordingDetections.length === 0;
+      process.env.NODE_ENV === "development" && normalizedDetections.length === 0;
 
     // If we're showing dev mock data, don't start polling for real detections
     if (isUsingDevMock) {
@@ -280,7 +355,7 @@ export default function SessionDetailPage() {
       if (cancelled) return;
       if (!selectedRecording) return;
       // If detections have appeared, stop polling
-      if (recordingDetections.length > 0) {
+      if (normalizedDetections.length > 0) {
         setIsPollingDetections(false);
         return;
       }
@@ -308,7 +383,7 @@ export default function SessionDetailPage() {
     };
 
     // Only start polling when a recording is selected and there are no detections
-    if (selectedRecording && recordingDetections.length === 0) {
+    if (selectedRecording && normalizedDetections.length === 0) {
       startPolling(0);
     }
 
@@ -316,7 +391,7 @@ export default function SessionDetailPage() {
       cancelled = true;
       setIsPollingDetections(false);
     };
-  }, [selectedRecording, recordingDetections.length, detectionsLoading, fetchDetectionsByRecording]);
+  }, [selectedRecording, normalizedDetections.length, detectionsLoading, fetchDetectionsByRecording]);
 
   const handleRecordingSelect = (recording: RecordingResponse) => {
     setSelectedRecording(recording);
@@ -684,7 +759,7 @@ export default function SessionDetailPage() {
                         <SkeletonOverlay
                           videoRef={videoRef}
                           landmarks={playbackLandmarks}
-                          enabled={true}
+                          enabled={!!(playbackLandmarks && playbackLandmarks.length > 0)}
                         />
                         
                         {/* Prediction Badge */}
@@ -711,7 +786,7 @@ export default function SessionDetailPage() {
                                 {playbackPrediction.top3 && playbackPrediction.top3.length > 1 && (
                                   <div className="mt-2 pt-2 border-t border-white/20">
                                     <p className="text-xs opacity-75 mb-1">Top predictions:</p>
-                                    {playbackPrediction.top3.slice(0, 3).map((item: any, idx: number) => (
+                                    {playbackPrediction.top3.slice(0, 3).map((item, idx) => (
                                       <p key={idx} className="text-xs opacity-90">
                                         {idx + 1}. {item.class} ({(item.confidence * 100).toFixed(1)}%)
                                       </p>
@@ -724,6 +799,16 @@ export default function SessionDetailPage() {
                         )}
                       </div>
 
+                      {/* Timeline-synced detections */}
+                      {selectedRecording && (
+                        <TimelineSyncedDetectionPanel
+                          recordingId={selectedRecording.id}
+                          currentTimestamp={currentTime}
+                          onLandmarksChange={setPlaybackLandmarks}
+                          onPredictionChange={setPlaybackPrediction}
+                          onSeekToTime={handleSeekToTime}
+                        />
+                      )}
 
                       {/* Recording Info */}
                       <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
@@ -915,17 +1000,18 @@ export default function SessionDetailPage() {
                   </p>
                 </CardHeader>
                 <CardContent>
-                  {detectionsLoading && recordingDetections.length > 0 ? (
+                  {detectionsLoading && normalizedDetections.length > 0 ? (
                     <div className="flex items-center justify-center py-8">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                       <span className="ml-2 text-sm text-gray-600">Loading detections...</span>
                     </div>
-                  ) : recordingDetections.length > 0 ? (
+                  ) : normalizedDetections.length > 0 ? (
                     <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                      {recordingDetections.map((detection) => {
+                      {normalizedDetections.map((detection) => {
                         // Check if detection is near current playback time (within 2 seconds)
                         const isActive = Math.abs(detection.timestamp - currentTime) < 2;
-                        const hasLandmarks = detection.detection_data?.pose_landmarks;
+                        const detectionData = parseDetectionData(detection.detection_data);
+                        const hasLandmarks = detectionData?.pose_landmarks;
                         
                         return (
                           <div
@@ -979,7 +1065,7 @@ export default function SessionDetailPage() {
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                       <span className="ml-2 text-sm text-gray-600">Searching for detections...</span>
                     </div>
-                  ) : process.env.NODE_ENV === "development" && recordingDetections.length === 0 ? (
+                  ) : process.env.NODE_ENV === "development" && normalizedDetections.length === 0 ? (
                     // mock detections UI
                     <div className="space-y-3 max-h-[400px] overflow-y-auto">
                       <div className="text-sm text-gray-600 mb-2">
