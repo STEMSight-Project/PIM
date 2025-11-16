@@ -13,6 +13,9 @@ import os
 import sys
 import asyncio
 from pathlib import Path
+from services.streaming.pending_recording_service import (
+    pending_recording_uploader,
+)
 
 # ✅ FIX: Windows asyncio subprocess support
 # Windows ProactorEventLoop doesn't support subprocesses
@@ -35,10 +38,13 @@ async def lifespan(app: FastAPI):
     await room_manager.start_session_monitoring()
     logger.info("Room manager background tasks started")
 
+    await pending_recording_uploader.start()
+
     yield
 
     # Shutdown
     logger.info("Shutting down STEMSight backend...")
+    await pending_recording_uploader.stop()
 
 
 app = FastAPI(
