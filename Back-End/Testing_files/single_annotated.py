@@ -23,9 +23,24 @@ from typing import List, Optional
 
 # ---------- Model + processor imports ----------
 try:
-    from train_single_view import PoseTCNSingleView, NUM_POSE_LANDMARKS, normalize_single_view
+    import sys
+    import importlib.util
+    from pathlib import Path
+    
+    # Load pose-tcn_single_view.py (with hyphens)
+    parent_dir = Path(__file__).parent.parent
+    pose_tcn_path = parent_dir / "pose-tcn_single_view.py"
+    
+    spec = importlib.util.spec_from_file_location("pose_tcn_single_view", pose_tcn_path)
+    pose_tcn_module = importlib.util.module_from_spec(spec)
+    sys.modules["pose_tcn_single_view"] = pose_tcn_module
+    spec.loader.exec_module(pose_tcn_module)
+    
+    PoseTCNSingleView = pose_tcn_module.PoseTCNSingleView
+    NUM_POSE_LANDMARKS = pose_tcn_module.NUM_POSE_LANDMARKS
+    normalize_single_view = pose_tcn_module.normalize_single_view
     TRAIN_IMPORT_ERROR = None
-except ImportError as e:
+except Exception as e:
     PoseTCNSingleView = None
     NUM_POSE_LANDMARKS = 33
     normalize_single_view = None
