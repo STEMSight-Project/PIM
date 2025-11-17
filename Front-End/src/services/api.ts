@@ -1,6 +1,5 @@
+import { getApiBaseUrl } from "@/lib/apiBase";
 import type { ApiResponse, HttpMethod } from "@/types";
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 class ApiError extends Error {
   constructor(message: string, public status: number, public details?: any) {
@@ -28,9 +27,10 @@ async function request<T>(
       headers.set("Authorization", `Bearer ${accessToken}`);
     }
 
+    const baseUrl = getApiBaseUrl();
     const url = endpoint.startsWith("http")
       ? endpoint
-      : `${BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+      : `${baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
 
     const res = await fetch(url, {
       method,
@@ -121,7 +121,8 @@ async function refreshAccessToken(): Promise<boolean> {
     const refreshToken = localStorage.getItem("refresh_token");
     if (!refreshToken) return false;
 
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+    const baseUrl = getApiBaseUrl();
+    const res = await fetch(`${baseUrl}/auth/refresh`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -180,8 +181,9 @@ export const apiHelpers = {
   // Download file
   downloadFile: async (endpoint: string, filename?: string) => {
     try {
+      const baseUrl = getApiBaseUrl();
       const response = await fetch(
-        `${BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`,
+        `${baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("access_token")}`,
