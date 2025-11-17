@@ -77,7 +77,7 @@ export default function TimelineSyncedDetectionPanel({
   recordingId,
   currentTimestamp,
   timeWindow = 2,
-  maxDetections = 5,
+  maxDetections = 500,
   onLandmarksChange,
   onPredictionChange,
   onSeekToTime,
@@ -397,6 +397,20 @@ export default function TimelineSyncedDetectionPanel({
     return null;
   }
 
+  const activitySummary = (() => {
+    if (loading) {
+      return "Loading detections";
+    }
+    if (allDetections.length === 0) {
+      return "Awaiting AI detections";
+    }
+    if (windowDetections.length === 0) {
+      return "No detections near current time";
+    }
+    const label = windowDetections.length === 1 ? "detection" : "detections";
+    return `${windowDetections.length} ${label} near current time`;
+  })();
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-4">
       {/* Header */}
@@ -419,9 +433,12 @@ export default function TimelineSyncedDetectionPanel({
           </div>
           <div>
             <h3 className="text-sm font-bold text-gray-900">Timeline Detections</h3>
-            <p className="text-xs text-gray-500">At {currentTimestamp.toFixed(1)}s</p>
+            <p className="text-xs text-gray-500">{activitySummary}</p>
           </div>
         </div>
+        <span className="text-[10px] font-semibold text-gray-500">
+          {currentTimestamp.toFixed(1)}s
+        </span>
       </div>
 
       {/* Error State */}
@@ -436,15 +453,6 @@ export default function TimelineSyncedDetectionPanel({
         <div className="flex items-center justify-center py-6">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
           <p className="text-xs text-gray-500 ml-2">Loading detections...</p>
-        </div>
-      )}
-
-      {/* Stats */}
-      {!loading && allDetections.length > 0 && (
-        <div className="mb-3 p-2 bg-purple-50 border border-purple-200 rounded-lg">
-          <p className="text-xs text-purple-700">
-            📊 {allDetections.length} total detections • {windowDetections.length} near current time
-          </p>
         </div>
       )}
 

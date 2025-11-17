@@ -577,18 +577,26 @@ export default function SessionDetailPage() {
     }
     return timelineDetections.length;
   })();
-  const detectionCountLabel = (() => {
-    const suffix = displayedSessionDetections === 1 ? "detection" : "detections";
-    if (totalSessionDetections > 0) {
-      return `${suffix} in session`;
+  const detectionHeaderMessage = (() => {
+    if (!selectedRecording) {
+      return "Select a recording to review detections.";
+    }
+    if (detectionsLoading) {
+      return "Loading detections...";
+    }
+    if (showingTimelineFallback) {
+      return "Showing AI timeline detections while movement service catches up.";
     }
     if (normalizedDetections.length > 0) {
-      return `${suffix} for this recording`;
+      return "Showing detections stored with this recording.";
     }
     if (timelineDetections.length > 0) {
-      return `timeline ${suffix} available`;
+      return "Timeline detections ready for playback review.";
     }
-    return suffix;
+    if (isPollingDetections) {
+      return "Waiting for detections to sync from the ambulance.";
+    }
+    return "No detections captured yet for this recording.";
   })();
   return (
     <DashboardLayout>
@@ -898,15 +906,12 @@ export default function SessionDetailPage() {
                   <h2 className="text-xl font-semibold text-gray-900">
                     Movement Detections
                   </h2>
-                  <p className="text-sm text-gray-600">
-                    {displayedSessionDetections} {detectionCountLabel}
-                  </p>
+                  <p className="text-sm text-gray-600">{detectionHeaderMessage}</p>
                 </CardHeader>
                 <CardContent>
-                  {!detectionsLoading && detectionsToDisplay.length > 0 && (
-                    <div className="mb-3 p-2 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-700">
-                      📊 {detectionsToDisplay.length} detections loaded for this recording • {" "}
-                      {detectionsNearCurrent.length} near current time
+                  {!detectionsLoading && detectionsNearCurrent.length > 0 && (
+                    <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                      🎯 {detectionsNearCurrent.length === 1 ? "Detection" : "Detections"} near current playback position
                     </div>
                   )}
                   {detectionsLoading && normalizedDetections.length > 0 ? (
