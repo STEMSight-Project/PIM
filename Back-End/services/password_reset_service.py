@@ -61,7 +61,8 @@ async def send_password_reset_email(email: str, user_name: str = "User") -> bool
             return False
         
         # Create reset URL (frontend route lives at /password-reset)
-        reset_url = f"{ENV.FRONTEND_URL}/password-reset?token={reset_token}"
+        base_reset_url = (ENV.REDIRECT_PASSWORD_URL or ENV.FRONTEND_URL).rstrip("/")
+        reset_url = f"{base_reset_url}/password-reset?token={reset_token}"
         
         # HTML email template
         html_template = f"""
