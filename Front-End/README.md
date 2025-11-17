@@ -1,6 +1,6 @@
 # STEMSight PIM Frontend
 
- Overview
+ 
 
 The STEMSightPIM  is a **Next.js 15** application  for monitoring camera AI performance and analyzing movement detection data from Raspberry Pi 4 devices. It provides dashboards for viewing live camera feeds, reviewing AI-detected postures and movements, and managing camera device configurations.
 
