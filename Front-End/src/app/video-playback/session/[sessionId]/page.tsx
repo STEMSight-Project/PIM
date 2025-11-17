@@ -15,9 +15,10 @@ import {
 import type { RecordingResponse } from "@/services/videoService";
 import type { MovementDetection } from "@/types/movementDetection";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { movementDetectionService } from "@/services/movementDetectionService";
 import { cn } from "@/utils/cn";
+import type { TimelineDetection } from "@/components/TimelineSyncedDetectionPanel";
 
 interface PoseLandmark {
   x: number;
@@ -53,48 +54,33 @@ export default function SessionDetailPage() {
   const [totalSessionDetections, setTotalSessionDetections] = useState(0);
   // Polling state: when a recording has no detections we keep retrying for a while
   const [isPollingDetections, setIsPollingDetections] = useState(false);
-
-  // Development mock detections (
-  const devMockDetections: MovementDetection[] = [
-    {
-      id: 9001,
-      timestamp: 3.2,
-      name: "tremor",
-      confidence: 0.87,
-      validation_status: "pending",
-      room_id: "dev-room",
-      recording_id: "dev-rec",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      id: 9002,
-      timestamp: 12.5,
-      name: "myoclonus",
-      confidence: 0.78,
-      validation_status: "confirmed",
-      room_id: "dev-room",
-      recording_id: "dev-rec",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      id: 9003,
-      timestamp: 30.1,
-      name: "fencer_posture",
-      confidence: 0.65,
-      validation_status: "pending",
-      room_id: "dev-room",
-      recording_id: "dev-rec",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-  ];
+  const [timelineDetections, setTimelineDetections] = useState<MovementDetection[]>([]);
 
   // Playback state for skeleton overlay and predictions
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackLandmarks, setPlaybackLandmarks] = useState<PoseLandmark[] | null>(null);
   const [playbackPrediction, setPlaybackPrediction] = useState<PredictionSummary | null>(null);
+
+  const handleTimelineDetections = useCallback(
+    (detections: TimelineDetection[]) => {
+      const converted: MovementDetection[] = detections.map((detection) => ({
+        id: detection.id,
+        timestamp: detection.timestamp,
+        name: detection.name as MovementDetection["name"],
+        confidence: detection.confidence,
+        validation_status: detection.validation_status,
+        room_id: detection.room_id || "",
+        recording_id: detection.recording_id,
+        created_at: detection.created_at,
+        updated_at: detection.updated_at,
+        detection_data: detection.detection_data
+          ? (detection.detection_data as Record<string, unknown>)
+          : null,
+      }));
+      setTimelineDetections(converted);
+    },
+    []
+  );
 
   // Initialize movement detections hook BEFORE using recordingDetections
   const {
@@ -302,8 +288,15 @@ export default function SessionDetailPage() {
     if (selectedRecording) {
       console.log("🔍 Fetching detections for recording:", selectedRecording.id);
       fetchDetectionsByRecording(selectedRecording.id);
+      setTimelineDetections([]); // reset fallback when switching recordings
     }
   }, [selectedRecording, fetchDetectionsByRecording]);
+
+  useEffect(() => {
+    if (normalizedDetections.length > 0 && timelineDetections.length > 0) {
+      setTimelineDetections([]);
+    }
+  }, [normalizedDetections.length, timelineDetections.length]);
 
   // Debug log when recordingDetections changes
   useEffect(() => {
@@ -568,6 +561,35 @@ export default function SessionDetailPage() {
     0
   );
 
+  const detectionsToDisplay =
+    normalizedDetections.length > 0 ? normalizedDetections : timelineDetections;
+  const showingTimelineFallback =
+    normalizedDetections.length === 0 && timelineDetections.length > 0;
+  const detectionsNearCurrent = detectionsToDisplay.filter(
+    (detection) => Math.abs(detection.timestamp - currentTime) < 2
+  );
+  const displayedSessionDetections = (() => {
+    if (totalSessionDetections > 0) {
+      return totalSessionDetections;
+    }
+    if (normalizedDetections.length > 0) {
+      return normalizedDetections.length;
+    }
+    return timelineDetections.length;
+  })();
+  const detectionCountLabel = (() => {
+    const suffix = displayedSessionDetections === 1 ? "detection" : "detections";
+    if (totalSessionDetections > 0) {
+      return `${suffix} in session`;
+    }
+    if (normalizedDetections.length > 0) {
+      return `${suffix} for this recording`;
+    }
+    if (timelineDetections.length > 0) {
+      return `timeline ${suffix} available`;
+    }
+    return suffix;
+  })();
   return (
     <DashboardLayout>
       <div className="px-4 py-8">
@@ -713,8 +735,13 @@ export default function SessionDetailPage() {
                 <div>
                   <p className="text-sm text-gray-600">Total Detections</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {totalSessionDetections}
+                    {displayedSessionDetections}
                   </p>
+                  {totalSessionDetections === 0 && displayedSessionDetections > 0 && (
+                    <p className="text-xs text-purple-600 mt-1">
+                      Showing available timeline data
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -807,6 +834,8 @@ export default function SessionDetailPage() {
                           onLandmarksChange={setPlaybackLandmarks}
                           onPredictionChange={setPlaybackPrediction}
                           onSeekToTime={handleSeekToTime}
+                          onDetectionsReady={handleTimelineDetections}
+                          showPanel={false}
                         />
                       )}
 
@@ -863,6 +892,126 @@ export default function SessionDetailPage() {
 
             {/* Recording List and Detections - Takes 1/3 width on large screens */}
             <div className="lg:col-span-1 space-y-6">
+              {/* Detections Card */}
+              <Card>
+                <CardHeader>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Movement Detections
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    {displayedSessionDetections} {detectionCountLabel}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {!detectionsLoading && detectionsToDisplay.length > 0 && (
+                    <div className="mb-3 p-2 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-700">
+                      📊 {detectionsToDisplay.length} detections loaded for this recording • {" "}
+                      {detectionsNearCurrent.length} near current time
+                    </div>
+                  )}
+                  {detectionsLoading && normalizedDetections.length > 0 ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      <span className="ml-2 text-sm text-gray-600">Loading detections...</span>
+                    </div>
+                  ) : detectionsToDisplay.length > 0 ? (
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                      {showingTimelineFallback && (
+                        <div className="px-3 py-2 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"
+                            />
+                          </svg>
+                          Showing AI timeline detections while movement service catches up.
+                        </div>
+                      )}
+                      {detectionsToDisplay.map((detection) => {
+                        // Check if detection is near current playback time (within 2 seconds)
+                        const isActive = Math.abs(detection.timestamp - currentTime) < 2;
+                        const detectionData = parseDetectionData(detection.detection_data);
+                        const hasLandmarks = detectionData?.pose_landmarks;
+                        
+                        return (
+                          <div
+                            key={detection.id}
+                            onClick={() => handleSeekToTime(detection.timestamp)}
+                            className={`p-3 rounded-lg border-2 transition-all cursor-pointer hover:shadow-md hover:scale-[1.02] ${
+                              isActive ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200' : 'bg-gray-50 border-gray-200'
+                            }`}
+                            title="Click to jump to this detection"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {isActive && (
+                                  <span className="flex h-2 w-2">
+                                    <span className="animate-ping absolute h-2 w-2 rounded-full bg-blue-400 opacity-75"></span>
+                                    <span className="relative rounded-full h-2 w-2 bg-blue-500"></span>
+                                  </span>
+                                )}
+                                <span className="text-sm font-medium text-gray-900 capitalize">
+                                  {detection.name.replace("_", " ")}
+                                </span>
+                              </div>
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                detection.validation_status === "confirmed"
+                                  ? "bg-green-100 text-green-800"
+                                  : detection.validation_status === "rejected"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-yellow-100 text-yellow-800"
+                              }`}>
+                                {detection.validation_status}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-gray-600">
+                              <span>Confidence: {(detection.confidence * 100).toFixed(1)}%</span>
+                              <span className="font-mono">{detection.timestamp.toFixed(1)}s</span>
+                            </div>
+                            {hasLandmarks && (
+                              <div className="mt-2 text-xs text-blue-600 flex items-center gap-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                Skeleton data available
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : isPollingDetections ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      <span className="ml-2 text-sm text-gray-600">Searching for detections...</span>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <svg
+                        className="w-8 h-8 mx-auto mb-2 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                        />
+                      </svg>
+                      <p className="text-sm text-gray-500">
+                        {selectedRecording
+                          ? "No detections found for this recording"
+                          : "Select a recording to view detections"}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Recordings Card */}
               <Card>
                 <CardHeader>
@@ -985,159 +1134,6 @@ export default function SessionDetailPage() {
                       </>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Detections Card */}
-              <Card>
-                <CardHeader>
-                  <h2 className="text-xl font-semibold text-gray-900">
-                    Movement Detections
-                  </h2>
-                  <p className="text-sm text-gray-600">
-                    {totalSessionDetections}{" "}
-                    {totalSessionDetections === 1 ? "detection" : "detections"} in session
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {detectionsLoading && normalizedDetections.length > 0 ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                      <span className="ml-2 text-sm text-gray-600">Loading detections...</span>
-                    </div>
-                  ) : normalizedDetections.length > 0 ? (
-                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                      {normalizedDetections.map((detection) => {
-                        // Check if detection is near current playback time (within 2 seconds)
-                        const isActive = Math.abs(detection.timestamp - currentTime) < 2;
-                        const detectionData = parseDetectionData(detection.detection_data);
-                        const hasLandmarks = detectionData?.pose_landmarks;
-                        
-                        return (
-                          <div
-                            key={detection.id}
-                            onClick={() => handleSeekToTime(detection.timestamp)}
-                            className={`p-3 rounded-lg border-2 transition-all cursor-pointer hover:shadow-md hover:scale-[1.02] ${
-                              isActive ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200' : 'bg-gray-50 border-gray-200'
-                            }`}
-                            title="Click to jump to this detection"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                {isActive && (
-                                  <span className="flex h-2 w-2">
-                                    <span className="animate-ping absolute h-2 w-2 rounded-full bg-blue-400 opacity-75"></span>
-                                    <span className="relative rounded-full h-2 w-2 bg-blue-500"></span>
-                                  </span>
-                                )}
-                                <span className="text-sm font-medium text-gray-900 capitalize">
-                                  {detection.name.replace("_", " ")}
-                                </span>
-                              </div>
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                detection.validation_status === "confirmed"
-                                  ? "bg-green-100 text-green-800"
-                                  : detection.validation_status === "rejected"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                              }`}>
-                                {detection.validation_status}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs text-gray-600">
-                              <span>Confidence: {(detection.confidence * 100).toFixed(1)}%</span>
-                              <span className="font-mono">{detection.timestamp.toFixed(1)}s</span>
-                            </div>
-                            {hasLandmarks && (
-                              <div className="mt-2 text-xs text-blue-600 flex items-center gap-1">
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                                Skeleton data available
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : isPollingDetections ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                      <span className="ml-2 text-sm text-gray-600">Searching for detections...</span>
-                    </div>
-                  ) : process.env.NODE_ENV === "development" && normalizedDetections.length === 0 ? (
-                    // mock detections UI
-                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                      <div className="text-sm text-gray-600 mb-2">
-                        Showing mock AI detections {devMockDetections.length}
-                      </div>
-                      {devMockDetections.map((detection) => (
-                        <div
-                          key={detection.id}
-                          className="p-3 bg-gray-50 rounded-lg border border-gray-200"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-900 capitalize">
-                              {detection.name.replace("_", " ")}
-                            </span>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              detection.validation_status === "confirmed"
-                                ? "bg-green-100 text-green-800"
-                                : detection.validation_status === "rejected"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-yellow-100 text-yellow-800"
-                            }`}>
-                              {detection.validation_status}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-gray-600">
-                            <span>Confidence: {(detection.confidence * 100).toFixed(1)}%</span>
-                            <span>{detection.timestamp}s</span>
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Simple timeline - horizontal markers */}
-                      <div className="pt-4">
-                        <div className="text-xs text-gray-600 mb-2">Timeline (seconds)</div>
-                        <div className="w-full h-8 bg-gray-100 rounded-full relative">
-                          {devMockDetections.map((d) => {
-                            // For visualization only: map timestamp to a percent position (assume 60s window)
-                            const pos = Math.min(100, (d.timestamp / 60) * 100);
-                            return (
-                              <div
-                                key={`marker-${d.id}`}
-                                title={`${d.name} @ ${d.timestamp}s`}
-                                className="absolute top-1/2 transform -translate-y-1/2 w-1 h-4 bg-blue-600 rounded"
-                                style={{ left: `${pos}%` }}
-                              />
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <svg
-                        className="w-8 h-8 mx-auto mb-2 text-gray-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                        />
-                      </svg>
-                      <p className="text-sm text-gray-500">
-                        {selectedRecording
-                          ? "No detections found for this recording"
-                          : "Select a recording to view detections"}
-                      </p>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </div>
