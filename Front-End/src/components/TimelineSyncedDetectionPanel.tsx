@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "@/services/api";
 
 interface PoseLandmark {
@@ -21,7 +21,7 @@ interface DetectionProbabilities {
   all_probabilities?: Record<string, number>;
 }
 
-interface TimelineDetection {
+export interface TimelineDetection {
   id: number | string;
   timestamp: number;
   name: string;
@@ -69,6 +69,8 @@ interface TimelineSyncedDetectionPanelProps {
   onLandmarksChange?: (landmarks: PoseLandmark[] | null) => void; // Callback for current landmarks
   onPredictionChange?: (prediction: PredictionSummary | null) => void; // Callback for current prediction
   onSeekToTime?: (timestamp: number) => void; // Callback to seek video to specific time
+  onDetectionsReady?: (detections: TimelineDetection[]) => void; // Callback when detections load for sharing elsewhere
+  showPanel?: boolean; // Allows running logic without rendering UI
 }
 
 export default function TimelineSyncedDetectionPanel({
@@ -79,6 +81,8 @@ export default function TimelineSyncedDetectionPanel({
   onLandmarksChange,
   onPredictionChange,
   onSeekToTime,
+  onDetectionsReady,
+  showPanel = true,
 }: TimelineSyncedDetectionPanelProps) {
   const [allDetections, setAllDetections] = useState<TimelineDetection[]>([]);
   const [windowDetections, setWindowDetections] = useState<TimelineDetection[]>([]);
@@ -88,6 +92,12 @@ export default function TimelineSyncedDetectionPanel({
   // Fetch ALL detections for the recording (once)
   useEffect(() => {
     if (!recordingId) return;
+
+    // Reset state when recording changes to avoid stale UI
+    setAllDetections([]);
+    if (onDetectionsReady) {
+      onDetectionsReady([]);
+    }
 
     const fetchDetections = async () => {
       setLoading(true);
@@ -287,6 +297,9 @@ export default function TimelineSyncedDetectionPanel({
         }
         
         setAllDetections(boundedDetections);
+        if (onDetectionsReady) {
+          onDetectionsReady(boundedDetections);
+        }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Failed to fetch detections";
         console.error("❌ [Timeline] Error:", err);
@@ -297,7 +310,7 @@ export default function TimelineSyncedDetectionPanel({
     };
 
     fetchDetections();
-  }, [recordingId]);
+  }, [recordingId, onDetectionsReady]);
 
   // Filter detections based on current video timestamp
   useEffect(() => {
@@ -379,6 +392,10 @@ export default function TimelineSyncedDetectionPanel({
     if (confidence >= 0.6) return "bg-yellow-50 border-yellow-200";
     return "bg-red-50 border-red-200";
   };
+
+  if (!showPanel) {
+    return null;
+  }
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-4">
