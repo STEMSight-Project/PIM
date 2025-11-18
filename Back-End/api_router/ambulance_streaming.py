@@ -113,6 +113,37 @@ async def get_ambulance_session(session_id: str):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.get("/ambulance-sessions-paginated", dependencies=[Depends(current_user)])
+async def get_ambulance_sessions_paginated(
+    ambulance_id: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    limit: int = 20,
+    offset: int = 0,
+):
+    """Get ambulance streaming sessions with pagination for Recent Live Sessions page."""
+    try:
+        sessions = await StreamingDatabaseService.get_ambulance_sessions_paginated(
+            ambulance_id, is_active, limit, offset
+        )
+        
+        # Get total count for pagination
+        total = await StreamingDatabaseService.get_ambulance_sessions_count(
+            ambulance_id, is_active
+        )
+        
+        return {
+            "data": sessions,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": (offset + limit) < total
+        }
+
+    except Exception as e:
+        logger.error("Error fetching paginated ambulance sessions: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @router.put(
     "/ambulance-sessions/{session_id}/end", dependencies=[Depends(current_user)]
 )

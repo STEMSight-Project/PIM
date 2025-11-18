@@ -144,16 +144,7 @@ class VideoService:
         try:
             result = (
                 supabase.table("ambulance_session_recordings")
-                .select(
-                    """
-                    *,
-                    ambulance_streaming_sessions!inner(
-                        session_name,
-                        ambulance_id,
-                        ambulances(ambulance_number, license_plate)
-                    )
-                """
-                )
+                .select("*")
                 .eq("session_id", session_id)
                 .order("created_at", desc=True)
                 .execute()
@@ -161,36 +152,22 @@ class VideoService:
 
             recordings = []
             for record in result.data or []:
-                # Get public URL from Supabase Storage if available
-                public_url = None
-                if record.get("storage_url"):
-                    public_url = record["storage_url"]
-                elif record.get("hls_playlist_url"):
-                    # Fallback to HLS URL for live sessions
-                    public_url = record["hls_playlist_url"]
-
                 recordings.append(
                     {
                         "id": record["id"],
                         "session_id": record["session_id"],
-                        "session_name": record.get(
-                            "ambulance_streaming_sessions", {}
-                        ).get("session_name"),
-                        "ambulance_number": record.get(
-                            "ambulance_streaming_sessions", {}
-                        )
-                        .get("ambulances", {})
-                        .get("ambulance_number"),
-                        "file_path": record.get("storage_url")
-                        or record.get("hls_playlist_url"),
-                        "public_video_url": public_url,
+                        "session_name": None,
+                        "ambulance_number": None,
+                        "camera_id": record.get("camera_id"),
+                        "recording_path": record.get("recording_path"),
+                        "file_path": record.get("storage_url"),
+                        "public_video_url": record.get("storage_url"),
                         "duration": record.get("duration"),
                         "file_size": record.get("file_size"),
                         "session_start": record.get("session_start"),
                         "session_end": record.get("session_end"),
                         "created_at": record["created_at"],
-                        "is_archived": record.get("storage_url")
-                        is not None,  # True if uploaded to Supabase
+                        "is_archived": record.get("storage_url") is not None,
                     }
                 )
 

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   // Removed static export for dynamic patient routes
@@ -7,6 +8,8 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   serverExternalPackages: [],
+  // Fix workspace root detection warning
+  outputFileTracingRoot: path.join(__dirname),
   // Ensure consistent hydration
   reactStrictMode: true,
   // ESLint configuration
