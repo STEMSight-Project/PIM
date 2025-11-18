@@ -2,6 +2,7 @@
 import asyncio
 import inspect
 import logging
+import os
 import platform
 import subprocess
 import re
@@ -31,7 +32,6 @@ try:
         sys.path.insert(0, parent_dir_str)
     
     # Change working directory to Back-End so .env file is found
-    import os
     original_cwd = os.getcwd()
     backend_dir = Path(__file__).parent.parent
     os.chdir(backend_dir)
@@ -67,6 +67,12 @@ NUM_POSE_LANDMARKS = pose_tcn_module.NUM_POSE_LANDMARKS
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("publisher")
+
+# Hosted backend default (override via PIM_SIGNALING_URL env var or --signaling flag)
+DEFAULT_SIGNALING_URL = os.getenv(
+    "PIM_SIGNALING_URL",
+    "https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net",
+).rstrip("/")
 
 
 class DetectionStorage:
@@ -1412,8 +1418,8 @@ Examples:
     )
     parser.add_argument(
         "--signaling",
-        default="http://localhost:8000",
-        help="Base URL of signalling server (default: http://localhost:8000)",
+        default=DEFAULT_SIGNALING_URL,
+        help=f"Base URL of signalling server (default: {DEFAULT_SIGNALING_URL})",
     )
     parser.add_argument(
         "--video_device",
