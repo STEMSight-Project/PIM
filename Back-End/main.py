@@ -12,6 +12,7 @@ from core.common import logger, supabase
 import os
 import sys
 import asyncio
+import logging
 from pathlib import Path
 from services.streaming.pending_recording_service import (
     pending_recording_uploader,
