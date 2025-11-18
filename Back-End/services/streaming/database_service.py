@@ -502,6 +502,54 @@ class StreamingDatabaseService:
             raise
 
     @staticmethod
+    async def get_ambulance_sessions_paginated(
+        ambulance_id: Optional[str] = None,
+        is_active: Optional[bool] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Get ambulance streaming sessions with pagination."""
+        try:
+            query = supabase.table("ambulance_streaming_sessions").select(
+                "*, camera_streaming_rooms(*, cameras(*))"
+            )
+
+            if ambulance_id:
+                query = query.eq("ambulance_id", ambulance_id)
+            if is_active is not None:
+                query = query.eq("is_active", is_active)
+
+            result = query.order("started_at", desc=True).range(offset, offset + limit - 1).execute()
+            return result.data or []
+
+        except Exception as e:
+            logger.error("Error fetching paginated ambulance sessions: %s", e)
+            raise
+
+    @staticmethod
+    async def get_ambulance_sessions_count(
+        ambulance_id: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ) -> int:
+        """Get total count of ambulance sessions matching filters."""
+        try:
+            query = supabase.table("ambulance_streaming_sessions").select(
+                "id", count="exact"
+            )
+
+            if ambulance_id:
+                query = query.eq("ambulance_id", ambulance_id)
+            if is_active is not None:
+                query = query.eq("is_active", is_active)
+
+            result = query.execute()
+            return result.count or 0
+
+        except Exception as e:
+            logger.error("Error getting ambulance sessions count: %s", e)
+            raise
+
+    @staticmethod
     async def get_ambulances_streaming_status() -> List[Dict[str, Any]]:
         """Get streaming status for all ambulances (with or without active sessions)."""
         try:
