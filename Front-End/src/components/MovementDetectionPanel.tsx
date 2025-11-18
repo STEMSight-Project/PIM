@@ -69,11 +69,24 @@ export function MovementDetectionPanel({
     }
   }, [roomId, recordingId, fetchStatistics]);
 
+  const normalizeDetectionId = (id: string | number): number | null => {
+    if (typeof id === "number") {
+      return id;
+    }
+    const parsed = Number(id);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
   const handleValidate = async (
-    detectionId: number,
+    detectionId: string | number,
     status: ValidationStatus
   ) => {
-    await updateValidationStatus(detectionId, status);
+    const normalizedId = normalizeDetectionId(detectionId);
+    if (normalizedId === null) {
+      console.warn("Skipping validation update for non-numeric id", detectionId);
+      return;
+    }
+    await updateValidationStatus(normalizedId, status);
   };
 
   const getMovementColor = (name: string) => {

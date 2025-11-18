@@ -105,8 +105,9 @@ class DetectionStorage:
     
     def store_detection(self, predicted_class: str, confidence: float,
                        all_probs: dict, temperature: float = 1.0,
-                       frame_count: int = 120, processing_time_ms: int = 0):
-        """Store a single detection to the database."""
+                       frame_count: int = 120, processing_time_ms: int = 0,
+                       pose_landmarks: list = None):
+        """Store a single detection to the database with optional pose landmarks."""
         if not self.enabled:
             return
         
@@ -119,6 +120,10 @@ class DetectionStorage:
                 'frame_count': frame_count,
                 'model_architecture': 'PoseTCN-SingleView'
             }
+            
+            # Add pose landmarks if provided (for skeleton replay during playback)
+            if pose_landmarks:
+                detection_data['pose_landmarks'] = pose_landmarks
             
             supabase.table('ai_detections').insert({
                 'session_id': self.session_id,
@@ -682,7 +687,8 @@ class MediaPipePoseProcessor:
                                     all_probs=all_probs,
                                     temperature=self.temperature,
                                     frame_count=self.window_size,
-                                    processing_time_ms=infer_time_ms
+                                    processing_time_ms=infer_time_ms,
+                                    pose_landmarks=landmarks  # Include landmarks for playback skeleton overlay
                                 )
                                 LOGGER.info(f"💾 Stored detection #{self.storage.sequence_number} to database")
                 
@@ -847,7 +853,20 @@ async def publish(
     
     @data_channel.on("close")
     def on_datachannel_close():
-        LOGGER.info("📡 Data channel closed")
+        # Log data channel closure with session statistics
+        if pose_processor and pose_processor.storage:
+            total_detections = sum(pose_processor.detection_counts.values()) if pose_processor.detection_counts else 0
+            duration = time.time() - pose_processor.stream_start_time
+            LOGGER.info(
+                "📡 Data channel closed - ✅ Recording complete: %d detections saved to database "
+                "(session_id: %s, camera_id: %s, duration: %.1fs)",
+                total_detections,
+                pose_processor.storage.session_id,
+                pose_processor.storage.camera_id,
+                duration
+            )
+        else:
+            LOGGER.info("📡 Data channel closed")
     
     @data_channel.on("error")
     def on_datachannel_error(error):

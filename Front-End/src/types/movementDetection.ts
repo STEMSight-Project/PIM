@@ -28,7 +28,7 @@ export type MovementType =
  * Movement detection record from database
  */
 export interface MovementDetection {
-  id: number;
+  id: number | string;
   timestamp: number;
   name: MovementType;
   confidence: number;
@@ -37,6 +37,10 @@ export interface MovementDetection {
   recording_id: string;
   created_at: string;
   updated_at: string;
+  session_id?: string;
+  camera_id?: string;
+  detection_data?: Record<string, unknown> | null;
+  frame_timestamp?: string;
 }
 
 /**
