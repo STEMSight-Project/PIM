@@ -24,7 +24,9 @@ import { useEffect, useMemo, useState } from "react";
 export default function DashboardPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
-  const [selectedFilter, setSelectedFilter] = useState<"all" | "active" | "inactive">("active");
+  const [selectedFilter, setSelectedFilter] = useState<
+    "all" | "active" | "inactive"
+  >("active");
 
   // Fetch real-time ambulance sessions and camera data
   const {
@@ -34,7 +36,12 @@ export default function DashboardPage() {
     error: sessionsError,
   } = useRealtimeAmbulanceSessions({
     enabled: true,
-    isActive: selectedFilter === "active" ? true : selectedFilter === "inactive" ? false : undefined,
+    isActive:
+      selectedFilter === "active"
+        ? true
+        : selectedFilter === "inactive"
+        ? false
+        : undefined,
   });
 
   useEffect(() => {
@@ -48,17 +55,28 @@ export default function DashboardPage() {
     const activeSessions = sessions.filter((s) => s.is_active);
     const allRooms = sessions.flatMap((s) => s.camera_rooms || []);
     const connectedRooms = allRooms.filter((r) => r.connected);
-    const totalDetections = allRooms.reduce((sum, r) => sum + (r.detections_count || 0), 0);
+    const totalDetections = allRooms.reduce(
+      (sum, r) => sum + (r.detections_count || 0),
+      0
+    );
     const roomsWithAI = allRooms.filter((r) => r.ai_processing_active);
 
     // Movement types detected (from AI model classes)
     const movementTypes = [
-      "ballistic", "chorea", "decerebrate", "decorticate", 
-      "dystonia", "fencer_posture", "myoclonus", "tremor", "versive_head"
+      "ballistic",
+      "chorea",
+      "decerebrate",
+      "decorticate",
+      "dystonia",
+      "fencer_posture",
+      "myoclonus",
+      "tremor",
+      "versive_head",
     ];
-    const detectionRate = connectedRooms.length > 0 
-      ? (totalDetections / connectedRooms.length).toFixed(1) 
-      : "0";
+    const detectionRate =
+      connectedRooms.length > 0
+        ? (totalDetections / connectedRooms.length).toFixed(1)
+        : "0";
 
     return [
       {
@@ -74,7 +92,10 @@ export default function DashboardPage() {
         value: `${connectedRooms.length}/${allRooms.length}`,
         color: "bg-green-500",
         icon: VideoCameraIcon,
-        trend: connectedRooms.length > 0 ? "Currently streaming" : "No active streams",
+        trend:
+          connectedRooms.length > 0
+            ? "Currently streaming"
+            : "No active streams",
         status: connectedRooms.length > 0 ? "active" : "inactive",
       },
       {
@@ -90,7 +111,8 @@ export default function DashboardPage() {
         value: `${roomsWithAI.length}/${allRooms.length}`,
         color: "bg-orange-500",
         icon: SignalIcon,
-        trend: roomsWithAI.length > 0 ? "UNIK Model Active" : "No AI processing",
+        trend:
+          roomsWithAI.length > 0 ? "UNIK Model Active" : "No AI processing",
         status: roomsWithAI.length > 0 ? "excellent" : "inactive",
       },
     ];
@@ -109,8 +131,12 @@ export default function DashboardPage() {
     const sorted = allRooms
       .filter((r) => r.last_detection_at || r.last_seen)
       .sort((a, b) => {
-        const aTime = new Date(a.last_detection_at || a.last_seen || 0).getTime();
-        const bTime = new Date(b.last_detection_at || b.last_seen || 0).getTime();
+        const aTime = new Date(
+          a.last_detection_at || a.last_seen || 0
+        ).getTime();
+        const bTime = new Date(
+          b.last_detection_at || b.last_seen || 0
+        ).getTime();
         return bTime - aTime;
       })
       .slice(0, 5);
@@ -126,7 +152,11 @@ export default function DashboardPage() {
         : "Camera Offline",
       confidence: room.detections_count || 0,
       time: new Date(room.last_detection_at || room.last_seen || Date.now()),
-      status: room.connected ? (room.ai_processing_active ? "alert" : "normal") : "offline",
+      status: room.connected
+        ? room.ai_processing_active
+          ? "alert"
+          : "normal"
+        : "offline",
       fps: room.current_fps,
       latency: room.latency_ms,
     }));
@@ -307,7 +337,11 @@ export default function DashboardPage() {
                     <div
                       key={activity.id}
                       className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/streamingDash?ambulance=${activity.ambulanceId}`)}
+                      onClick={() =>
+                        router.push(
+                          `/streamingDash?ambulance=${activity.ambulanceId}`
+                        )
+                      }
                     >
                       <div className="flex items-center space-x-4">
                         <div
@@ -471,7 +505,9 @@ export default function DashboardPage() {
                     className="flex items-center justify-between"
                   >
                     <div className="flex items-center space-x-2">
-                      <div className={`w-3 h-3 rounded-full ${movement.color}`}></div>
+                      <div
+                        className={`w-3 h-3 rounded-full ${movement.color}`}
+                      ></div>
                       <span className="text-gray-700">{movement.name}</span>
                     </div>
                   </div>
@@ -530,7 +566,8 @@ export default function DashboardPage() {
                       System Status: Waiting for Camera Devices
                     </p>
                     <p className="text-sm text-yellow-700">
-                      No active camera sessions • Waiting for devices to connect and start streaming
+                      No active camera sessions • Waiting for devices to connect
+                      and start streaming
                     </p>
                   </div>
                 </>

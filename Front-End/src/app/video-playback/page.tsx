@@ -29,18 +29,20 @@ const formatSessionName = (session: any): string => {
   }
 
   const firstRecording = session.recordings[0];
-  const date = new Date(firstRecording.session_start || firstRecording.created_at);
-  
+  const date = new Date(
+    firstRecording.session_start || firstRecording.created_at
+  );
+
   // Format: "Nov 17, 2025 • 2:30 PM"
-  const formattedDate = date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric', 
-    year: 'numeric' 
+  const formattedDate = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
-  const formattedTime = date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
+  const formattedTime = date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
 
   return `${formattedDate} • ${formattedTime}`;
@@ -189,8 +191,9 @@ export default function VideoPlaybackPage() {
                   No Archived Recordings
                 </h3>
                 <p className="text-gray-600 mb-6">
-                  No archived recordings available yet. Recordings will appear here
-                  after ambulance sessions are completed and uploaded to storage.
+                  No archived recordings available yet. Recordings will appear
+                  here after ambulance sessions are completed and uploaded to
+                  storage.
                 </p>
               </div>
             </CardContent>
