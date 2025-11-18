@@ -6,6 +6,7 @@
  */
 
 import { api } from "./api";
+import getApiBaseUrl from "@/lib/apiBase";
 
 export interface HLSRecordingStatus {
   room_id: string;
@@ -36,8 +37,8 @@ class HLSService {
   private baseUrl: string;
 
   constructor() {
-    // Get base URL from environment or default to localhost
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    // Use runtime-normalized API base URL (ensures HTTPS in production)
+    this.baseUrl = getApiBaseUrl();
   }
 
   /**

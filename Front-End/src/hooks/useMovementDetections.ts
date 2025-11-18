@@ -10,6 +10,7 @@ import type {
   ValidationStatus,
 } from "@/types/movementDetection";
 import { useCallback, useEffect, useRef, useState } from "react";
+import getApiBaseUrl from "@/lib/apiBase";
 
 export interface UseMovementDetectionsOptions {
   /**
@@ -525,7 +526,7 @@ export function useMovementDetections(
       return;
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const baseUrl = getApiBaseUrl();
     const realtimeUrl = movementDetectionService.getRealtimeUrl(
       roomId,
       recordingId,

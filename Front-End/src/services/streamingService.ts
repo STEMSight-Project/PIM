@@ -11,6 +11,7 @@ import type {
   StreamResponse,
 } from "@/types";
 import { api } from "./api";
+import getApiBaseUrl from "@/lib/apiBase";
 
 /**
  * AMBULANCE STREAMING SERVICE
@@ -233,7 +234,7 @@ export const ambulanceStreamingService = {
    * Get real-time ambulance sessions stream (Server-Sent Events)
    */
   getRealtimeAmbulanceSessions(): EventSource {
-    const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+    const baseURL = getApiBaseUrl();
     return new EventSource(`${baseURL}/realtime/ambulance-sessions`);
   },
 
@@ -241,7 +242,7 @@ export const ambulanceStreamingService = {
    * Get real-time camera rooms stream (Server-Sent Events)
    */
   getRealtimeCameraRooms(): EventSource {
-    const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+    const baseURL = getApiBaseUrl();
     return new EventSource(`${baseURL}/realtime/camera-rooms`);
   },
 
