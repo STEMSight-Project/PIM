@@ -162,8 +162,7 @@ export default function VideoPlaybackPage() {
                 <p className="text-gray-600 mb-4">{error}</p>
                 <button
                   onClick={() => {
-                    clearError();
-                    fetchSessionsWithRecordings();
+                    window.location.reload();
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >

@@ -24,9 +24,9 @@ import { useEffect, useMemo, useState } from "react";
 export default function DashboardPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
-  const [selectedFilter, setSelectedFilter] = useState<
-    "all" | "active" | "inactive"
-  >("active");
+  const [selectedFilter, setSelectedFilter] = useState<"active" | "inactive">(
+    "active"
+  );
 
   // Fetch real-time ambulance sessions and camera data
   const {
@@ -34,14 +34,11 @@ export default function DashboardPage() {
     isLoading: sessionsLoading,
     isConnected,
     error: sessionsError,
+    refetchInitialData,
   } = useRealtimeAmbulanceSessions({
     enabled: true,
-    isActive:
-      selectedFilter === "active"
-        ? true
-        : selectedFilter === "inactive"
-        ? false
-        : undefined,
+    isActive: selectedFilter === "active" ? true : false,
+    limit: 10, // Limit to 10 most recent sessions for dashboard
   });
 
   useEffect(() => {
@@ -49,6 +46,21 @@ export default function DashboardPage() {
       router.push("/");
     }
   }, [isAuthenticated, isLoading, router]);
+
+  // Refetch data when filter changes
+  useEffect(() => {
+    if (refetchInitialData) {
+      refetchInitialData();
+    }
+  }, [selectedFilter, refetchInitialData]);
+
+  // Debug: Log filter changes and session data
+  useEffect(() => {
+    console.log("🔍 Dashboard Filter:", selectedFilter);
+    console.log("🔍 Sessions Data:", sessions);
+    console.log("🔍 Sessions Count:", sessions.length);
+    console.log("🔍 Sessions Loading:", sessionsLoading);
+  }, [selectedFilter, sessions, sessionsLoading]);
 
   // Calculate real-time statistics
   const stats = useMemo(() => {
@@ -138,10 +150,21 @@ export default function DashboardPage() {
           b.last_detection_at || b.last_seen || 0
         ).getTime();
         return bTime - aTime;
-      })
-      .slice(0, 5);
+      });
 
-    return sorted.map((room, idx) => ({
+    // Filter unique cameras by name (keep most recent for each camera)
+    const uniqueCameras = new Map<string, (typeof sorted)[0]>();
+    sorted.forEach((room) => {
+      const cameraKey = room.camera_name || room.room_name;
+      if (!uniqueCameras.has(cameraKey)) {
+        uniqueCameras.set(cameraKey, room);
+      }
+    });
+
+    // Convert to array and take top 5
+    const uniqueArray = Array.from(uniqueCameras.values()).slice(0, 5);
+
+    return uniqueArray.map((room, idx) => ({
       id: idx + 1,
       camera: room.camera_name || room.room_name,
       ambulanceId: room.ambulance_id,
@@ -213,36 +236,32 @@ export default function DashboardPage() {
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex items-center space-x-2 border-b border-gray-200">
+        <div className="flex items-center space-x-1 border-b-2 border-gray-200 bg-white rounded-t-lg overflow-hidden">
           <button
             onClick={() => setSelectedFilter("active")}
-            className={`px-4 py-2 font-medium transition-colors ${
+            className={`relative px-6 py-3 font-semibold transition-all duration-300 ${
               selectedFilter === "active"
-                ? "text-blue-600 border-b-2 border-blue-600"
-                : "text-gray-600 hover:text-gray-900"
+                ? "text-blue-600 bg-blue-50"
+                : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
             }`}
           >
             Active Sessions
-          </button>
-          <button
-            onClick={() => setSelectedFilter("all")}
-            className={`px-4 py-2 font-medium transition-colors ${
-              selectedFilter === "all"
-                ? "text-blue-600 border-b-2 border-blue-600"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            All Sessions
+            {selectedFilter === "active" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+            )}
           </button>
           <button
             onClick={() => setSelectedFilter("inactive")}
-            className={`px-4 py-2 font-medium transition-colors ${
+            className={`relative px-6 py-3 font-semibold transition-all duration-300 ${
               selectedFilter === "inactive"
-                ? "text-blue-600 border-b-2 border-blue-600"
-                : "text-gray-600 hover:text-gray-900"
+                ? "text-blue-600 bg-blue-50"
+                : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
             }`}
           >
             Completed Sessions
+            {selectedFilter === "inactive" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+            )}
           </button>
         </div>
 
@@ -253,45 +272,58 @@ export default function DashboardPage() {
             return (
               <Card
                 key={index}
-                className="p-6 hover:shadow-lg transition-shadow cursor-pointer"
+                className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:-translate-y-1"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <div className={`p-3 rounded-lg ${stat.color}`}>
+                {/* Background gradient effect */}
+                <div
+                  className={`absolute inset-0 ${stat.color} opacity-5 group-hover:opacity-10 transition-opacity`}
+                ></div>
+
+                <div className="relative p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div
+                      className={`p-3 rounded-xl ${stat.color} shadow-lg group-hover:scale-110 transition-transform duration-300`}
+                    >
                       <IconComponent className="w-6 h-6 text-white" />
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">
-                        {stat.label}
-                      </p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {stat.value}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">{stat.trend}</p>
+                    <div className="flex flex-col items-end">
+                      {stat.status === "online" && (
+                        <div className="flex items-center text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                          <div className="w-2 h-2 bg-green-600 rounded-full mr-1 animate-pulse"></div>
+                          <span className="text-xs font-semibold">Online</span>
+                        </div>
+                      )}
+                      {stat.status === "active" && (
+                        <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                          <SignalIcon className="w-3 h-3 mr-1" />
+                          <span className="text-xs font-semibold">Active</span>
+                        </div>
+                      )}
+                      {stat.status === "normal" && (
+                        <CheckCircleIcon className="w-5 h-5 text-green-600" />
+                      )}
+                      {stat.status === "excellent" && (
+                        <div className="flex items-center text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                          <CheckCircleIcon className="w-3 h-3 mr-1" />
+                          <span className="text-xs font-semibold">
+                            Excellent
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center">
-                    {stat.status === "online" && (
-                      <div className="flex items-center text-green-600">
-                        <div className="w-2 h-2 bg-green-600 rounded-full mr-1 animate-pulse"></div>
-                        <span className="text-xs font-medium">Online</span>
-                      </div>
-                    )}
-                    {stat.status === "active" && (
-                      <div className="flex items-center text-blue-600">
-                        <SignalIcon className="w-4 h-4 mr-1" />
-                        <span className="text-xs font-medium">Active</span>
-                      </div>
-                    )}
-                    {stat.status === "normal" && (
-                      <CheckCircleIcon className="w-5 h-5 text-green-600" />
-                    )}
-                    {stat.status === "excellent" && (
-                      <div className="flex items-center text-green-600">
-                        <CheckCircleIcon className="w-4 h-4 mr-1" />
-                        <span className="text-xs font-medium">Excellent</span>
-                      </div>
-                    )}
+
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 uppercase tracking-wide mb-1">
+                      {stat.label}
+                    </p>
+                    <p className="text-3xl font-bold text-gray-900 mb-2">
+                      {stat.value}
+                    </p>
+                    <p className="text-xs text-gray-500 flex items-center">
+                      <span className="inline-block w-1 h-1 bg-gray-400 rounded-full mr-1.5"></span>
+                      {stat.trend}
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -324,33 +356,59 @@ export default function DashboardPage() {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 </div>
               ) : recentActivity.length === 0 ? (
-                <div className="text-center py-12">
-                  <VideoCameraIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-gray-600">No recent camera activity</p>
-                  <p className="text-sm text-gray-500 mt-1">
+                <div className="text-center py-16">
+                  <div className="relative mx-auto w-20 h-20 mb-6">
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full opacity-20 animate-pulse"></div>
+                    <div className="relative flex items-center justify-center w-full h-full">
+                      <VideoCameraIcon className="w-12 h-12 text-blue-600" />
+                    </div>
+                  </div>
+                  <p className="text-lg font-semibold text-gray-700 mb-2">
+                    No recent camera activity
+                  </p>
+                  <p className="text-sm text-gray-500 mb-6">
                     Waiting for camera devices to connect and stream
                   </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push("/streamingDash")}
+                    className="mx-auto"
+                  >
+                    <EyeIcon className="w-4 h-4 mr-2" />
+                    Go to Live Cameras
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {recentActivity.map((activity) => (
                     <div
                       key={activity.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                      className="group relative flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-300 cursor-pointer"
                       onClick={() =>
                         router.push(
                           `/streamingDash?ambulance=${activity.ambulanceId}`
                         )
                       }
                     >
-                      <div className="flex items-center space-x-4">
+                      {/* Status indicator bar */}
+                      <div
+                        className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${
+                          activity.status === "alert"
+                            ? "bg-orange-500"
+                            : activity.status === "normal"
+                            ? "bg-green-500"
+                            : "bg-gray-400"
+                        }`}
+                      ></div>
+
+                      <div className="flex items-center space-x-4 ml-2">
                         <div
-                          className={`p-2 rounded-lg ${
+                          className={`p-2.5 rounded-xl shadow-sm group-hover:scale-110 transition-transform duration-300 ${
                             activity.status === "alert"
-                              ? "bg-orange-500"
+                              ? "bg-gradient-to-br from-orange-400 to-orange-600"
                               : activity.status === "normal"
-                              ? "bg-green-500"
-                              : "bg-gray-400"
+                              ? "bg-gradient-to-br from-green-400 to-green-600"
+                              : "bg-gradient-to-br from-gray-400 to-gray-600"
                           }`}
                         >
                           {activity.status === "alert" ? (
@@ -362,7 +420,7 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">
+                          <p className="font-semibold text-gray-900 mb-0.5">
                             {activity.camera}
                           </p>
                           <p className="text-sm text-gray-600">
@@ -371,20 +429,20 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2 mb-1">
                           {activity.fps && (
-                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 border border-blue-200">
                               {activity.fps} FPS
                             </span>
                           )}
                           {activity.latency && (
-                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700 border border-purple-200">
                               {activity.latency}ms
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 mt-1 flex items-center justify-end">
-                          <ClockIcon className="w-3 h-3 mr-1" />
+                        <p className="text-sm text-gray-500 flex items-center justify-end">
+                          <ClockIcon className="w-3.5 h-3.5 mr-1" />
                           {activity.time.toLocaleTimeString()}
                         </p>
                       </div>
@@ -399,80 +457,121 @@ export default function DashboardPage() {
           <div>
             <Card className="p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-6">
-                Active Sessions
+                {selectedFilter === "active"
+                  ? "Active Sessions"
+                  : "Recent Completed Sessions"}
               </h3>
 
               {sessionsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                 </div>
-              ) : sessions.filter((s) => s.is_active).length === 0 ? (
-                <div className="text-center py-8">
-                  <TruckIcon className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-600">No active sessions</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Waiting for camera devices to connect
+              ) : sessions.length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="relative mx-auto w-16 h-16 mb-4">
+                    <div className="absolute inset-0 bg-gradient-to-r from-gray-300 to-gray-400 rounded-full opacity-20 animate-pulse"></div>
+                    <div className="relative flex items-center justify-center w-full h-full">
+                      <TruckIcon className="w-10 h-10 text-gray-500" />
+                    </div>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-700 mb-1">
+                    {selectedFilter === "active"
+                      ? "No active sessions"
+                      : "No completed sessions"}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {selectedFilter === "active"
+                      ? "Waiting for devices to connect"
+                      : "No session data available"}
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {sessions
-                    .filter((s) => s.is_active)
-                    .slice(0, 4)
-                    .map((session) => {
-                      const liveRooms = (session.camera_rooms || []).filter(
-                        (r) => r.connected
-                      ).length;
-                      const totalRooms = session.camera_rooms?.length || 0;
-                      const detections = (session.camera_rooms || []).reduce(
-                        (sum, r) => sum + (r.detections_count || 0),
-                        0
-                      );
+                <div className="space-y-3">
+                  {sessions.slice(0, 4).map((session) => {
+                    const liveRooms = (session.camera_rooms || []).filter(
+                      (r) => r.connected
+                    ).length;
+                    const totalRooms = session.camera_rooms?.length || 0;
+                    const detections = (session.camera_rooms || []).reduce(
+                      (sum, r) => sum + (r.detections_count || 0),
+                      0
+                    );
+                    const connectionPercentage =
+                      totalRooms > 0 ? (liveRooms / totalRooms) * 100 : 0;
 
-                      return (
-                        <div
-                          key={session.id}
-                          className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
-                          onClick={() =>
-                            router.push(
-                              `/streamingDash?ambulance=${session.ambulance_id}`
-                            )
-                          }
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center space-x-2">
+                    return (
+                      <div
+                        key={session.id}
+                        className="group p-4 border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-lg transition-all duration-300 cursor-pointer bg-gradient-to-br from-white to-gray-50"
+                        onClick={() =>
+                          router.push(
+                            `/streamingDash?ambulance=${session.ambulance_id}`
+                          )
+                        }
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center space-x-2">
+                            <div className="p-1.5 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
                               <TruckIcon className="w-4 h-4 text-blue-600" />
-                              <span className="font-medium text-gray-900">
-                                {session.ambulance_id}
-                              </span>
                             </div>
-                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                              Active
+                            <span className="font-semibold text-gray-900">
+                              {session.ambulance_id}
                             </span>
                           </div>
-                          <div className="space-y-1 text-sm text-gray-600">
-                            <div className="flex items-center justify-between">
-                              <span>Cameras:</span>
-                              <span className="font-medium">
-                                {liveRooms}/{totalRooms} Live
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span>Detections:</span>
-                              <span className="font-medium">{detections}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span>Started:</span>
-                              <span className="font-medium">
-                                {new Date(
-                                  session.started_at
-                                ).toLocaleTimeString()}
-                              </span>
-                            </div>
+                          <span
+                            className={`px-2.5 py-1 text-xs font-bold rounded-full border shadow-sm ${
+                              session.is_active
+                                ? "bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-green-300"
+                                : "bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 border-gray-300"
+                            }`}
+                          >
+                            {session.is_active ? "Active" : "Completed"}
+                          </span>
+                        </div>
+
+                        {/* Connection Progress Bar */}
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                            <span>Camera Connection</span>
+                            <span className="font-semibold">
+                              {liveRooms}/{totalRooms}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-500"
+                              style={{ width: `${connectionPercentage}%` }}
+                            ></div>
                           </div>
                         </div>
-                      );
-                    })}
+
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="bg-white p-2 rounded-lg border border-gray-100">
+                            <p className="text-xs text-gray-500 mb-0.5">
+                              Detections
+                            </p>
+                            <p className="font-bold text-gray-900">
+                              {detections}
+                            </p>
+                          </div>
+                          <div className="bg-white p-2 rounded-lg border border-gray-100">
+                            <p className="text-xs text-gray-500 mb-0.5">
+                              Started
+                            </p>
+                            <p className="font-bold text-gray-900 text-xs">
+                              {new Date(session.started_at).toLocaleTimeString(
+                                [],
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -486,11 +585,16 @@ export default function DashboardPage() {
             </Card>
 
             {/* Movement Classifications */}
-            <Card className="p-6 mt-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Movement Classifications
-              </h3>
-              <div className="space-y-2 text-sm">
+            <Card className="p-6 mt-6 bg-gradient-to-br from-white to-gray-50">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Movement Classifications
+                </h3>
+                <div className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
+                  AI Model
+                </div>
+              </div>
+              <div className="space-y-2.5 text-sm mb-4">
                 {[
                   { name: "Tremor", color: "bg-red-500" },
                   { name: "Decorticate", color: "bg-orange-500" },
@@ -502,56 +606,86 @@ export default function DashboardPage() {
                 ].map((movement) => (
                   <div
                     key={movement.name}
-                    className="flex items-center justify-between"
+                    className="flex items-center justify-between p-2 rounded-lg hover:bg-white transition-colors group"
                   >
-                    <div className="flex items-center space-x-2">
-                      <div
-                        className={`w-3 h-3 rounded-full ${movement.color}`}
-                      ></div>
-                      <span className="text-gray-700">{movement.name}</span>
+                    <div className="flex items-center space-x-3">
+                      <div className="relative">
+                        <div
+                          className={`w-3 h-3 rounded-full ${movement.color} shadow-sm group-hover:scale-125 transition-transform`}
+                        ></div>
+                      </div>
+                      <span className="text-gray-700 font-medium">
+                        {movement.name}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-gray-500 mt-4">
-                UNIK Model - 82.88% Accuracy
-              </p>
+              <div className="pt-3 border-t border-gray-200">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600 font-medium">UNIK Model</span>
+                  <span className="px-2 py-1 bg-green-100 text-green-700 font-bold rounded-full">
+                    82.88% Accuracy
+                  </span>
+                </div>
+              </div>
             </Card>
           </div>
         </div>
 
         {/* System Status Banner */}
         <Card
-          className={`p-4 ${
+          className={`relative overflow-hidden p-6 border-2 ${
             isConnected && sessions.filter((s) => s.is_active).length > 0
-              ? "bg-green-50 border-green-200"
+              ? "bg-gradient-to-r from-green-50 via-green-50 to-emerald-50 border-green-300 shadow-lg"
               : sessionsError
-              ? "bg-red-50 border-red-200"
-              : "bg-yellow-50 border-yellow-200"
+              ? "bg-gradient-to-r from-red-50 via-red-50 to-pink-50 border-red-300 shadow-lg"
+              : "bg-gradient-to-r from-yellow-50 via-yellow-50 to-amber-50 border-yellow-300 shadow-lg"
           }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
+          {/* Animated background effect */}
+          <div
+            className={`absolute inset-0 opacity-10 ${
+              isConnected && sessions.filter((s) => s.is_active).length > 0
+                ? "bg-gradient-to-r from-green-400 to-emerald-400"
+                : sessionsError
+                ? "bg-gradient-to-r from-red-400 to-pink-400"
+                : "bg-gradient-to-r from-yellow-400 to-amber-400"
+            } animate-pulse`}
+          ></div>
+
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center space-x-4">
               {isConnected && sessions.filter((s) => s.is_active).length > 0 ? (
                 <>
-                  <CheckCircleIcon className="w-6 h-6 text-green-600" />
+                  <div className="p-3 bg-white rounded-xl shadow-md">
+                    <CheckCircleIcon className="w-7 h-7 text-green-600" />
+                  </div>
                   <div>
-                    <p className="font-medium text-green-900">
-                      System Status: All Systems Operational
+                    <p className="text-lg font-bold text-green-900 mb-1">
+                      All Systems Operational
                     </p>
-                    <p className="text-sm text-green-700">
-                      {sessions.filter((s) => s.is_active).length} active
-                      session(s) • Real-time monitoring active • UNIK AI model
-                      ready
-                    </p>
+                    <div className="flex items-center space-x-3 text-sm text-green-700">
+                      <span className="flex items-center">
+                        <div className="w-2 h-2 bg-green-600 rounded-full mr-1.5 animate-pulse"></div>
+                        {sessions.filter((s) => s.is_active).length} active
+                        session(s)
+                      </span>
+                      <span>•</span>
+                      <span>Real-time monitoring active</span>
+                      <span>•</span>
+                      <span className="font-semibold">UNIK AI model ready</span>
+                    </div>
                   </div>
                 </>
               ) : sessionsError ? (
                 <>
-                  <ExclamationCircleIcon className="w-6 h-6 text-red-600" />
+                  <div className="p-3 bg-white rounded-xl shadow-md">
+                    <ExclamationCircleIcon className="w-7 h-7 text-red-600" />
+                  </div>
                   <div>
-                    <p className="font-medium text-red-900">
-                      System Status: Connection Error
+                    <p className="text-lg font-bold text-red-900 mb-1">
+                      Connection Error
                     </p>
                     <p className="text-sm text-red-700">
                       Unable to connect to backend • Check server status
@@ -560,10 +694,12 @@ export default function DashboardPage() {
                 </>
               ) : (
                 <>
-                  <ExclamationTriangleIcon className="w-6 h-6 text-yellow-600" />
+                  <div className="p-3 bg-white rounded-xl shadow-md">
+                    <ExclamationTriangleIcon className="w-7 h-7 text-yellow-600" />
+                  </div>
                   <div>
-                    <p className="font-medium text-yellow-900">
-                      System Status: Waiting for Camera Devices
+                    <p className="text-lg font-bold text-yellow-900 mb-1">
+                      Waiting for Camera Devices
                     </p>
                     <p className="text-sm text-yellow-700">
                       No active camera sessions • Waiting for devices to connect
@@ -578,8 +714,9 @@ export default function DashboardPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => router.push("/streamingDash")}
-                className="border-green-300 text-green-700 hover:bg-green-100"
+                className="bg-white border-2 border-green-400 text-green-700 hover:bg-green-50 hover:border-green-500 font-semibold shadow-md"
               >
+                <EyeIcon className="w-4 h-4 mr-1.5" />
                 View Live Cameras
               </Button>
             )}

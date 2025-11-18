@@ -1,6 +1,14 @@
 /**
  * React hooks for realtime functionality
  * Provides easy-to-use hooks for consuming SSE streams
+ *
+ * **Improvements (Nov 17, 2025):**
+ * - Added AbortController to cancel pending fetch requests on unmount
+ * - Added isMountedRef to prevent state updates after component unmount
+ * - Fixed race conditions when switching pages quickly
+ * - Improved cleanup to abort async operations properly
+ * - Enhanced error handling for aborted operations
+ * - Added better logging for debugging lifecycle issues
  */
 
 import { ambulanceStreamingService } from "@/services/streamingService";
@@ -22,6 +30,7 @@ interface UseRealtimeAmbulanceSessionsOptions extends RealtimeOptions {
   ambulanceId?: string;
   sessionId?: string;
   isActive?: boolean; // Filter by active/inactive sessions
+  limit?: number; // Limit number of sessions returned
 }
 
 export interface UseRealtimeAmbulanceOptions {
@@ -80,8 +89,17 @@ export function useRealtimeAmbulanceSessions(
   const sessionEventSourceRef = useRef<EventSource | null>(null);
   const roomEventSourceRef = useRef<EventSource | null>(null);
   const roomUpdateTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const handleSessionMessageRef = useRef<
+    ((event: MessageEvent) => void) | null
+  >(null);
+  const handleRoomMessageRef = useRef<((event: MessageEvent) => void) | null>(
+    null
+  );
+  const isConnectingRef = useRef(false);
 
-  const { enabled = true, ambulanceId, sessionId, isActive } = options;
+  const { enabled = true, ambulanceId, sessionId, isActive, limit } = options;
 
   /**
    * Fetch complete session information including all ambulance cameras
@@ -180,11 +198,13 @@ export function useRealtimeAmbulanceSessions(
     []
   );
 
+  // Create stable callback that updates via ref
   const handleSessionMessage = useCallback(
     async (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
 
+        if (!isMountedRef.current) return;
         setError(null);
 
         // Extract actual event type from 'event' field
@@ -199,7 +219,9 @@ export function useRealtimeAmbulanceSessions(
             timestamp: data.timestamp || new Date().toISOString(),
           };
 
-          setEvents((prev) => [...prev, sessionEvent]);
+          if (isMountedRef.current) {
+            setEvents((prev) => [...prev, sessionEvent]);
+          }
 
           // Update sessions based on event type
           switch (actualEventType) {
@@ -232,6 +254,8 @@ export function useRealtimeAmbulanceSessions(
                   const completeSession = await fetchCompleteSessionInfo(
                     sessionData
                   );
+
+                  if (!isMountedRef.current) return;
 
                   setSessions((prev) => {
                     // Check if session already exists (race condition protection)
@@ -298,6 +322,7 @@ export function useRealtimeAmbulanceSessions(
                       // Will be fetched asynchronously
                       fetchCompleteSessionInfo(sessionData).then(
                         (completeSession) => {
+                          if (!isMountedRef.current) return;
                           setSessions((current) => {
                             const idx = current.findIndex(
                               (s) => s.id === completeSession.id
@@ -346,9 +371,16 @@ export function useRealtimeAmbulanceSessions(
     [ambulanceId, sessionId, isActive, fetchCompleteSessionInfo]
   );
 
+  // Update ref whenever callback changes
+  useEffect(() => {
+    handleSessionMessageRef.current = handleSessionMessage;
+  }, [handleSessionMessage]);
+
   const handleRoomMessage = useCallback((event: MessageEvent) => {
     try {
       const data = JSON.parse(event.data);
+
+      if (!isMountedRef.current) return;
       setError(null);
 
       const eventData = typeof data === "string" ? JSON.parse(data) : data;
@@ -366,7 +398,9 @@ export function useRealtimeAmbulanceSessions(
           timestamp: eventData.timestamp || new Date().toISOString(),
         };
 
-        setEvents((prev) => [...prev, roomEvent]);
+        if (isMountedRef.current) {
+          setEvents((prev) => [...prev, roomEvent]);
+        }
 
         // Handle DELETE event - remove room immediately
         if (actualEventType === "DELETE") {
@@ -405,6 +439,8 @@ export function useRealtimeAmbulanceSessions(
         }
 
         const newTimer = setTimeout(() => {
+          if (!isMountedRef.current) return;
+
           roomUpdateTimersRef.current.delete(roomData.camera_id);
 
           setSessions((prev) =>
@@ -453,10 +489,23 @@ export function useRealtimeAmbulanceSessions(
     }
   }, []);
 
+  // Update ref whenever callback changes
+  useEffect(() => {
+    handleRoomMessageRef.current = handleRoomMessage;
+  }, [handleRoomMessage]);
+
   const fetchInitialSessions = useCallback(async () => {
     if (!enabled) return;
 
+    // Create new abort controller for this fetch
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
     try {
+      if (!isMountedRef.current) return;
       setIsLoading(true);
 
       // Build filters based on options
@@ -474,20 +523,35 @@ export function useRealtimeAmbulanceSessions(
         filters.is_active = isActive;
       }
 
+      if (limit !== undefined) {
+        filters.limit = limit;
+      }
+
+      // Check if aborted before making request
+      if (signal.aborted) return;
+
       // Fetch sessions with filters
       const sessionsResponse =
         await ambulanceStreamingService.getAmbulanceSessions(filters);
+
+      // Check if component is still mounted and not aborted
+      if (!isMountedRef.current || signal.aborted) return;
 
       if (sessionsResponse.data && !sessionsResponse.error) {
         // 🔥 NEW: Fetch all cameras for each ambulance (not just session rooms)
         const sessionsWithCameras = await Promise.all(
           sessionsResponse.data.map(async (session) => {
             try {
+              // Check abort signal before each fetch
+              if (signal.aborted) return null;
+
               // Get all cameras for this ambulance
               const camerasResponse =
                 await ambulanceStreamingService.getAmbulanceCameras(
                   session.ambulance_id
                 );
+
+              if (signal.aborted) return null;
 
               if (camerasResponse.data && !camerasResponse.error) {
                 // Convert AmbulanceCamera[] to CameraRoom[] format
@@ -496,6 +560,8 @@ export function useRealtimeAmbulanceSessions(
                   await ambulanceStreamingService.getCameraRooms({
                     session_id: session.id,
                   });
+
+                if (signal.aborted) return null;
 
                 const activeRoomIds = new Set(
                   (roomsResponse.data || []).map((room) => room.camera_id)
@@ -542,6 +608,8 @@ export function useRealtimeAmbulanceSessions(
                   session_id: session.id,
                 });
 
+              if (signal.aborted) return null;
+
               return {
                 ...session,
                 camera_rooms: roomsResponse.data || [],
@@ -559,22 +627,66 @@ export function useRealtimeAmbulanceSessions(
           })
         );
 
-        setSessions(sessionsWithCameras);
+        // Filter out null values from aborted requests
+        const validSessions = sessionsWithCameras.filter(
+          (s) => s !== null
+        ) as AmbulanceSession[];
+
+        // Only update state if still mounted and not aborted
+        if (isMountedRef.current && !signal.aborted) {
+          setSessions(validSessions);
+        }
       } else {
-        setError(sessionsResponse.error || "Failed to load initial sessions");
+        if (isMountedRef.current && !signal.aborted) {
+          setError(sessionsResponse.error || "Failed to load initial sessions");
+        }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load sessions");
+      // Ignore abort errors
+      if (err instanceof Error && err.name === "AbortError") {
+        console.log("[Realtime] Fetch aborted");
+        return;
+      }
+
+      if (isMountedRef.current && !signal.aborted) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load sessions"
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current && !signal.aborted) {
+        setIsLoading(false);
+      }
     }
-  }, [enabled, ambulanceId, sessionId, isActive]);
+  }, [enabled, ambulanceId, sessionId, isActive, limit]);
 
   const connect = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled || !isMountedRef.current) return;
+
+    // Prevent duplicate connections
+    if (
+      isConnectingRef.current ||
+      sessionEventSourceRef.current ||
+      roomEventSourceRef.current
+    ) {
+      console.log("[Realtime] Already connecting or connected, skipping...");
+      return;
+    }
+
+    isConnectingRef.current = true;
+    console.log("[Realtime] Starting connection...");
 
     // First fetch initial data
     await fetchInitialSessions();
+
+    // Check if still mounted after async operation
+    if (!isMountedRef.current) {
+      console.log(
+        "[Realtime] Component unmounted during initial fetch, aborting connection"
+      );
+      isConnectingRef.current = false;
+      return;
+    }
 
     try {
       // Connect to sessions stream
@@ -582,11 +694,15 @@ export function useRealtimeAmbulanceSessions(
         ambulanceStreamingService.getRealtimeAmbulanceSessions();
 
       sessionEventSource.onopen = () => {
-        setIsConnected(false);
+        if (!isMountedRef.current) return;
+        console.log("[Realtime] Session EventSource opened");
       };
-      sessionEventSource.onmessage = handleSessionMessage;
+      sessionEventSource.onmessage = (event: MessageEvent) => {
+        handleSessionMessageRef.current?.(event);
+      };
       sessionEventSource.onerror = (err) => {
         console.error("Ambulance sessions SSE error:", err);
+        if (!isMountedRef.current) return;
         setError("Connection to sessions real-time updates failed");
         setIsConnected(false);
       };
@@ -596,25 +712,45 @@ export function useRealtimeAmbulanceSessions(
         ambulanceStreamingService.getRealtimeCameraRooms();
 
       roomEventSource.onopen = () => {
+        if (!isMountedRef.current) return;
         // Only set connected when both streams are ready
         setIsConnected(true);
+        console.log("[Realtime] Successfully connected to real-time streams");
       };
-      roomEventSource.onmessage = handleRoomMessage;
+      roomEventSource.onmessage = (event: MessageEvent) => {
+        handleRoomMessageRef.current?.(event);
+      };
       roomEventSource.onerror = (err) => {
         console.error("Camera rooms SSE error:", err);
+        if (!isMountedRef.current) return;
         setError("Connection to rooms real-time updates failed");
         setIsConnected(false);
       };
 
       sessionEventSourceRef.current = sessionEventSource;
       roomEventSourceRef.current = roomEventSource;
+
+      isConnectingRef.current = false;
+      console.log("[Realtime] Connection established successfully");
     } catch (err) {
+      isConnectingRef.current = false;
+      if (!isMountedRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to connect");
       setIsConnected(false);
     }
   }, [enabled, fetchInitialSessions]);
 
   const disconnect = useCallback(() => {
+    console.log("[Realtime] Disconnecting...");
+
+    isConnectingRef.current = false;
+
+    // Abort any pending fetch operations
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
     if (sessionEventSourceRef.current) {
       sessionEventSourceRef.current.close();
       sessionEventSourceRef.current = null;
@@ -630,10 +766,15 @@ export function useRealtimeAmbulanceSessions(
     });
     roomUpdateTimersRef.current.clear();
 
-    setIsConnected(false);
+    if (isMountedRef.current) {
+      setIsConnected(false);
+    }
   }, []);
 
   useEffect(() => {
+    // Set mounted flag
+    isMountedRef.current = true;
+
     if (enabled) {
       connect();
     } else {
@@ -641,6 +782,9 @@ export function useRealtimeAmbulanceSessions(
     }
 
     return () => {
+      // Mark as unmounted to prevent state updates
+      isMountedRef.current = false;
+      console.log("[Realtime] Component unmounting, cleaning up...");
       disconnect();
     };
     // Only reconnect when enabled changes, not when filter params change

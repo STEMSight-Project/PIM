@@ -1,5 +1,8 @@
 import { ThemeProvider } from "@/components/providers";
+import { ApiErrorInitializer } from "@/components/ApiErrorInitializer";
 import { ClientOnly } from "@/components/ui";
+import { ApiErrorBanner } from "@/components/ui/ApiErrorBanner";
+import { ApiErrorProvider } from "@/contexts/ApiErrorContext";
 import { AuthProvider } from "@/hooks/useAuth";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -52,25 +55,29 @@ export default function RootLayout({
           }
         >
           <ThemeProvider>
-            <AuthProvider>
-              <Suspense
-                fallback={
-                  <div className="min-h-screen bg-transparent flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="relative mx-auto w-16 h-16 mb-8">
-                        <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
-                        <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
+            <ApiErrorProvider>
+              <AuthProvider>
+                <ApiErrorInitializer />
+                <ApiErrorBanner />
+                <Suspense
+                  fallback={
+                    <div className="min-h-screen bg-transparent flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="relative mx-auto w-16 h-16 mb-8">
+                          <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-pulse"></div>
+                          <div className="absolute inset-0 rounded-full border-t-4 border-blue-600 animate-spin"></div>
+                        </div>
+                        <p className="text-slate-600 font-medium">
+                          Initializing application...
+                        </p>
                       </div>
-                      <p className="text-slate-600 font-medium">
-                        Initializing application...
-                      </p>
                     </div>
-                  </div>
-                }
-              >
-                {children}
-              </Suspense>
-            </AuthProvider>
+                  }
+                >
+                  {children}
+                </Suspense>
+              </AuthProvider>
+            </ApiErrorProvider>
           </ThemeProvider>
         </ClientOnly>
       </body>

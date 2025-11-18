@@ -302,9 +302,8 @@ export default function RecentLiveSessionPage() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log(
-                                "View Subject clicked for session:",
-                                session.id
+                              router.push(
+                                `/recent-live-session/subject/${session.session_id}`
                               );
                             }}
                           >
