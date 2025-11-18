@@ -5,7 +5,10 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
-import { ambulanceSessionService, type AmbulanceSession } from "@/services/ambulanceSessionService";
+import {
+  ambulanceSessionService,
+  type AmbulanceSession,
+} from "@/services/ambulanceSessionService";
 import { formatDate } from "@/utils/cn";
 import {
   ArrowLeftIcon,
@@ -18,6 +21,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { recordingService } from "@/services/videoService";
 
 export default function SessionDetailsPage() {
   const params = useParams();
@@ -27,6 +31,7 @@ export default function SessionDetailsPage() {
   const [session, setSession] = useState<AmbulanceSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [totalFileSize, setTotalFileSize] = useState<number>(0);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -44,6 +49,25 @@ export default function SessionDetailsPage() {
         }
 
         setSession(result.data);
+
+        // Fetch recordings to calculate total file size
+        try {
+          const recordingsResponse =
+            await recordingService.getRecordingsBySession(sessionId);
+          if (recordingsResponse.data) {
+            const totalSize = recordingsResponse.data.reduce(
+              (sum, recording) => {
+                return sum + (recording.file_size || 0);
+              },
+              0
+            );
+            setTotalFileSize(totalSize);
+          }
+        } catch (err) {
+          console.error("Failed to fetch recordings for file size:", err);
+          // Use session file_size as fallback
+          setTotalFileSize(result.data.file_size || 0);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load session");
       } finally {
@@ -80,9 +104,13 @@ export default function SessionDetailsPage() {
     );
   }
 
-  const isActive = ambulanceSessionService.isSessionActive(session);
+  // Check is_active field (new streaming sessions table) or status field (old recordings table)
+  const isActive = session.is_active ?? session.status === "active";
   const duration = ambulanceSessionService.getSessionDuration(session);
-  const fileSize = ambulanceSessionService.formatFileSize(session.file_size);
+  const fileSize = ambulanceSessionService.formatFileSize(totalFileSize);
+  const sessionStart =
+    session.started_at || session.session_start || session.created_at;
+  const sessionEnd = session.ended_at || session.session_end;
 
   return (
     <DashboardLayout>
@@ -101,28 +129,44 @@ export default function SessionDetailsPage() {
                 Session Details
               </h1>
               <p className="text-gray-600">
-                {formatDate(session.session_start)}
+                Session ID: {sessionId.slice(0, 8)}...
               </p>
             </div>
           </div>
           <div className="flex space-x-3">
             {isActive && (
               <Button
+                variant="primary"
                 onClick={() =>
-                  router.push(`/streamingDash/${session.session_id}`)
+                  router.push(
+                    `/streamingDash?ambulance=${
+                      session.ambulance_id || session.session_id
+                    }`
+                  )
                 }
               >
                 <PlayIcon className="h-4 w-4 mr-2" />
                 Watch Live
               </Button>
             )}
+            <Button
+              variant="outline"
+              onClick={() =>
+                router.push(`/recent-live-session/subject/${sessionId}`)
+              }
+            >
+              <VideoCameraIcon className="h-4 w-4 mr-2" />
+              Watch Recordings
+            </Button>
           </div>
         </div>
 
         {/* Status Banner */}
         <Card
           className={`p-4 ${
-            isActive ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200"
+            isActive
+              ? "bg-green-50 border-green-200"
+              : "bg-blue-50 border-blue-200"
           }`}
         >
           <div className="flex items-center justify-between">
@@ -138,7 +182,8 @@ export default function SessionDetailsPage() {
                     isActive ? "text-green-900" : "text-blue-900"
                   }`}
                 >
-                  Status: {isActive ? "Recording Active" : "Recording Completed"}
+                  Status:{" "}
+                  {isActive ? "Recording Active" : "Recording Completed"}
                 </p>
                 <p
                   className={`text-sm ${
@@ -164,7 +209,7 @@ export default function SessionDetailsPage() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Started</p>
                 <p className="text-sm font-bold text-gray-900">
-                  {formatDate(session.session_start)}
+                  {formatDate(sessionStart)}
                 </p>
               </div>
             </div>
@@ -202,7 +247,7 @@ export default function SessionDetailsPage() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Status</p>
                 <p className="text-sm font-bold text-gray-900 capitalize">
-                  {session.status}
+                  {isActive ? "Active" : "Completed"}
                 </p>
               </div>
             </div>
@@ -217,14 +262,26 @@ export default function SessionDetailsPage() {
               Technical Details
             </h3>
             <div className="space-y-3">
-              <div className="flex justify-between py-2 border-b border-gray-200">
-                <span className="text-sm font-medium text-gray-600">
-                  Session ID
-                </span>
-                <span className="text-sm text-gray-900 font-mono">
-                  {session.session_id}
-                </span>
-              </div>
+              {session.session_id && (
+                <div className="flex justify-between py-2 border-b border-gray-200">
+                  <span className="text-sm font-medium text-gray-600">
+                    Session ID
+                  </span>
+                  <span className="text-sm text-gray-900 font-mono">
+                    {session.session_id}
+                  </span>
+                </div>
+              )}
+              {session.ambulance_id && (
+                <div className="flex justify-between py-2 border-b border-gray-200">
+                  <span className="text-sm font-medium text-gray-600">
+                    Ambulance ID
+                  </span>
+                  <span className="text-sm text-gray-900 font-mono">
+                    {session.ambulance_id}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between py-2 border-b border-gray-200">
                 <span className="text-sm font-medium text-gray-600">
                   Record ID
@@ -270,13 +327,13 @@ export default function SessionDetailsPage() {
                   </span>
                 </div>
               )}
-              {session.session_end && (
+              {sessionEnd && (
                 <div className="flex justify-between py-2 border-b border-gray-200">
                   <span className="text-sm font-medium text-gray-600">
                     Ended At
                   </span>
                   <span className="text-sm text-gray-900">
-                    {formatDate(session.session_end)}
+                    {formatDate(sessionEnd)}
                   </span>
                 </div>
               )}

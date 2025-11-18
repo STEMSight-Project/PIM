@@ -12,6 +12,7 @@ from core.common import logger, supabase
 import os
 import sys
 import asyncio
+import logging
 from pathlib import Path
 from services.streaming.pending_recording_service import (
     pending_recording_uploader,
@@ -23,6 +24,10 @@ from services.streaming.pending_recording_service import (
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     logger.info("🪟 Windows: Using SelectorEventLoop for subprocess support")
+
+# 🔇 Reduce logging noise from Supabase Realtime heartbeat messages
+logging.getLogger("realtime._async.client").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
