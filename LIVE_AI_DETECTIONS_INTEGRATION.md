@@ -479,6 +479,7 @@ Once table is created:
 ✅ **React Hook**: Implemented with state management
 ✅ **UI Component**: Beautiful panel with animations and statistics
 ✅ **Dashboard Integration**: Successfully replaced old component
+✅ **Data Channel Logging**: Enhanced close event with recording statistics
 
 ⚠️ **Pending**:
 
@@ -487,3 +488,62 @@ Once table is created:
 - Audio file creation (optional)
 
 🚀 **Ready to test** once `ai_detections` table is created in Supabase!
+
+---
+
+## Recent Updates (October 2025)
+
+### Enhanced Data Channel Logging
+
+**File**: `Back-End/Testing_files/broadcaster.py` (lines 848-863)
+
+**Enhancement**: Added comprehensive logging when data channel closes to track recording completion:
+
+**Before**:
+
+```python
+@data_channel.on("close")
+def on_datachannel_close():
+    LOGGER.info("📡 Data channel closed")
+```
+
+**After**:
+
+```python
+@data_channel.on("close")
+def on_datachannel_close():
+    # Log data channel closure with session statistics
+    if pose_processor and pose_processor.storage:
+        total_detections = sum(pose_processor.detection_counts.values()) if pose_processor.detection_counts else 0
+        duration = time.time() - pose_processor.stream_start_time
+        LOGGER.info(
+            "📡 Data channel closed - ✅ Recording complete: %d detections saved to database "
+            "(session_id: %s, camera_id: %s, duration: %.1fs)",
+            total_detections,
+            pose_processor.storage.session_id,
+            pose_processor.storage.camera_id,
+            duration
+        )
+    else:
+        LOGGER.info("📡 Data channel closed")
+```
+
+**Benefits**:
+
+- **Visibility**: See exactly when recordings complete and data is persisted
+- **Statistics**: Track total detections stored, session IDs, and duration
+- **Debugging**: Helps diagnose recording completion issues
+- **Correlation**: Ties data channel close events to recording finalization
+
+**Example Log Output**:
+
+```
+INFO: 📡 Data channel closed - ✅ Recording complete: 47 detections saved to database (session_id: abc-123-def-456, camera_id: cam-789, duration: 125.3s)
+```
+
+**Use Cases**:
+
+1. Monitor when recordings successfully save to database
+2. Verify detection counts match expected values
+3. Debug recording pipeline issues (use with `HLS_RECORDING_FLOW.md`)
+4. Track session durations for analytics

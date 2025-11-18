@@ -519,11 +519,7 @@ class StreamingDatabaseService:
             if is_active is not None:
                 query = query.eq("is_active", is_active)
 
-            result = (
-                query.order("started_at", desc=True)
-                .range(offset, offset + limit - 1)
-                .execute()
-            )
+            result = query.order("started_at", desc=True).range(offset, offset + limit - 1).execute()
             return result.data or []
 
         except Exception as e:

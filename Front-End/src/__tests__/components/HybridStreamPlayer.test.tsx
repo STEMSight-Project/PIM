@@ -3,37 +3,59 @@
  * Tests video player UI, controls, and state management
  */
 
+import React from "react";
 import { HybridStreamPlayer } from "@/components/HybridStreamPlayer";
 import { useHLS } from "@/hooks/useHLS";
 import { useStreaming } from "@/hooks/useStreaming";
+import { useHLSSegmentEvents } from "@/hooks/useHLSSegmentEvents";
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 // Mock hooks
 jest.mock("@/hooks/useStreaming");
 jest.mock("@/hooks/useHLS");
+jest.mock("@/hooks/useHLSSegmentEvents");
 
 const mockUseStreaming = useStreaming as jest.MockedFunction<
   typeof useStreaming
 >;
 const mockUseHLS = useHLS as jest.MockedFunction<typeof useHLS>;
+const mockUseHLSSegmentEvents =
+  useHLSSegmentEvents as jest.MockedFunction<typeof useHLSSegmentEvents>;
+
+const createVideoRef = () => {
+  const videoElement = document.createElement("video");
+  return { current: videoElement } as React.RefObject<HTMLVideoElement>;
+};
 
 describe("HybridStreamPlayer", () => {
   const defaultStreamingState = {
+    videoRef: createVideoRef(),
     isConnected: false,
+    isConnecting: false,
     error: null,
     localStream: null,
+    userFriendlyStatus: "Idle",
+    isWaitingForData: false,
+    poseLandmarks: null,
+    prediction: null,
     startStreaming: jest.fn(),
     stopStreaming: jest.fn(),
   };
 
   const defaultHLSState = {
-    videoRef: { current: null },
+    videoRef: createVideoRef(),
     hls: null,
     isLoading: false,
     error: null,
     status: "Ready",
-    recordingStatus: null,
+    recordingStatus: {
+      room_id: "AMB-001-ROOM-001",
+      is_active: true,
+      duration: 0,
+      segment_count: 0,
+      session_id: "session-001",
+    },
     isHLSReady: true,
     reload: jest.fn(),
     play: jest.fn().mockResolvedValue(undefined),
@@ -43,8 +65,20 @@ describe("HybridStreamPlayer", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseStreaming.mockReturnValue(defaultStreamingState as any);
-    mockUseHLS.mockReturnValue(defaultHLSState as any);
+    mockUseHLSSegmentEvents.mockImplementation(() => undefined);
+    mockUseStreaming.mockReturnValue({
+      ...defaultStreamingState,
+      videoRef: createVideoRef(),
+      startStreaming: jest.fn(),
+      stopStreaming: jest.fn(),
+    } as any);
+    mockUseHLS.mockReturnValue({
+      ...defaultHLSState,
+      videoRef: createVideoRef(),
+      play: jest.fn().mockResolvedValue(undefined),
+      pause: jest.fn(),
+      seek: jest.fn(),
+    } as any);
   });
 
   describe("rendering", () => {
@@ -89,25 +123,22 @@ describe("HybridStreamPlayer", () => {
     });
 
     it("should switch to playback mode", async () => {
-      const mockHLS = {
+      const mockPlay = jest.fn().mockResolvedValue(undefined);
+      mockUseHLS.mockReturnValue({
         ...defaultHLSState,
-        recordingStatus: {
-          room_id: "AMB-001-ROOM-001",
-          segment_count: 5,
-          is_active: true,
-        },
-      };
-      mockUseHLS.mockReturnValue(mockHLS as any);
+        videoRef: createVideoRef(),
+        play: mockPlay,
+      } as any);
 
       render(
         <HybridStreamPlayer ambulanceId="AMB-001" roomId="AMB-001-ROOM-001" />
       );
 
-      const playbackButton = screen.getByRole("button", { name: /playback/i });
-      fireEvent.click(playbackButton);
+      const toggleButton = screen.getByRole("button", { name: /pause/i });
+      fireEvent.click(toggleButton);
 
       await waitFor(() => {
-        expect(mockHLS.play).toHaveBeenCalled();
+        expect(screen.getByText(/PLAYBACK/i)).toBeInTheDocument();
       });
     });
 
@@ -139,9 +170,12 @@ describe("HybridStreamPlayer", () => {
         <HybridStreamPlayer ambulanceId="AMB-001" roomId="AMB-001-ROOM-001" />
       );
 
-      // Component renders with pause button in live mode
-      const pauseButton = screen.getByRole("button", { name: /pause/i });
-      expect(pauseButton).toBeInTheDocument();
+      const toggleButton = screen.getByRole("button", { name: /pause/i });
+      fireEvent.click(toggleButton);
+
+      await waitFor(() => {
+        expect(mockPlay).toHaveBeenCalledTimes(1);
+      });
     });
 
     it("should pause video when pause button clicked", () => {
@@ -219,12 +253,14 @@ describe("HybridStreamPlayer", () => {
     it("should display recording duration", () => {
       mockUseHLS.mockReturnValue({
         ...defaultHLSState,
+        videoRef: createVideoRef(),
         currentTime: 0,
         recordingStatus: {
           room_id: "AMB-001-ROOM-001",
           duration: 0,
           segment_count: 4,
           is_active: true,
+          session_id: "session-001",
         },
       } as any);
 

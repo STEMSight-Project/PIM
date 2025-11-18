@@ -125,18 +125,18 @@ async def get_ambulance_sessions_paginated(
         sessions = await StreamingDatabaseService.get_ambulance_sessions_paginated(
             ambulance_id, is_active, limit, offset
         )
-
+        
         # Get total count for pagination
         total = await StreamingDatabaseService.get_ambulance_sessions_count(
             ambulance_id, is_active
         )
-
+        
         return {
             "data": sessions,
             "total": total,
             "limit": limit,
             "offset": offset,
-            "has_more": (offset + limit) < total,
+            "has_more": (offset + limit) < total
         }
 
     except Exception as e:

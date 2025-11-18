@@ -17,15 +17,16 @@ class AIDetectionResponse(BaseModel):
     id: str
     session_id: str
     camera_id: str
-    room_id: str
+    recording_id: Optional[str] = None
+    room_id: Optional[str] = None
     detection_type: str
-    confidence_score: float
+    confidence_score: Optional[float] = None
     detection_data: dict
     frame_timestamp: str
-    sequence_number: int
-    model_used: str
-    processing_time_ms: int
-    processed_on: str
+    sequence_number: Optional[int] = None
+    model_used: Optional[str] = None
+    processing_time_ms: Optional[int] = None
+    processed_on: Optional[str] = "edge"
     created_at: str
 
 
@@ -34,6 +35,9 @@ async def get_ai_detections(
     room_id: Optional[str] = Query(None, description="Filter by room ID"),
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
     camera_id: Optional[str] = Query(None, description="Filter by camera ID"),
+    recording_id: Optional[str] = Query(
+        None, description="Filter by recording ID (ambulance recording UUID)"
+    ),
     limit: int = Query(50, ge=1, le=500, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
 ):
@@ -44,6 +48,8 @@ async def get_ai_detections(
     - room_id: Filter by room ID (e.g., "AMB-001-ROOM-001")
     - session_id: Filter by session UUID
     - camera_id: Filter by camera UUID
+    - recording_id: Filter by recording UUID
+    - recording_id: Filter by recording UUID
     - limit: Max results (1-500, default 50)
     - offset: Pagination offset (default 0)
 
@@ -52,8 +58,14 @@ async def get_ai_detections(
     """
     try:
         logger.info(
-            f"Fetching AI detections - room_id={room_id}, session_id={session_id}, "
-            f"camera_id={camera_id}, limit={limit}, offset={offset}"
+            "Fetching AI detections - room_id=%s, session_id=%s, camera_id=%s,"
+            " recording_id=%s, limit=%s, offset=%s",
+            room_id,
+            session_id,
+            camera_id,
+            recording_id,
+            limit,
+            offset,
         )
 
         # Build query
@@ -66,6 +78,8 @@ async def get_ai_detections(
             query = query.eq("session_id", session_id)
         if camera_id:
             query = query.eq("camera_id", camera_id)
+        if recording_id:
+            query = query.eq("recording_id", recording_id)
 
         # Order and pagination
         query = query.order("created_at", desc=True).range(offset, offset + limit - 1)

@@ -20,9 +20,7 @@ interface UsePaginatedSessionsOptions {
   isActive?: boolean;
 }
 
-export function usePaginatedSessions(
-  options: UsePaginatedSessionsOptions = {}
-) {
+export function usePaginatedSessions(options: UsePaginatedSessionsOptions = {}) {
   const { pageSize = 20, ambulanceId, isActive } = options;
 
   const [sessions, setSessions] = useState<AmbulanceSession[]>([]);
@@ -61,8 +59,7 @@ export function usePaginatedSessions(
         params.append("limit", pageSize.toString());
         params.append("offset", currentOffset.toString());
         if (ambulanceId) params.append("ambulance_id", ambulanceId);
-        if (isActive !== undefined)
-          params.append("is_active", isActive.toString());
+        if (isActive !== undefined) params.append("is_active", isActive.toString());
 
         const response = await api.get<PaginatedSessionsResponse>(
           `/ambulance-streaming/ambulance-sessions-paginated?${params.toString()}`
@@ -88,9 +85,7 @@ export function usePaginatedSessions(
         setTotal(result.total);
       } catch (err) {
         if (!isMountedRef.current) return;
-        setError(
-          err instanceof Error ? err.message : "Failed to load sessions"
-        );
+        setError(err instanceof Error ? err.message : "Failed to load sessions");
       } finally {
         if (isMountedRef.current) {
           setIsLoading(false);

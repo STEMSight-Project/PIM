@@ -35,13 +35,26 @@ export default function MovementDetectionDemo() {
     },
   });
 
+  const normalizeDetectionId = (id: string | number): number | null => {
+    if (typeof id === "number") {
+      return id;
+    }
+    const parsed = Number(id);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
   const handleValidate = async (
-    detectionId: number,
+    detectionId: string | number,
     status: ValidationStatus
   ) => {
-    const success = await updateValidationStatus(detectionId, status);
+    const normalizedId = normalizeDetectionId(detectionId);
+    if (normalizedId === null) {
+      console.warn("Unable to update detection with non-numeric id", detectionId);
+      return;
+    }
+    const success = await updateValidationStatus(normalizedId, status);
     if (success) {
-      console.log(`✅ Detection ${detectionId} ${status}`);
+      console.log(`✅ Detection ${normalizedId} ${status}`);
     }
   };
 

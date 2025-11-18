@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
 import { usePaginatedSessions } from "@/hooks/usePaginatedSessions";
-import { ambulanceSessionService } from "@/services/ambulanceSessionService";
+import {
+  ambulanceSessionService,
+} from "@/services/ambulanceSessionService";
 import { formatDate } from "@/utils/cn";
 import {
   ArrowPathIcon,
@@ -21,44 +23,29 @@ import {
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useMemo } from "react";
 
 export default function RecentLiveSessionPage() {
   const router = useRouter();
-  const [sessions, setSessions] = useState<AmbulanceSession[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
-  const loadSessions = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+  // Use the pagination hook
+  const {
+    sessions,
+    isLoading,
+    isLoadingMore,
+    error,
+    hasMore,
+    total,
+    loadMore,
+    refresh,
+  } = usePaginatedSessions({ pageSize: 20 });
 
-      const result = await ambulanceSessionService.getRecentSessions(20);
-
-      if (!result.success) {
-        setError(result.error || "Failed to load sessions");
-        return;
-      }
-
-      setSessions(result.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load sessions");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Infinite scroll observer
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (
-          entries[0].isIntersecting &&
-          hasMore &&
-          !isLoadingMore &&
-          !isLoading
-        ) {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore && !isLoading) {
           loadMore();
         }
       },
@@ -96,15 +83,12 @@ export default function RecentLiveSessionPage() {
   };
 
   // Calculate statistics
-  const stats = useMemo(
-    () => ({
-      total: sessions.length,
-      active: sessions.filter((s) => s.is_active).length,
-      completed: sessions.filter((s) => !s.is_active && s.ended_at).length,
-      totalSessions: total,
-    }),
-    [sessions, total]
-  );
+  const stats = useMemo(() => ({
+    total: sessions.length,
+    active: sessions.filter((s) => s.is_active).length,
+    completed: sessions.filter((s) => !s.is_active && s.ended_at).length,
+    totalSessions: total,
+  }), [sessions, total]);
 
   if (isLoading) {
     return (
@@ -130,9 +114,13 @@ export default function RecentLiveSessionPage() {
             </p>
           </div>
           <div className="flex space-x-3">
-            <Button variant="outline" onClick={refresh} disabled={isLoading}>
+            <Button
+              variant="outline"
+              onClick={refresh}
+              disabled={isLoading}
+            >
               <ArrowPathIcon
-                className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
+                className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
               />
               Refresh
             </Button>
@@ -146,7 +134,7 @@ export default function RecentLiveSessionPage() {
         {error && <Alert variant="error">{error}</Alert>}
 
         {/* Session Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-blue-100 rounded-lg">
@@ -192,22 +180,6 @@ export default function RecentLiveSessionPage() {
               </div>
             </div>
           </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <ServerIcon className="h-6 w-6 text-orange-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">
-                  Total Storage
-                </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {ambulanceSessionService.formatFileSize(stats.totalSize)}
-                </p>
-              </div>
-            </div>
-          </Card>
         </div>
 
         {/* Sessions List */}
@@ -233,9 +205,7 @@ export default function RecentLiveSessionPage() {
               {sessions.map((session) => {
                 // Calculate duration
                 const startTime = new Date(session.started_at);
-                const endTime = session.ended_at
-                  ? new Date(session.ended_at)
-                  : new Date();
+                const endTime = session.ended_at ? new Date(session.ended_at) : new Date();
                 const durationMs = endTime.getTime() - startTime.getTime();
                 const duration = `${Math.floor(durationMs / 60000)} min`;
                 const isActive = session.is_active;
@@ -258,17 +228,16 @@ export default function RecentLiveSessionPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2 flex-wrap">
                             <p className="text-sm font-medium text-gray-900">
-                              {session.session_name ||
-                                `Session ${session.id.slice(0, 8)}...`}
+                              {session.session_name || `Session ${session.id.slice(0, 8)}...`}
                             </p>
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                                session.status
+                                status
                               )}`}
                             >
                               {getStatusIcon(isActive)}
                               <span className="ml-1">
-                                {getStatusLabel(session.status)}
+                                {getStatusLabel(status)}
                               </span>
                             </span>
                           </div>
@@ -276,23 +245,17 @@ export default function RecentLiveSessionPage() {
                           <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500 flex-wrap">
                             <div className="flex items-center">
                               <CalendarIcon className="h-4 w-4 mr-1" />
-                              {formatDate(session.session_start)}
+                              {formatDate(session.started_at)}
                             </div>
                             <div className="flex items-center">
                               <ClockIcon className="h-4 w-4 mr-1" />
                               {duration}
                             </div>
                             <div className="flex items-center">
-                              <ServerIcon className="h-4 w-4 mr-1" />
-                              {fileSize}
+                              <TruckIcon className="h-4 w-4 mr-1" />
+                              {session.ambulance_id}
                             </div>
                           </div>
-
-                          {session.recording_path && (
-                            <div className="mt-1 text-xs text-gray-400 truncate">
-                              {session.recording_path}
-                            </div>
-                          )}
                         </div>
                       </div>
 
@@ -305,7 +268,7 @@ export default function RecentLiveSessionPage() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 router.push(
-                                  `/streamingDash/${session.session_id}`
+                                  `/streamingDash?ambulance=${session.ambulance_id}`
                                 );
                               }}
                             >
@@ -319,7 +282,7 @@ export default function RecentLiveSessionPage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               router.push(
-                                `/recent-live-session/subject/${session.session_id}`
+                                `/recent-live-session/subject/${session.id}`
                               );
                             }}
                           >
@@ -343,6 +306,24 @@ export default function RecentLiveSessionPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Infinite scroll trigger */}
+          {!isLoading && hasMore && (
+            <div ref={observerTarget} className="py-8 text-center">
+              {isLoadingMore ? (
+                <Loading size="sm" text="Loading more sessions..." />
+              ) : (
+                <div className="text-sm text-gray-500">Scroll for more</div>
+              )}
+            </div>
+          )}
+
+          {/* End of list indicator */}
+          {!isLoading && !hasMore && sessions.length > 0 && (
+            <div className="py-6 text-center text-sm text-gray-500 border-t border-gray-200">
+              No more sessions to load
             </div>
           )}
         </Card>
