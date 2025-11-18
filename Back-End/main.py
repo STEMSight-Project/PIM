@@ -13,6 +13,7 @@ import os
 import sys
 import asyncio
 from pathlib import Path
+import logging
 
 # ✅ FIX: Windows asyncio subprocess support
 # Windows ProactorEventLoop doesn't support subprocesses
@@ -20,6 +21,10 @@ from pathlib import Path
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     logger.info("🪟 Windows: Using SelectorEventLoop for subprocess support")
+
+# 🔇 Reduce logging noise from Supabase Realtime heartbeat messages
+logging.getLogger("realtime._async.client").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager

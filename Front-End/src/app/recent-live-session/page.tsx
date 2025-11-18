@@ -5,10 +5,8 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
-import {
-  ambulanceSessionService,
-  type AmbulanceSession,
-} from "@/services/ambulanceSessionService";
+import { usePaginatedSessions } from "@/hooks/usePaginatedSessions";
+import { ambulanceSessionService } from "@/services/ambulanceSessionService";
 import { formatDate } from "@/utils/cn";
 import {
   ArrowPathIcon,
@@ -53,14 +51,31 @@ export default function RecentLiveSessionPage() {
   };
 
   useEffect(() => {
-    loadSessions();
-  }, []);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0].isIntersecting &&
+          hasMore &&
+          !isLoadingMore &&
+          !isLoading
+        ) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await loadSessions();
-    setIsRefreshing(false);
-  };
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [hasMore, isLoadingMore, isLoading, loadMore]);
 
   const getStatusColor = (status: string) => {
     return status === "completed"
@@ -81,13 +96,15 @@ export default function RecentLiveSessionPage() {
   };
 
   // Calculate statistics
-  const stats = {
-    total: sessions.length,
-    active: sessions.filter((s) => ambulanceSessionService.isSessionActive(s))
-      .length,
-    completed: sessions.filter((s) => s.status === "completed").length,
-    totalSize: sessions.reduce((acc, s) => acc + (s.file_size || 0), 0),
-  };
+  const stats = useMemo(
+    () => ({
+      total: sessions.length,
+      active: sessions.filter((s) => s.is_active).length,
+      completed: sessions.filter((s) => !s.is_active && s.ended_at).length,
+      totalSessions: total,
+    }),
+    [sessions, total]
+  );
 
   if (isLoading) {
     return (
@@ -113,11 +130,7 @@ export default function RecentLiveSessionPage() {
             </p>
           </div>
           <div className="flex space-x-3">
-            <Button
-              variant="outline"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-            >
+            <Button variant="outline" onClick={refresh} disabled={isLoading}>
               <ArrowPathIcon
                 className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
               />
@@ -218,13 +231,15 @@ export default function RecentLiveSessionPage() {
           ) : (
             <div className="divide-y divide-gray-200">
               {sessions.map((session) => {
-                const duration =
-                  ambulanceSessionService.getSessionDuration(session);
-                const isActive =
-                  ambulanceSessionService.isSessionActive(session);
-                const fileSize = ambulanceSessionService.formatFileSize(
-                  session.file_size
-                );
+                // Calculate duration
+                const startTime = new Date(session.started_at);
+                const endTime = session.ended_at
+                  ? new Date(session.ended_at)
+                  : new Date();
+                const durationMs = endTime.getTime() - startTime.getTime();
+                const duration = `${Math.floor(durationMs / 60000)} min`;
+                const isActive = session.is_active;
+                const status = isActive ? "active" : "completed";
 
                 return (
                   <div
@@ -243,7 +258,8 @@ export default function RecentLiveSessionPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2 flex-wrap">
                             <p className="text-sm font-medium text-gray-900">
-                              Session {session.session_id.slice(0, 8)}...
+                              {session.session_name ||
+                                `Session ${session.id.slice(0, 8)}...`}
                             </p>
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
