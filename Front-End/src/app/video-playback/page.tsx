@@ -22,6 +22,30 @@ interface AmbulanceGroup {
   totalDuration: number;
 }
 
+// Helper function to format session display name
+const formatSessionName = (session: any): string => {
+  if (!session.recordings || session.recordings.length === 0) {
+    return "Unknown Session";
+  }
+
+  const firstRecording = session.recordings[0];
+  const date = new Date(firstRecording.session_start || firstRecording.created_at);
+  
+  // Format: "Nov 17, 2025 • 2:30 PM"
+  const formattedDate = date.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric' 
+  });
+  const formattedTime = date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
+
+  return `${formattedDate} • ${formattedTime}`;
+};
+
 export default function VideoPlaybackPage() {
   const router = useRouter();
   const {
@@ -162,11 +186,11 @@ export default function VideoPlaybackPage() {
                   <VideoCameraIcon className="w-10 h-10 text-gray-400" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  No Recorded Sessions
+                  No Archived Recordings
                 </h3>
                 <p className="text-gray-600 mb-6">
-                  No archived sessions available yet. Sessions will appear here
-                  after they are recorded and uploaded.
+                  No archived recordings available yet. Recordings will appear here
+                  after ambulance sessions are completed and uploaded to storage.
                 </p>
               </div>
             </CardContent>
@@ -183,10 +207,10 @@ export default function VideoPlaybackPage() {
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Recorded Sessions by Ambulance
+              Archived Camera Recordings
             </h1>
             <p className="text-gray-600">
-              Sessions grouped by ambulance and sorted by ambulance number
+              View past ambulance session recordings grouped by vehicle
             </p>
           </div>
 
@@ -355,11 +379,7 @@ export default function VideoPlaybackPage() {
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                   <h3 className="text-base font-semibold text-gray-900 mb-1">
-                                    {session.session_name ||
-                                      `Session ${session.session_id.slice(
-                                        0,
-                                        8
-                                      )}`}
+                                    {formatSessionName(session)}
                                   </h3>
                                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                                     Archived
