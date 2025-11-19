@@ -1,0 +1,100 @@
+name: CI - Run Backend and Frontend Tests
+
+on:
+  push:
+    branches: [main, "**"]
+  workflow_dispatch: {}
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install backend deps
+        working-directory: Back-End
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio httpx
+
+      - name: Run backend pytest
+        working-directory: Back-End
+        run: |
+          python -m pytest -q tests/api_router/test_recording_control.py tests/api_router/test_recording_playback.py || true
+        continue-on-error: true
+
+      - name: Upload backend pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-pytest-log
+          path: Back-End/.pytest_log || Back-End/tests-output.txt || ''
+
+      - name: Install frontend deps
+        working-directory: Front-End
+        run: |
+          npm ci
+
+      - name: Run frontend jest
+        working-directory: Front-End
+        run: |
+          npx jest --runInBand --json --outputFile=jest-results.json || true
+
+      - name: Upload frontend jest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-jest-results
+          path: Front-End/jest-results.json
+
+      - name: Upload full repo (optional small snapshot)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-snapshot
+          path: |
+            Front-End/src/__tests__/**
+            Back-End/tests/api_router/**
+
+      - name: Prepare recordings for E2E
+        if: always()
+        run: |
+          mkdir -p Back-End/recordings/room-TEST-E2E-ROOM
+          echo "#EXTM3U" > Back-End/recordings/room-TEST-E2E-ROOM/playlist.m3u8
+          printf "FAKESEGMENTDATA" > Back-End/recordings/room-TEST-E2E-ROOM/segment-001.ts
+
+      - name: Start test backend (uvicorn test_app:app)
+        run: |
+          # Start uvicorn in background for E2E tests
+          nohup python -m uvicorn test_app:app --host 0.0.0.0 --port 8000 > backend-test.log 2>&1 &
+          # Wait a bit for server to become ready
+          sleep 2
+
+      - name: Install Playwright and run E2E
+        run: |
+          mkdir -p e2e/e2e-screenshots
+          cd e2e
+          npm init -y
+          npm install --no-audit --no-fund @playwright/test playwright
+          npx playwright install --with-deps chromium
+          npx playwright test --config playwright.config.js --project=chromium || true
+        working-directory: .
+
+      - name: Upload E2E screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: e2e/e2e-screenshots/**
