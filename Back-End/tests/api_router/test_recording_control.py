@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from pathlib import Path
 import os
 
-from main import app
+from test_app import app
 
 
 def test_get_recording_status_not_found(tmp_path, monkeypatch):

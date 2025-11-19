@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 import shutil
 
-from main import app
+from test_app import app
 
 
 def test_hls_playlist_and_segment(tmp_path, monkeypatch):
