@@ -3,6 +3,7 @@
  * Covers: video element, loading state, error overlay, live indicator, status bar
  */
 
+import React from "react";
 import { HLSPlayer } from "@/components/HLSPlayer";
 import { useHLS } from "@/hooks/useHLS";
 import "@testing-library/jest-dom";

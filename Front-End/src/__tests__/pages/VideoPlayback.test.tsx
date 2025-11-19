@@ -3,6 +3,7 @@
  * Covers: loading state, error state, empty sessions, sessions rendering
  */
 
+import React from "react";
 import VideoPlaybackPage from "@/app/video-playback/page";
 import { useRecordings } from "@/hooks";
 import "@testing-library/jest-dom";
