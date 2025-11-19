@@ -268,12 +268,23 @@ python broadcaster.py --room test --device camera_module
                        └─────────────────┘
 ```
 
+
+---
+
+### ✅ **Updated “Documentation Links” Section**
+
+```markdown
 ## 📚 Documentation Links
 
-- **[Backend Documentation](./Back-End/README.md)** - FastAPI setup, API endpoints, AI models
-- **[Frontend Documentation](./Front-End/README.md)** - Next.js setup, components, service layer
-- **[Raspberry Pi Documentation](./Raspberry-Pi/README.md)** - Edge device setup, camera configuration, AI deployment
-- **[Development Guidelines](./.github/instructions/copilot-instructions.md)** - Coding standards and patterns
+- **Backend API (Production):** [https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net/docs](https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net/docs)
+- **Frontend (Production):** [https://nextjsfrontend-c0cydrgwa3ckdxgp.westus3-01.azurewebsites.net](https://nextjsfrontend-c0cydrgwa3ckdxgp.westus3-01.azurewebsites.net)
+- **Backend (Local):** http://localhost:8000/docs
+- **Frontend (Local):** http://localhost:3000
+- **[Backend Documentation](./Back-End/README.md)** — FastAPI setup, API endpoints, AI models  
+- **[Frontend Documentation](./Front-End/README.md)** — Next.js setup, components, service layer  
+- **[Raspberry Pi Documentation](./Raspberry-Pi/README.md)** — Edge device setup, camera configuration, AI deployment  
+- **[Development Guidelines](./.github/instructions/copilot-instructions.md)** — Coding standards and patterns  
+
 
 ## 👥 Contributors
 
