@@ -4,12 +4,20 @@
  */
 
 import React from "react";
-import VideoPlaybackPage from "@/app/video-playback/page";
+// Mock next/navigation before importing app page to avoid "invariant expected app router to be mounted"
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), forward: jest.fn() }),
+  usePathname: () => "/",
+  useSearchParams: () => ({ get: () => null }),
+}));
+
 import { useRecordings } from "@/hooks";
 import "@testing-library/jest-dom";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 jest.mock("@/hooks");
+
+import VideoPlaybackPage from "@/app/video-playback/page";
 
 const mockUseRecordings = useRecordings as jest.MockedFunction<
   typeof useRecordings

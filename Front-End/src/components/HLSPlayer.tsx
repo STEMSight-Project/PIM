@@ -7,6 +7,8 @@
 
 "use client";
 
+import React from "react";
+
 import { useHLS } from "@/hooks/useHLS";
 import { cn } from "@/utils/cn";
 import {
