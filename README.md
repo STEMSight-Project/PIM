@@ -275,7 +275,19 @@ python broadcaster.py --room test --device camera_module
 - **[Raspberry Pi Documentation](./Raspberry-Pi/README.md)** - Edge device setup, camera configuration, AI deployment
 - **[Development Guidelines](./.github/instructions/copilot-instructions.md)** - Coding standards and patterns
 
-## 🤝 Contributing
+## 👥 Contributors
+
+| Name | Contact |
+|------|---------|
+| Mike Feschenko | [mikefeschenko@csus.edu](mailto:mikefeschenko@csus.edu) |
+| Ian Anderson | [ima34@csus.edu](mailto:ima34@csus.edu) |
+| Nguyen Phuc Tran | [nguyenphuctran@csus.edu](mailto:nguyenphuctran@csus.edu) |
+| Xeng Feng | [xiangfeng@csus.edu](mailto:xiangfeng@csus.edu) |
+| Faith Montemayor | [faithmontemayor@csus.edu](mailto:faithmontemayor@csus.edu) |
+| Antonio Graci | [agraci@csus.edu](mailto:agraci@csus.edu) |
+| Corbin West | [corbinwest@csus.edu](mailto:corbinwest@csus.edu) |
+| Pablo Hernandez | [phernandez4@csus.edu](mailto:phernandez4@csus.edu) |
+
 
 ### Getting Started
 
