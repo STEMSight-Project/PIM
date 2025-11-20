@@ -273,7 +273,7 @@ python broadcaster.py --room test --device camera_module
 
 ### ✅ **Updated “Documentation Links” Section**
 
-```markdown
+
 ## 📚 Documentation Links
 
 - **Backend API (Production):** [https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net/docs](https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net/docs)
@@ -285,7 +285,31 @@ python broadcaster.py --room test --device camera_module
 - **[Raspberry Pi Documentation](./Raspberry-Pi/README.md)** — Edge device setup, camera configuration, AI deployment  
 - **[Development Guidelines](./.github/instructions/copilot-instructions.md)** — Coding standards and patterns  
 
+Backend (FastAPI) tests – Back-End
 
+Activate the repo’s virtualenv (Activate.ps1 on PowerShell) and install deps from requirements.txt if you haven’t yet.
+From Back-End, run the full suite with:
+cd C:\Users\Mike\PIM Detector\PIM\Back-End
+pytest
+or, for verbose output / specific files, python -m pytest -v tests/services/test_room_service.py.
+These tests rely on the project fixtures under tests (see pytest.ini), so don’t move or rename them. Environment variables (Supabase keys, etc.) must match .env for anything hitting external services.
+Frontend (Next.js) tests – Front-End
+
+Ensure Node 18+; install deps via npm install inside Front-End.
+Run the Vitest suite (configured via vitest.config.ts) with:
+cd C:\Users\Mike\PIM Detector\PIM\Front-End
+npm test
+You can add -- run filename.test.tsx to target individual specs. Tests live under src/__tests__/ or beside components and use React Testing Library.
+Manual streaming / broadcaster checks
+
+For end-to-end validation of WebRTC + detection, the repo ships broadcaster.py. With the backend running (uvicorn main:app --reload from Back-End), you can simulate an ambulance camera:
+cd C:\Users\Mike\PIM Detector\PIM\Back-End
+python Testing_files\broadcaster.py --ambulance_number 001 --room 001 --video_device "Logitech BRIO" (or whichever video device is active/in use)
+This exercises pose detection, Supabase storage writes, and the pending-recording recovery loop. Watch backend logs for INFO:publisher lines (live run complete) or PendingRecordingUploader warnings (stuck upload recovery).
+Raspberry Pi edge tests (optional but recommended)
+
+Under Raspberry-Pi, use python rpi_broadcaster.py --ambulance_number 001 --room 001 --video_device /dev/video0 on the Pi to verify real hardware streaming.
+test_broadcaster.ps1 provides a Windows pre-flight check for FFmpeg, virtualenv, and backend availability before running broadcaster tests.
 ## 👥 Contributors
 
 | Name | Contact |
