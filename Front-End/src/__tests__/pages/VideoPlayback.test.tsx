@@ -80,7 +80,8 @@ describe("VideoPlaybackPage", () => {
 
     render(<VideoPlaybackPage />);
 
-    expect(screen.getByText(/No Archived Recordings/i)).toBeInTheDocument();
+    const headings = screen.getAllByRole("heading", { name: /No Archived Recordings/i });
+    expect(headings).toHaveLength(1);
   });
 
   it("renders sessions grouped by ambulance and allows expand", () => {

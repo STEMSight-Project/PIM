@@ -7,6 +7,21 @@ can import `app` without side effects.
 """
 from fastapi import FastAPI
 from pathlib import Path
+import sys
+import pathlib
+
+# Ensure Back-End directory is on sys.path so imports like `api_router` resolve
+BACKEND_DIR = pathlib.Path(__file__).resolve().parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+    # Debug print helps when running single test files to confirm path addition
+    print(f"✅ Added to Python path: {BACKEND_DIR}")
+    # Print current path entries and contents of the added folder to help debug import issues
+    print(f"sys.path[0:3] = {sys.path[0:3]}")
+    try:
+        print(f"Back-End directory listing: {list(BACKEND_DIR.iterdir())}")
+    except Exception as e:
+        print("Failed to list Back-End directory: ", e)
 from fastapi.staticfiles import StaticFiles
 
 from api_router.router import api_router
