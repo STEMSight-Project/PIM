@@ -12,6 +12,17 @@ jest.mock("next/navigation", () => ({
 }));
 
 import { useRecordings } from "@/hooks";
+// Mock auth hook so DashboardLayout can render in tests
+jest.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    user: { email: "tester@example.com", first_name: "Test", last_name: "User" },
+    logout: jest.fn(),
+    isLoading: false,
+    isAuthenticated: true,
+    login: jest.fn(),
+    refreshUser: jest.fn(),
+  }),
+}));
 import "@testing-library/jest-dom";
 import { render, screen, fireEvent } from "@testing-library/react";
 
