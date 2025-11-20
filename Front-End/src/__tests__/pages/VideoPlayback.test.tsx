@@ -80,7 +80,7 @@ describe("VideoPlaybackPage", () => {
 
     render(<VideoPlaybackPage />);
 
-    expect(screen.getByText(/No Recorded Sessions/i)).toBeInTheDocument();
+    expect(screen.getByText(/No Archived Recordings/i)).toBeInTheDocument();
   });
 
   it("renders sessions grouped by ambulance and allows expand", () => {
@@ -108,7 +108,7 @@ describe("VideoPlaybackPage", () => {
     render(<VideoPlaybackPage />);
 
     // Header and stats
-    expect(screen.getByText(/Recorded Sessions by Ambulance/i)).toBeInTheDocument();
+    expect(screen.getByText(/Archived Camera Recordings/i)).toBeInTheDocument();
     expect(screen.getByText(/Total Recordings/i)).toBeInTheDocument();
 
     // Ambulance group collapsed by default; expand by clicking the ambulance header
