@@ -31,6 +31,8 @@ By combining **edge computing**, **computer vision**, and **machine learning**, 
  main dashboard | <img width="1307" height="866" alt="image" src="https://github.com/user-attachments/assets/77e40c0a-d051-4c48-95ba-0617de66d790" />
  streaming dashboard | <img width="1219" height="778" alt="image" src="https://github.com/user-attachments/assets/14205763-a4fa-4da0-8c4f-c238371a118e" />
  playback page | <img width="1217" height="726" alt="image" src="https://github.com/user-attachments/assets/cfad5bf1-a721-40b5-930b-3903b2cf1ea5" />
+ recent sessions page | <img width="1223" height="780" alt="image" src="https://github.com/user-attachments/assets/2af99f77-51ff-4940-b728-af7431655068" /> |
+
 
 
 
