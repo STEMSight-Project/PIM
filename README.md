@@ -23,12 +23,9 @@ By combining **edge computing**, **computer vision**, and **machine learning**, 
 
 | Feature | Preview |
 | :--- | :--- |
-| **Dashboard Overview**<br>Real-time monitoring of multiple camera feeds. | ![Dashboard Overview](https://github.com/user-attachments/assets/e4975e16-84d4-41da-bfce-4849d732eb41) |
 | **Main Dashboard**<br>Central hub for system status and alerts. | ![Main Dashboard](https://github.com/user-attachments/assets/77e40c0a-d051-4c48-95ba-0617de66d790) |
 | **Streaming Interface**<br>Live WebRTC video stream with low latency. | ![Streaming Dashboard](https://github.com/user-attachments/assets/14205763-a4fa-4da0-8c4f-c238371a118e) |
-| **AI Detection Panel**<br>Live posture classification with confidence scores. | ![Detection Panel](https://github.com/user-attachments/assets/43201b92-210f-4900-939d-03bf0cce1743) |
 | **Playback & Review**<br>Replay recorded sessions with timeline controls. | ![Playback Page](https://github.com/user-attachments/assets/cfad5bf1-a721-40b5-930b-3903b2cf1ea5) |
-| **Patient Profiles**<br>Detailed medical history and session logs. | ![Patient Profiles](https://github.com/user-attachments/assets/1226fefd-6a3a-4371-8f7d-307c578d7746) |
 | **Recent Sessions**<br>History of past monitoring activities. | ![Recent Sessions](https://github.com/user-attachments/assets/2af99f77-51ff-4940-b728-af7431655068) |
 | **ERD**<br>Relationship diagram of supabase tables. | ![Edge Stream Simulation](https://github.com/user-attachments/assets/19edfff5-49a9-484f-8240-d7aaad03d763) |
 | **Raspberry pi 4**<br>Edge device, meant to run ai inference and handle video recording in ambulances. | ![AI Output](https://github.com/user-attachments/assets/3cda8c3a-1f19-468b-acfb-10ee6441a871) |
