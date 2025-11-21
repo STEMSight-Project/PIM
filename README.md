@@ -46,43 +46,135 @@ By combining **edge computing**, **computer vision**, and **machine learning**, 
 
 ---
 
-## 🧪 Testing  
+# STEMSight PIM - Verified Test Command Reference
 
-### Automated Testing  
+This appendix lists all test execution commands and environments drawn directly from the System Test Report for **Project PIM (iddCuties Team)**.
 
-**Backend (FastAPI):**  
+---
 
-```bash
-cd Back-End
-pytest
-```
+## 🧩 Test Environment Setup
 
-**Frontend (Next.js):**
+### Front-End
 
 ```bash
 cd Front-End
-npm test
+npm install        # Node/npm bundled with Next.js ^15.2.4
+npm run test       # Runs full Jest suite
+# or for targeted specs:
+npm test -- <pattern>
 ```
 
-### Manual Streaming Tests
+### Back-End
 
-Use `broadcaster.py` to simulate live camera feeds:
+```bash
+cd Back-End
+python -m venv .venv
+.venv\Scripts\activate   # Windows PowerShell
+pip install -r requirements.txt
+pytest                   # Full suite
+python -m pytest tests/<file>::<test>  # Targeted run
+```
+
+**System baseline:** Windows 11 + PowerShell 5.1 terminals.
+**Python version:** 3.11
+
+---
+
+## 🧠 Backend Model & Integration Tests
+
+| Test                            | Command                                                                                                                                                 | Notes                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **Single View Model Loading**   | `cd Back-End/testing_files && python test_single_view.py`                                                                                               | Confirms single-view model loads and infers correctly  |
+| **Multi View Model Test**       | `cd Back-End && python training_tests.py`                                                                                                               | Validates training logic for multi-view PoseTCN models |
+| **Single View PoseTCN Test**    | `cd Back-End && python test_pose_tcn_single_view.py`                                                                                                    | Checks architecture and inference consistency          |
+| **Model Discovery/Loading**     | `cd Back-End && python test_model.py`                                                                                                                   | Scans model directories for valid checkpoints          |
+| **Broadcaster Unit Tests**      | `cd Back-End && pytest tests\test_broadcaster.py`                                                                                                       | Unit-level verification for broadcaster methods        |
+| **Live Inference Test**         | `cd Back-End && python test_live.py --ckpt C:\runs\single_view_f1_bn_t240_gamma175_cm_tremor\best_single_view_f1_bn_t240_gamma175_cm_tremor.pt --T 240` | Validates end-to-end real-time inference               |
+| **Broadcaster Functional Test** | `cd Back-End/Testing_files && python broadcaster.py --ambulance_number 001 --room 001 --video_device "Logitech BRIO"`                                   | Simulates streaming + Supabase interaction             |
+
+---
+
+## 🎥 Annotated Video Generator Tests
+
+### Multi-View
+
+```bash
+python annotated_video_generator.py \
+  "$env:USERPROFILE\Desktop\2025-06-01 08-31-38.mkv" \
+  --output "$env:USERPROFILE\Desktop\annotated_cnn_test.mp4" \
+  --model "C:\runs\sv_t240_noMix_attn02_warp06_rebal\best_sv_t240_noMix_attn02_warp06_rebal.pt" \
+  --skip-frames 1
+```
+
+### Single-View
+
+```bash
+python single_annotated.py \
+  "$env:USERPROFILE\Desktop\2025-06-01 08-31-38.mkv" \
+  --output "$env:USERPROFILE\Desktop\annotated_cnn_test1.mp4" \
+  --model "runs\f1_plus\best_f1_plus.pt" \
+  --skip-frames 1
+```
+
+**Expected result:** Annotated video with overlayed skeleton, live predictions, and confidence summary output.
+
+---
+
+## 💻 Front-End Test Suite
+
+**Run all automated Jest tests:**
+
+```bash
+cd Front-End
+npm run test
+```
+
+**Run a specific file:**
+
+```bash
+npm test -- src/__tests__/Dashboard.test.tsx
+```
+
+**Libraries & Versions:**
+
+* jest 30.2.0
+* jest-environment-jsdom 30.2.0
+* ts-jest 29.4.4
+* @testing-library/react 16.3.0
+* @testing-library/jest-dom 6.8.0
+
+---
+
+## ⚙️ 3rd-Party Back-End Testing Libraries
+
+* pytest ≥ 7.4.0
+* pytest-asyncio ≥ 0.21.0
+* pytest-cov ≥ 4.1.0
+* pytest-mock ≥ 3.11.0
+
+---
+
+## 🧪 Edge Device / RPi Tests
+
+Run the local broadcaster simulation:
 
 ```bash
 cd Back-End/Testing_files
-python broadcaster.py --room test_room --video_device "Logitech BRIO"
+python broadcaster.py --ambulance_number 001 --room 001 --video_device "Logitech BRIO"
 ```
 
-For real Raspberry Pi devices:
+On the Raspberry Pi hardware:
 
 ```bash
 cd Raspberry-Pi
+pip install -r requirements-rpi.txt
 python3 pose_model_capture.py --device camera_module
 ```
 
-These tests verify **pose detection**, **Supabase data writes**, and **streaming stability**.
+**Expected Result:** Stream initializes correctly, backend receives data packets, and live prediction output appears in terminal.
 
 ---
+
 
 ## ⚙️ Download, Setup & Run
 
