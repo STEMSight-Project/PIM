@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
   async rewrites() {
   // ✅ NEW / FIXED
 // We ignore the environment variable and force the correct HTTPS address
-    const backendUrl = "https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net";
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
     return [
       {
