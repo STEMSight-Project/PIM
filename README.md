@@ -26,7 +26,8 @@ By combining **edge computing**, **computer vision**, and **machine learning**, 
 | **Dashboard Overview** – Displays live streaming sessions from multiple Raspberry Pi cameras. | ![Dashboard Screenshot](https://github.com/user-attachments/assets/e4975e16-84d4-41da-bfce-4849d732eb41) |
 | **Detection Panel** – AI-powered posture/movement classification with confidence scoring. | ![Detection Panel](https://github.com/user-attachments/assets/43201b92-210f-4900-939d-03bf0cce1743) |
 | **Patient Profiles** – View detection history, session stats, and medical data. | ![Patient Profiles](https://github.com/user-attachments/assets/1226fefd-6a3a-4371-8f7d-307c578d7746) |
-| **Edge Stream Simulation** – Backend test running with WebRTC video input. | ![Edge Stream](https://github.com/user-attachments/assets/76ff5830-a69b-439e-a7cb-7c2a36e87457) |
+| **Edge Stream Simulation** – Backend test running with WebRTC video input. | <img width="1267" height="915" alt="image" src="https://github.com/user-attachments/assets/19edfff5-49a9-484f-8240-d7aaad03d763" />
+ |
 | **AI Model Inference Output** – Example classification of posture sequence. | ![AI Output](https://github.com/user-attachments/assets/3cda8c3a-1f19-468b-acfb-10ee6441a871) |
  main dashboard | <img width="1307" height="866" alt="image" src="https://github.com/user-attachments/assets/77e40c0a-d051-4c48-95ba-0617de66d790" />
  streaming dashboard | <img width="1219" height="778" alt="image" src="https://github.com/user-attachments/assets/14205763-a4fa-4da0-8c4f-c238371a118e" />
