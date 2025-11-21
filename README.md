@@ -1,4 +1,4 @@
-# STEMSight PIM — Posture Intelligence Monitoring  
+# STEMSight PIM — Posture Involuntary Movement  
 
 ![Project Logo](https://github.com/user-attachments/assets/f02eda1f-1769-4865-ad06-d2790e286197)
 
@@ -6,7 +6,7 @@
 
 ## 🧠 Project Description  
 
-**STEMSight PIM** (Posture Intelligence Monitoring) is a **real-time AI application** designed to detect and classify abnormal postures and involuntary movements from live video streams. Using camera modules on Raspberry Pi 4 edge devices, the system analyzes patient movement through MediaPipe pose estimation and custom PyTorch neural networks.  
+**STEMSight PIM** is a **real-time AI application** designed to detect and classify abnormal postures and involuntary movements from live video streams. Using camera modules on Raspberry Pi 4 edge devices, the system analyzes patient movement through MediaPipe pose estimation and custom PyTorch neural networks.  
 
 The application was developed to assist **healthcare providers and first responders** by automatically identifying potential neurological distress during **patient transport in ambulances**. It delivers instant visual feedback and alerts through a **Next.js dashboard**, allowing remote clinicians to monitor multiple live camera feeds securely and efficiently.  
 
