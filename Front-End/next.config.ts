@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
   // Proxy API requests to backend
   async rewrites() {
     const backendUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      process.env.NEXT_PUBLIC_API_URL;
 
     return [
       {
