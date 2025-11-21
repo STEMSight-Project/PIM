@@ -246,20 +246,176 @@ if (res.data) { /* handle success */ } else { /* handle error */ }
 
 ---
 
-## 🌐 Deployment Architecture
+# 🚀 Deployment Appendix (Azure)
 
+This app deploys **both** Frontend (Next.js) and Backend (FastAPI) to **Azure App Service** and uses **Supabase (PostgreSQL)** for data/storage. Raspberry Pi devices stream to the backend over WebRTC/REST.
+
+---
+
+## 🧩 Prerequisites
+
+- Azure subscription + Azure CLI:
+  
+  ```bash
+  az login
+  az account set --subscription "<YOUR_SUBSCRIPTION_NAME_OR_ID>"
+  ```
+
+- **Backend**: Python 3.11, `uvicorn`, `requirements.txt`
+- **Frontend**: Node 18+, `npm run build` succeeds locally
+- **Supabase**: Project URL + keys (Anon and/or Service Role)
+
+---
+
+## ⚙️ Environment Variables
+
+### Backend (FastAPI)
+
+Set these as **App Settings** in Azure Web App → Configuration → Application settings:
+
+| Variable            | Description                     |
+| ------------------- | ------------------------------- |
+| `SUPABASE_URL`      | Supabase project endpoint       |
+| `SUPABASE_ANON_KEY` | Public API key                  |
+| `JWT_SECRET`        | Token signing secret            |
+| `CORS_ORIGINS`      | Comma-separated frontend URLs   |
+| `MODEL_PATH`        | Optional: model checkpoint path |
+
+### Frontend (Next.js)
+
+| Variable                   | Example                                                                |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_BASE_URL` | `https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net` |
+
+---
+
+## ☁️ Backend Deploy (FastAPI → Azure App Service)
+
+### Option A — CLI Quick Create
+
+```bash
+az group create -n pim-rg -l westus3
+az appservice plan create -g pim-rg -n pim-plan --sku B1 --is-linux
+az webapp create -g pim-rg -p pim-plan -n fastapibackend-amfucydqayg9h8gb --runtime "PYTHON:3.11"
+
+# App settings
+az webapp config appsettings set -g pim-rg -n fastapibackend-amfucydqayg9h8gb --settings \
+  SUPABASE_URL="https://XXXX.supabase.co" \
+  SUPABASE_ANON_KEY="XXXX" \
+  JWT_SECRET="change-me" \
+  CORS_ORIGINS="https://nextjsfrontend-c0cydrgwa3ckdxgp.westus3-01.azurewebsites.net,http://localhost:3000"
+
+# Deploy from local directory (OneDeploy)
+az webapp deploy \
+  --resource-group pim-rg \
+  --name fastapibackend-amfucydqayg9h8gb \
+  --src-path ./Back-End \
+  --type zip
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ Edge Devices    │    │ Cloud Backend   │    │ Web Frontend    │
-│ (RPi 4)         │───▶│ AWS/Azure (API) │───▶│ Vercel/Netlify  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                       ┌─────────────────┐
-                       │ Database        │
-                       │ Supabase/Postgres
-                       └─────────────────┘
+
+### Option B — GitHub Actions (OneDeploy)
+
+Use the `azure/webapps-deploy@v3` GitHub Action to deploy the backend ZIP.
+If you see **409 Conflict**, cancel concurrent runs or use **deployment slots**.
+
+**Startup command:**
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 120
+```
+
+**Production URL:**
+`https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net/docs`
+
+> 📝 **FFmpeg note:** Azure App Service doesn't include FFmpeg. You've disabled server-side recording. To enable it:
+> 
+> * Use a custom container with FFmpeg installed, or
+> * Bundle a static binary in your app folder and add it to PATH.
+
+---
+
+## 🖥️ Frontend Deploy (Next.js → Azure App Service)
+
+```bash
+az webapp create -g pim-rg -p pim-plan -n nextjsfrontend-c0cydrgwa3ckdxgp --runtime "NODE:18LTS"
+
+az webapp config appsettings set -g pim-rg -n nextjsfrontend-c0cydrgwa3ckdxgp --settings \
+  NEXT_PUBLIC_API_BASE_URL="https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net"
+
+az webapp deploy \
+  --resource-group pim-rg \
+  --name nextjsfrontend-c0cydrgwa3ckdxgp \
+  --src-path ./Front-End \
+  --type zip
+```
+
+**Build commands:**
+
+```bash
+npm install
+npm run build
+npm start   # or next start
+```
+
+**Production URL:**
+`https://nextjsfrontend-c0cydrgwa3ckdxgp.westus3-01.azurewebsites.net`
+
+---
+
+## 🔐 CORS, WebSockets & HTTPS
+
+* Add frontend origins to backend `CORS_ORIGINS`.
+* Enable WebSockets: Azure Portal → App Settings → **Web sockets ON**.
+* Always use HTTPS for camera/mic access.
+
+---
+
+## 🧪 Post-Deployment Checks
+
+1. Verify backend health at `/docs` endpoint.
+2. Check that frontend `NEXT_PUBLIC_API_BASE_URL` points to production backend.
+3. Confirm WebRTC streams connect and predictions appear.
+4. Optionally simulate an ambulance camera stream:
+
+   ```bash
+   cd Back-End/Testing_files
+   python broadcaster.py --ambulance_number 001 --room 001 --video_device "Logitech BRIO"
+   ```
+
+---
+
+## 🧱 Optional: Deployment Slots
+
+Create a staging slot:
+
+```bash
+az webapp deployment slot create -g pim-rg -n fastapibackend-amfucydqayg9h8gb --slot staging
+```
+
+Swap after validation:
+
+```bash
+az webapp deployment slot swap -g pim-rg -n fastapibackend-amfucydqayg9h8gb --slot staging
 ```
 
 ---
+
+## 🧩 Common Issues
+
+| Issue                        | Fix                                    |
+| ---------------------------- | -------------------------------------- |
+| **409 Conflict**             | Cancel concurrent deploys or use slots |
+| **WebRTC not connecting**    | Enable WebSockets, check CORS & HTTPS  |
+| **FFmpeg missing**           | Custom container or static binary      |
+| **Environment vars ignored** | Restart the Web App                    |
+
+---
+
+## 📎 Reference
+
+* **Backend API (Prod):** [https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net/docs](https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net/docs)
+* **Frontend (Prod):** [https://nextjsfrontend-c0cydrgwa3ckdxgp.westus3-01.azurewebsites.net](https://nextjsfrontend-c0cydrgwa3ckdxgp.westus3-01.azurewebsites.net)
+
 
 ## ⚙️ Troubleshooting
 
