@@ -411,12 +411,6 @@ az webapp deployment slot swap -g pim-rg -n fastapibackend-amfucydqayg9h8gb --sl
 
 ---
 
-## 📎 Reference
-
-* **Backend API (Prod):** [https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net/docs](https://fastapibackend-amfucydqayg9h8gb.westus3-01.azurewebsites.net/docs)
-* **Frontend (Prod):** [https://nextjsfrontend-c0cydrgwa3ckdxgp.westus3-01.azurewebsites.net](https://nextjsfrontend-c0cydrgwa3ckdxgp.westus3-01.azurewebsites.net)
-
-
 ## ⚙️ Troubleshooting
 
 * **CORS errors:** Add your frontend origin to backend CORS settings.
