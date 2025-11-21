@@ -29,6 +29,8 @@ By combining **edge computing**, **computer vision**, and **machine learning**, 
 | **Edge Stream Simulation** – Backend test running with WebRTC video input. | ![Edge Stream](https://github.com/user-attachments/assets/76ff5830-a69b-439e-a7cb-7c2a36e87457) |
 | **AI Model Inference Output** – Example classification of posture sequence. | ![AI Output](https://github.com/user-attachments/assets/3cda8c3a-1f19-468b-acfb-10ee6441a871) |
  main dashboard <img width="1307" height="866" alt="image" src="https://github.com/user-attachments/assets/77e40c0a-d051-4c48-95ba-0617de66d790" />
+ streaming dashboard <img width="1219" height="778" alt="image" src="https://github.com/user-attachments/assets/14205763-a4fa-4da0-8c4f-c238371a118e" />
+
 
 ---
 
