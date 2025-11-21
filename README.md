@@ -154,27 +154,6 @@ npm test -- src/__tests__/Dashboard.test.tsx
 
 ---
 
-## 🧪 Edge Device / RPi Tests
-
-Run the local broadcaster simulation:
-
-```bash
-cd Back-End/Testing_files
-python broadcaster.py --ambulance_number 001 --room 001 --video_device "Logitech BRIO"
-```
-
-On the Raspberry Pi hardware:
-
-```bash
-cd Raspberry-Pi
-pip install -r requirements-rpi.txt
-python3 pose_model_capture.py --device camera_module
-```
-
-**Expected Result:** Stream initializes correctly, backend receives data packets, and live prediction output appears in terminal.
-
----
-
 
 ## ⚙️ Download, Setup & Run
 
