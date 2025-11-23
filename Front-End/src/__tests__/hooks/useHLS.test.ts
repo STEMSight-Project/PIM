@@ -7,11 +7,12 @@ import { useHLS } from "@/hooks/useHLS";
 import { hlsService } from "@/services/hlsService";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import Hls from "hls.js";
+import { vi } from "vitest";
 
 // Mock dependencies
-jest.mock("@/services/hlsService");
-jest.mock("hls.js", () => {
-  const mockHlsClass = jest.fn();
+vi.mock("@/services/hlsService");
+vi.mock("hls.js", () => {
+  const mockHlsClass = vi.fn();
   return {
     __esModule: true,
     default: mockHlsClass,
@@ -23,7 +24,7 @@ jest.mock("hls.js", () => {
   };
 });
 
-const mockHlsService = hlsService as jest.Mocked<typeof hlsService>;
+const mockHlsService = hlsService as any;
 
 describe("useHLS", () => {
   let mockHlsInstance: any;
@@ -32,33 +33,31 @@ describe("useHLS", () => {
   beforeEach(() => {
     // Mock HLS instance
     mockHlsInstance = {
-      loadSource: jest.fn(),
-      attachMedia: jest.fn(),
-      on: jest.fn(),
-      destroy: jest.fn(),
-      startLoad: jest.fn(),
-      stopLoad: jest.fn(),
-      recoverMediaError: jest.fn(),
+      loadSource: vi.fn(),
+      attachMedia: vi.fn(),
+      on: vi.fn(),
+      destroy: vi.fn(),
+      startLoad: vi.fn(),
+      stopLoad: vi.fn(),
+      recoverMediaError: vi.fn(),
       loadLevel: -1, // Default to auto quality
       media: null,
     };
 
     // Mock Hls constructor to return mockHlsInstance
-    (Hls as any).isSupported = jest.fn().mockReturnValue(true);
-    (Hls as jest.MockedClass<typeof Hls>).mockImplementation(
-      () => mockHlsInstance
-    );
+    (Hls as any).isSupported = vi.fn().mockReturnValue(true);
+    (Hls as any).mockImplementation(() => mockHlsInstance);
 
     // Mock video element
     mockVideoElement = document.createElement("video");
-    mockVideoElement.play = jest.fn().mockResolvedValue(undefined);
-    mockVideoElement.pause = jest.fn();
+    mockVideoElement.play = vi.fn().mockResolvedValue(undefined);
+    mockVideoElement.pause = vi.fn();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe("initialization", () => {
@@ -88,11 +87,11 @@ describe("useHLS", () => {
 
   describe("status polling", () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     it("should start status polling when roomId is provided", async () => {
-      mockHlsService.pollRecordingStatus = jest.fn().mockReturnValue(() => {});
+      mockHlsService.pollRecordingStatus = vi.fn().mockReturnValue(() => {});
 
       renderHook(() =>
         useHLS({
@@ -119,7 +118,7 @@ describe("useHLS", () => {
       };
 
       let statusCallback: (status: any) => void;
-      mockHlsService.pollRecordingStatus = jest.fn(
+      mockHlsService.pollRecordingStatus = vi.fn(
         (roomId, callback, intervalMs) => {
           statusCallback = callback;
           return () => {};
@@ -145,8 +144,8 @@ describe("useHLS", () => {
     });
 
     it("should cleanup polling on unmount", async () => {
-      const cleanupFn = jest.fn();
-      mockHlsService.pollRecordingStatus = jest.fn().mockReturnValue(cleanupFn);
+      const cleanupFn = vi.fn();
+      mockHlsService.pollRecordingStatus = vi.fn().mockReturnValue(cleanupFn);
 
       const { unmount } = renderHook(() =>
         useHLS({ roomId: "AMB-001-ROOM-001" })

@@ -1,0 +1,188 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Input Component > Snapshots > should match snapshot - default input 1`] = `
+<div
+  class="space-y-1"
+>
+  <input
+    class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    id="test-input-1"
+    placeholder="Enter text"
+  />
+</div>
+`;
+
+exports[`Input Component > Snapshots > should match snapshot - disabled state 1`] = `
+<div
+  class="space-y-1"
+>
+  <label
+    class="block text-sm font-medium text-gray-700"
+    for="test-input-5"
+  >
+    Disabled
+  </label>
+  <input
+    class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    disabled=""
+    id="test-input-5"
+    value="Cannot edit"
+  />
+</div>
+`;
+
+exports[`Input Component > Snapshots > should match snapshot - email type 1`] = `
+<div
+  class="space-y-1"
+>
+  <label
+    class="block text-sm font-medium text-gray-700"
+    for="test-input-9"
+  >
+    Email
+  </label>
+  <input
+    class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    id="test-input-9"
+    placeholder="you@example.com"
+    type="email"
+  />
+</div>
+`;
+
+exports[`Input Component > Snapshots > should match snapshot - number type 1`] = `
+<div
+  class="space-y-1"
+>
+  <label
+    class="block text-sm font-medium text-gray-700"
+    for="test-input-10"
+  >
+    Age
+  </label>
+  <input
+    class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    id="test-input-10"
+    max="120"
+    min="0"
+    type="number"
+  />
+</div>
+`;
+
+exports[`Input Component > Snapshots > should match snapshot - required field 1`] = `
+<div
+  class="space-y-1"
+>
+  <label
+    class="block text-sm font-medium text-gray-700"
+    for="test-input-7"
+  >
+    Required Field
+  </label>
+  <input
+    class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    id="test-input-7"
+    required=""
+  />
+</div>
+`;
+
+exports[`Input Component > Snapshots > should match snapshot - with custom className 1`] = `
+<div
+  class="space-y-1"
+>
+  <label
+    class="block text-sm font-medium text-gray-700"
+    for="test-input-8"
+  >
+    Custom
+  </label>
+  <input
+    class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 custom-class"
+    id="test-input-8"
+  />
+</div>
+`;
+
+exports[`Input Component > Snapshots > should match snapshot - with error 1`] = `
+<div
+  class="space-y-1"
+>
+  <label
+    class="block text-sm font-medium text-gray-700"
+    for="test-input-3"
+  >
+    Email
+  </label>
+  <input
+    class="flex h-10 w-full rounded-md border bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-red-500 focus-visible:ring-red-500"
+    id="test-input-3"
+    placeholder="you@example.com"
+  />
+  <p
+    class="text-sm text-red-600"
+  >
+    Invalid email address
+  </p>
+</div>
+`;
+
+exports[`Input Component > Snapshots > should match snapshot - with helper text 1`] = `
+<div
+  class="space-y-1"
+>
+  <label
+    class="block text-sm font-medium text-gray-700"
+    for="test-input-4"
+  >
+    Password
+  </label>
+  <input
+    class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    id="test-input-4"
+    type="password"
+  />
+  <p
+    class="text-sm text-gray-500"
+  >
+    Must be at least 8 characters
+  </p>
+</div>
+`;
+
+exports[`Input Component > Snapshots > should match snapshot - with label 1`] = `
+<div
+  class="space-y-1"
+>
+  <label
+    class="block text-sm font-medium text-gray-700"
+    for="test-input-2"
+  >
+    Username
+  </label>
+  <input
+    class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    id="test-input-2"
+    placeholder="Enter username"
+  />
+</div>
+`;
+
+exports[`Input Component > Snapshots > should match snapshot - with value 1`] = `
+<div
+  class="space-y-1"
+>
+  <label
+    class="block text-sm font-medium text-gray-700"
+    for="test-input-6"
+  >
+    Name
+  </label>
+  <input
+    class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    id="test-input-6"
+    value="John Doe"
+  />
+</div>
+`;

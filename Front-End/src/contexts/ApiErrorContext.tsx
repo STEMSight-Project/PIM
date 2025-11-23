@@ -54,8 +54,7 @@ export function ApiErrorProvider({ children }: { children: ReactNode }) {
     (e) =>
       e.status === 408 ||
       e.status === 0 ||
-      e.message.toLowerCase().includes("timeout") ||
-      e.message.toLowerCase().includes("network")
+      e.message.toLowerCase().includes("timeout")
   );
   const hasTimeoutError = recentTimeouts.length >= TIMEOUT_THRESHOLD;
 

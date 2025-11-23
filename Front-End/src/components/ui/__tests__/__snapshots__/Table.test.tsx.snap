@@ -1,0 +1,310 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Table Component > Snapshots > should match snapshot - clickable rows 1`] = `
+<div
+  class="overflow-x-auto"
+>
+  <table
+    class="min-w-full divide-y divide-gray-200"
+  >
+    <tbody
+      class="bg-white divide-y divide-gray-200"
+    >
+      <tr
+        class="cursor-pointer hover:bg-gray-50 transition-colors"
+      >
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left"
+        >
+          Clickable Row
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`;
+
+exports[`Table Component > Snapshots > should match snapshot - complex table 1`] = `
+<div
+  class="overflow-x-auto"
+>
+  <table
+    class="min-w-full divide-y divide-gray-200"
+  >
+    <thead
+      class="bg-gray-50"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-left"
+        >
+          ID
+        </th>
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-left"
+        >
+          Patient
+        </th>
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-center"
+        >
+          Status
+        </th>
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-right"
+        >
+          Date
+        </th>
+      </tr>
+    </thead>
+    <tbody
+      class="bg-white divide-y divide-gray-200"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left"
+        >
+          001
+        </td>
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left"
+        >
+          John Doe
+        </td>
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-center"
+        >
+          Active
+        </td>
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-right"
+        >
+          2024-01-15
+        </td>
+      </tr>
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left"
+        >
+          002
+        </td>
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left"
+        >
+          Jane Smith
+        </td>
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-center"
+        >
+          Pending
+        </td>
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-right"
+        >
+          2024-01-16
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`;
+
+exports[`Table Component > Snapshots > should match snapshot - empty table 1`] = `
+<div
+  class="overflow-x-auto"
+>
+  <table
+    class="min-w-full divide-y divide-gray-200"
+  >
+    <thead
+      class="bg-gray-50"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-left"
+        >
+          Column 1
+        </th>
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-left"
+        >
+          Column 2
+        </th>
+      </tr>
+    </thead>
+    <tbody
+      class="bg-white divide-y divide-gray-200"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-center"
+        >
+          No data available
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`;
+
+exports[`Table Component > Snapshots > should match snapshot - simple table 1`] = `
+<div
+  class="overflow-x-auto"
+>
+  <table
+    class="min-w-full divide-y divide-gray-200"
+  >
+    <thead
+      class="bg-gray-50"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-left"
+        >
+          Name
+        </th>
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-left"
+        >
+          Age
+        </th>
+      </tr>
+    </thead>
+    <tbody
+      class="bg-white divide-y divide-gray-200"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left"
+        >
+          John Doe
+        </td>
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left"
+        >
+          30
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`;
+
+exports[`Table Component > Snapshots > should match snapshot - with alignment 1`] = `
+<div
+  class="overflow-x-auto"
+>
+  <table
+    class="min-w-full divide-y divide-gray-200"
+  >
+    <thead
+      class="bg-gray-50"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-left"
+        >
+          Name
+        </th>
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-center"
+        >
+          Age
+        </th>
+        <th
+          class="px-6 py-4 text-sm font-medium text-gray-900 tracking-wider uppercase text-right"
+        >
+          Score
+        </th>
+      </tr>
+    </thead>
+    <tbody
+      class="bg-white divide-y divide-gray-200"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left"
+        >
+          John
+        </td>
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-center"
+        >
+          30
+        </td>
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-right"
+        >
+          95
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`;
+
+exports[`Table Component > Snapshots > should match snapshot - with custom className 1`] = `
+<div
+  class="overflow-x-auto"
+>
+  <table
+    class="min-w-full divide-y divide-gray-200 custom-table-class"
+  >
+    <thead
+      class="bg-gray-50 custom-header-class"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors custom-row-class"
+      >
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left custom-cell-class"
+        >
+          Header
+        </td>
+      </tr>
+    </thead>
+  </table>
+</div>
+`;
+
+exports[`Table Component > Snapshots > should match snapshot - with hover effect 1`] = `
+<div
+  class="overflow-x-auto"
+>
+  <table
+    class="min-w-full divide-y divide-gray-200"
+  >
+    <tbody
+      class="bg-white divide-y divide-gray-200"
+    >
+      <tr
+        class="hover:bg-gray-50 transition-colors"
+      >
+        <td
+          class="px-6 py-4 text-sm text-gray-500 text-left"
+        >
+          Hoverable Row
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`;

@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ApiErrorBanner Component > Snapshots > should match snapshot - hidden by default 1`] = `<div />`;
+
+exports[`ApiErrorBanner Component > Snapshots > should match snapshot - network error visible 1`] = `<div />`;
+
+exports[`ApiErrorBanner Component > Snapshots > should match snapshot - timeout error visible 1`] = `<div />`;

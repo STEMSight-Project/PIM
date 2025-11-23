@@ -1,0 +1,32 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Card Component > renders basic card 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm"
+>
+  <h2>
+    Card Title
+  </h2>
+  <p>
+    Card content goes here
+  </p>
+</div>
+`;
+
+exports[`Card Component > renders card with custom className 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm custom-class"
+>
+  Custom Card
+</div>
+`;
+
+exports[`Card Component > renders card with padding variants 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm p-6"
+>
+  <p>
+    Padded Card
+  </p>
+</div>
+`;

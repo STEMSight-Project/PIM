@@ -1,0 +1,339 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Alert Component > Snapshots > should match snapshot - alert with complex content 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-red-50 border-red-200 text-red-800"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    <div>
+      <strong>
+        Error:
+      </strong>
+       Unable to connect to server
+      <ul
+        class="mt-2 ml-4 list-disc"
+      >
+        <li>
+          Check your internet connection
+        </li>
+        <li>
+          Verify server status
+        </li>
+        <li>
+          Contact support if problem persists
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Alert Component > Snapshots > should match snapshot - alert with custom className 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-blue-50 border-blue-200 text-blue-800 mt-4 mb-4"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    Custom styled alert
+  </div>
+</div>
+`;
+
+exports[`Alert Component > Snapshots > should match snapshot - alert with onClose handler 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-yellow-50 border-yellow-200 text-yellow-800"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    Dismissible warning
+  </div>
+  <button
+    class="flex-shrink-0 ml-2 text-current hover:opacity-70"
+  >
+    <svg
+      aria-hidden="true"
+      class="h-5 w-5"
+      data-slot="icon"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  </button>
+</div>
+`;
+
+exports[`Alert Component > Snapshots > should match snapshot - error variant 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-red-50 border-red-200 text-red-800"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    An error occurred. Please try again.
+  </div>
+</div>
+`;
+
+exports[`Alert Component > Snapshots > should match snapshot - error without close button 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-red-50 border-red-200 text-red-800"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    Critical error that cannot be dismissed
+  </div>
+</div>
+`;
+
+exports[`Alert Component > Snapshots > should match snapshot - info variant 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-blue-50 border-blue-200 text-blue-800"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    This is an informational message
+  </div>
+</div>
+`;
+
+exports[`Alert Component > Snapshots > should match snapshot - info with long text 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-blue-50 border-blue-200 text-blue-800"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    This is a very long informational message that contains multiple sentences. It provides detailed information about a particular situation or condition that the user should be aware of. The message continues to provide context and helpful details.
+  </div>
+</div>
+`;
+
+exports[`Alert Component > Snapshots > should match snapshot - success variant 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-green-50 border-green-200 text-green-800"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    Operation completed successfully!
+  </div>
+</div>
+`;
+
+exports[`Alert Component > Snapshots > should match snapshot - success with onClose 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-green-50 border-green-200 text-green-800"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    Success! You can dismiss this message.
+  </div>
+  <button
+    class="flex-shrink-0 ml-2 text-current hover:opacity-70"
+  >
+    <svg
+      aria-hidden="true"
+      class="h-5 w-5"
+      data-slot="icon"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  </button>
+</div>
+`;
+
+exports[`Alert Component > Snapshots > should match snapshot - warning variant 1`] = `
+<div
+  class="flex items-start space-x-3 rounded-md border p-4 bg-yellow-50 border-yellow-200 text-yellow-800"
+>
+  <svg
+    aria-hidden="true"
+    class="h-5 w-5 flex-shrink-0 mt-0.5"
+    data-slot="icon"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <div
+    class="flex-1"
+  >
+    Please review before proceeding
+  </div>
+</div>
+`;

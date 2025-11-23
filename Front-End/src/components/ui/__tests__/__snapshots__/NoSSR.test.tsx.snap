@@ -1,0 +1,66 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`NoSSR Component > Snapshots > should match snapshot - with complex children 1`] = `
+<div>
+  <div
+    class="complex-component"
+  >
+    <h1>
+      Dynamic Content
+    </h1>
+    <p>
+      This content is not server-side rendered
+    </p>
+    <button>
+      Interactive Element
+    </button>
+  </div>
+</div>
+`;
+
+exports[`NoSSR Component > Snapshots > should match snapshot - with multiple children 1`] = `
+<div>
+  <div>
+    Child 1
+  </div>
+  <div>
+    Child 2
+  </div>
+  <div>
+    Child 3
+  </div>
+</div>
+`;
+
+exports[`NoSSR Component > Snapshots > should match snapshot - with nested components 1`] = `
+<div>
+  <div>
+    <header>
+      Header
+    </header>
+    <main>
+      <section>
+        Section 1
+      </section>
+      <section>
+        Section 2
+      </section>
+    </main>
+    <footer>
+      Footer
+    </footer>
+  </div>
+</div>
+`;
+
+exports[`NoSSR Component > Snapshots > should match snapshot - with simple children 1`] = `<div />`;
+
+exports[`NoSSR Component > Snapshots > should match snapshot - with styled components 1`] = `
+<div>
+  <div
+    class="p-4 bg-blue-500 text-white rounded-lg shadow-md"
+  >
+    Styled content
+  </div>
+</div>
+`;

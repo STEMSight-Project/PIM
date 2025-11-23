@@ -1,0 +1,56 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Loading Component > renders large loading spinner 1`] = `
+<div
+  class="flex flex-col items-center justify-center space-y-2"
+>
+  <div
+    class="animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 h-12 w-12"
+  />
+</div>
+`;
+
+exports[`Loading Component > renders medium loading spinner 1`] = `
+<div
+  class="flex flex-col items-center justify-center space-y-2"
+>
+  <div
+    class="animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 h-8 w-8"
+  />
+</div>
+`;
+
+exports[`Loading Component > renders small loading spinner 1`] = `
+<div
+  class="flex flex-col items-center justify-center space-y-2"
+>
+  <div
+    class="animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 h-4 w-4"
+  />
+</div>
+`;
+
+exports[`Loading Component > renders with text 1`] = `
+<div
+  class="flex flex-col items-center justify-center space-y-2"
+>
+  <div
+    class="animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 h-8 w-8"
+  />
+  <p
+    class="text-sm text-gray-600"
+  >
+    Loading data...
+  </p>
+</div>
+`;
+
+exports[`Loading Component > renders without text 1`] = `
+<div
+  class="flex flex-col items-center justify-center space-y-2"
+>
+  <div
+    class="animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 h-8 w-8"
+  />
+</div>
+`;
