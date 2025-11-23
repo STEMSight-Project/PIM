@@ -28,6 +28,7 @@ class AIDetectionResponse(BaseModel):
     processing_time_ms: Optional[int] = None
     processed_on: Optional[str] = "edge"
     created_at: str
+    validation_status: Optional[str] = "pending"
 
 
 @router.get("/ai-detections", response_model=List[AIDetectionResponse])
@@ -210,4 +211,53 @@ async def delete_ai_detection(detection_id: str):
         logger.error(f"❌ Failed to delete AI detection: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to delete detection: {str(e)}"
+        ) from e
+    
+@router.patch("/ai-detections/{detection_id}/validation")
+async def update_ai_detection_validation(
+    detection_id: str,
+    validation_status: str = Query(
+        ..., 
+        regex="^(pending|confirmed|rejected)$",
+        description="New validation status"
+    )
+):
+    """
+    Update validation status for an AI detection
+    
+    Path Parameters:
+    - detection_id: UUID of the AI detection
+    
+    Query Parameters:
+    - validation_status: New status (pending/confirmed/rejected)
+    
+    Returns:
+    - Updated AI detection record
+    
+    """
+    try:
+        logger.info(
+            f"Updating AI detection {detection_id} validation status to: {validation_status}"
+        )
+
+        response = (
+            supabase.table("ai_detections")
+            .update({"validation_status": validation_status})
+            .eq("id", detection_id)
+            .execute()
+        )
+
+        if not response.data or len(response.data) == 0:
+            raise HTTPException(status_code=404, detail="AI detection not found")
+
+        logger.info(f"✅ Updated AI detection validation: {detection_id}")
+        return response.data[0]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Failed to update AI detection validation: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to update validation: {str(e)}"
         ) from e

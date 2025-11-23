@@ -1,5 +1,5 @@
 "use client";
-
+import React from "react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
@@ -19,6 +19,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { movementDetectionService } from "@/services/movementDetectionService";
 import { cn } from "@/utils/cn";
 import type { TimelineDetection } from "@/components/TimelineSyncedDetectionPanel";
+import { aiDetectionService } from "@/services/aiDetectionService";
+import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import type { ValidationStatus } from "@/types/movementDetection";
 
 interface PoseLandmark {
   x: number;
@@ -81,7 +84,7 @@ export default function SessionDetailPage() {
     },
     []
   );
-
+  const [updatingDetections, setUpdatingDetections] = useState<Set<string | number>>(new Set());
   // Initialize movement detections hook BEFORE using recordingDetections
   const {
     detections: recordingDetections,
@@ -125,7 +128,7 @@ export default function SessionDetailPage() {
 
       const fallbackSeconds =
         typeof detection.timestamp === "number" &&
-        Number.isFinite(detection.timestamp)
+          Number.isFinite(detection.timestamp)
           ? detection.timestamp
           : null;
 
@@ -210,7 +213,7 @@ export default function SessionDetailPage() {
       const detectionData = parseDetectionData(closest.detection_data);
       const landmarks = detectionData?.pose_landmarks || null;
       setPlaybackLandmarks(landmarks);
-      
+
       // Set prediction if available
       if (detectionData?.all_probabilities) {
         const top3 = Object.entries(detectionData.all_probabilities)
@@ -397,7 +400,45 @@ export default function SessionDetailPage() {
   const handleBackToSessions = () => {
     router.push("/video-playback");
   };
+  /**
+   * Handle validation status update (confirm/deny)
+   */
+  const handleValidationUpdate = async (
+    detectionId: string | number,
+    newStatus: ValidationStatus
+  ) => {
+    setUpdatingDetections(prev => new Set(prev).add(detectionId));
 
+    try {
+      const result = await aiDetectionService.updateValidationStatus(
+        detectionId,
+        newStatus
+      );
+
+      if (result.success) {
+        // Update local state optimistically
+        setTimelineDetections(prev =>
+          prev.map(d =>
+            d.id === detectionId
+              ? { ...d, validation_status: newStatus }
+              : d
+          )
+        );
+
+        console.log(`✅ Updated detection ${detectionId} to ${newStatus}`);
+      } else {
+        console.error("Failed to update validation:", result.error);
+      }
+    } catch (err) {
+      console.error("Error updating validation:", err);
+    } finally {
+      setUpdatingDetections(prev => {
+        const next = new Set(prev);
+        next.delete(detectionId);
+        return next;
+      });
+    }
+  };
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -789,14 +830,14 @@ export default function SessionDetailPage() {
                         >
                           Your browser does not support the video tag.
                         </video>
-                        
+
                         {/* Skeleton Overlay */}
                         <SkeletonOverlay
                           videoRef={videoRef}
                           landmarks={playbackLandmarks}
                           enabled={!!(playbackLandmarks && playbackLandmarks.length > 0)}
                         />
-                        
+
                         {/* Prediction Badge */}
                         {playbackPrediction && (
                           <div className="absolute top-3 left-3 z-10">
@@ -805,8 +846,8 @@ export default function SessionDetailPage() {
                               playbackPrediction.confidence >= 0.7
                                 ? "bg-emerald-600/90 border-emerald-400/50"
                                 : playbackPrediction.confidence >= 0.5
-                                ? "bg-amber-600/90 border-amber-400/50"
-                                : "bg-red-600/90 border-red-400/50"
+                                  ? "bg-amber-600/90 border-amber-400/50"
+                                  : "bg-red-600/90 border-red-400/50"
                             )}>
                               <div className="text-white">
                                 <p className="text-xs font-semibold uppercase tracking-wider opacity-75 mb-1">
@@ -939,14 +980,14 @@ export default function SessionDetailPage() {
                         const isActive = Math.abs(detection.timestamp - currentTime) < 2;
                         const detectionData = parseDetectionData(detection.detection_data);
                         const hasLandmarks = detectionData?.pose_landmarks;
-                        
+                        const isUpdating = updatingDetections.has(detection.id);  // ADD THIS LINE
+
                         return (
                           <div
                             key={detection.id}
                             onClick={() => handleSeekToTime(detection.timestamp)}
-                            className={`p-3 rounded-lg border-2 transition-all cursor-pointer hover:shadow-md hover:scale-[1.02] ${
-                              isActive ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200' : 'bg-gray-50 border-gray-200'
-                            }`}
+                            className={`p-3 rounded-lg border-2 transition-all cursor-pointer hover:shadow-md hover:scale-[1.02] ${isActive ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200' : 'bg-gray-50 border-gray-200'
+                              }`}
                             title="Click to jump to this detection"
                           >
                             <div className="flex items-center justify-between mb-2">
@@ -961,13 +1002,12 @@ export default function SessionDetailPage() {
                                   {detection.name.replace("_", " ")}
                                 </span>
                               </div>
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                detection.validation_status === "confirmed"
-                                  ? "bg-green-100 text-green-800"
-                                  : detection.validation_status === "rejected"
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${detection.validation_status === "confirmed"
+                                ? "bg-green-100 text-green-800"
+                                : detection.validation_status === "rejected"
                                   ? "bg-red-100 text-red-800"
                                   : "bg-yellow-100 text-yellow-800"
-                              }`}>
+                                }`}>
                                 {detection.validation_status}
                               </span>
                             </div>
@@ -981,6 +1021,48 @@ export default function SessionDetailPage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                 </svg>
                                 Skeleton data available
+                              </div>
+                            )}
+
+                            {/* Confirm/Deny Buttons */}
+                            {detection.validation_status === "pending" ? (
+                              <div
+                                className="flex gap-2 mt-3 pt-3 border-t border-gray-200"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  onClick={() => handleValidationUpdate(detection.id, "confirmed")}
+                                  disabled={isUpdating}
+                                  className="flex-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 disabled:bg-green-300 disabled:cursor-not-allowed text-white text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <CheckCircleIcon className="h-4 w-4" />
+                                  {isUpdating ? "..." : "Confirm"}
+                                </button>
+                                <button
+                                  onClick={() => handleValidationUpdate(detection.id, "rejected")}
+                                  disabled={isUpdating}
+                                  className="flex-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed text-white text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <XCircleIcon className="h-4 w-4" />
+                                  {isUpdating ? "..." : "Deny"}
+                                </button>
+                              </div>
+                            ) : (
+                              /* Reset button - Show for confirmed/rejected detections */
+                              <div
+                                className="flex gap-2 mt-3 pt-3 border-t border-gray-200"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  onClick={() => handleValidationUpdate(detection.id, "pending")}
+                                  disabled={isUpdating}
+                                  className="flex-1 px-3 py-1.5 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                  {isUpdating ? "..." : "Reset to Pending"}
+                                </button>
                               </div>
                             )}
                           </div>
@@ -1040,11 +1122,10 @@ export default function SessionDetailPage() {
                       <button
                         key={recording.id}
                         onClick={() => handleRecordingSelect(recording)}
-                        className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                          selectedRecording?.id === recording.id
-                            ? "border-blue-500 bg-blue-50"
-                            : "border-gray-200 hover:border-gray-300 bg-white"
-                        }`}
+                        className={`w-full text-left p-4 rounded-lg border-2 transition-all ${selectedRecording?.id === recording.id
+                          ? "border-blue-500 bg-blue-50"
+                          : "border-gray-200 hover:border-gray-300 bg-white"
+                          }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">

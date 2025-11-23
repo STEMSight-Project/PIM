@@ -24,6 +24,7 @@ export interface AIDetection {
   processing_time_ms: number;
   processed_on: "edge" | "cloud";
   created_at: string;
+  validation_status?: "pending" | "confirmed" | "rejected";
 }
 
 export interface AIDetectionStats {
@@ -139,10 +140,38 @@ export function subscribeToAIDetections(
     clearInterval(pollInterval);
   };
 }
+/**
+ * Update validation status for an AI detection
+ */
+export async function updateAIDetectionValidationStatus(
+  detectionId: string | number,
+  validationStatus: "pending" | "confirmed" | "rejected"
+) {
+  try {
+    const response = await api.patch(
+      `/ai-detections/${detectionId}/validation?validation_status=${validationStatus}`
+    );
 
+    if (response.error) {
+      console.error("❌ Failed to update AI detection validation:", response.error);
+      return { success: false, data: null, error: response.error };
+    }
+
+    console.log(`✅ Updated AI detection ${detectionId} to ${validationStatus}`);
+    return { success: true, data: response.data, error: null };
+  } catch (error) {
+    console.error("❌ Error updating AI detection validation:", error);
+    return {
+      success: false,
+      data: null,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
 export const aiDetectionService = {
   fetchByRoom: fetchAIDetectionsByRoom,
   fetchBySession: fetchAIDetectionsBySession,
   fetchStats: fetchAIDetectionStats,
   subscribe: subscribeToAIDetections,
+  updateValidationStatus: updateAIDetectionValidationStatus,
 };
