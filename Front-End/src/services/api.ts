@@ -1,6 +1,28 @@
 import { getApiBaseUrl } from "@/lib/apiBase";
 import type { ApiResponse, HttpMethod } from "@/types";
 
+// Rate-limiting and timeout defaults (tunable)
+const MIN_REQUEST_INTERVAL = 250; // ms
+const DEFAULT_TIMEOUT = 15000; // ms
+const REFRESH_IN_PROGRESS_KEY = "__refresh_in_progress";
+
+// Track last request times to prevent accidental rapid re-requests to same endpoint
+const lastRequestTime: Map<string, number> = new Map();
+
+// Global error callback — can be set by UI to show errors
+export type ApiErrorCallback = (payload: {
+  message: string;
+  endpoint: string;
+  timestamp: number;
+  status: number;
+}) => void;
+
+let globalErrorCallback: ApiErrorCallback | null = null;
+
+export function setApiErrorCallback(cb: ApiErrorCallback | null) {
+  globalErrorCallback = cb;
+}
+
 class ApiError extends Error {
   constructor(message: string, public status: number, public details?: any) {
     super(message);
@@ -218,6 +240,8 @@ async function refreshAccessToken(): Promise<boolean> {
     if (data.refresh_token) {
       localStorage.setItem("refresh_token", data.refresh_token);
     }
+    // Successfully refreshed
+    return true;
   } finally {
     sessionStorage.removeItem(REFRESH_IN_PROGRESS_KEY);
   }

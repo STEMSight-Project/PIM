@@ -25,6 +25,13 @@ export interface AmbulanceSession {
 }
 
 class AmbulanceSessionService {
+  private _sessionTimestamp(session: AmbulanceSession): number {
+    // Prefer schema-specific fields, fall back to created_at
+    const timeStr = session.session_start ?? session.started_at ?? session.created_at;
+    if (!timeStr) return 0;
+    const parsed = Date.parse(String(timeStr));
+    return isNaN(parsed) ? 0 : parsed;
+  }
   /**
    * Fetch recent ambulance sessions
    */
@@ -39,11 +46,7 @@ class AmbulanceSessionService {
 
       // Sort by session_start descending and limit
       const sortedSessions = response.data
-        .sort(
-          (a, b) =>
-            new Date(b.session_start).getTime() -
-            new Date(a.session_start).getTime()
-        )
+        .sort((a, b) => this._sessionTimestamp(b) - this._sessionTimestamp(a))
         .slice(0, limit);
 
       return { success: true, data: sortedSessions, error: null };
@@ -98,11 +101,7 @@ class AmbulanceSessionService {
           (session) =>
             session.session_end === null || session.status !== "completed"
         )
-        .sort(
-          (a, b) =>
-            new Date(b.session_start).getTime() -
-            new Date(a.session_start).getTime()
-        );
+        .sort((a, b) => this._sessionTimestamp(b) - this._sessionTimestamp(a));
 
       return { success: true, data: activeSessions, error: null };
     } catch (err) {
