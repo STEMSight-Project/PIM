@@ -1,0 +1,43 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ClientOnly Component > Snapshots > should match snapshot - with children after mount 1`] = `
+<div>
+  <div>
+    Client-side content
+  </div>
+</div>
+`;
+
+exports[`ClientOnly Component > Snapshots > should match snapshot - with complex children 1`] = `
+<div>
+  <div
+    class="complex-component"
+  >
+    <h1>
+      Title
+    </h1>
+    <p>
+      Description
+    </p>
+    <button>
+      Action
+    </button>
+  </div>
+</div>
+`;
+
+exports[`ClientOnly Component > Snapshots > should match snapshot - with custom fallback 1`] = `
+<div>
+  <div>
+    Content
+  </div>
+</div>
+`;
+
+exports[`ClientOnly Component > Snapshots > should match snapshot - with fallback before mount 1`] = `
+<div>
+  <div>
+    Client-side content
+  </div>
+</div>
+`;

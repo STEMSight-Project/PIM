@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+
 import { Button, ClientOnly } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/utils/cn";
@@ -14,14 +16,19 @@ import {
   UserGroupIcon,
   UserIcon,
   VideoCameraIcon,
-  XMarkIcon
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CustomCamera, CustomDash, CustomPatient, CustomRecent, CustomReplay } from "../ui/CustomIcons";
-
+import {
+  CustomCamera,
+  CustomDash,
+  CustomPatient,
+  CustomRecent,
+  CustomReplay,
+} from "../ui/CustomIcons";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -30,12 +37,12 @@ interface DashboardLayoutProps {
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: CustomDash },
   // { name: "Patients", href: "/patients", icon: CustomPatient }, // Temporarily hidden
+  { name: "Live Cameras", href: "/streamingDash", icon: CustomCamera },
   {
     name: "Recent Live Session",
     href: "/recent-live-session",
     icon: CustomRecent,
   },
-  { name: "Live Cameras", href: "/streamingDash", icon: CustomCamera },
   { name: "Video Playback", href: "/video-playback", icon: CustomReplay },
 ];
 
@@ -45,15 +52,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout, user } = useAuth();
-  // Derive display name/email from authenticated user to display in sidebar 
-  const firstName = (user as any)?.first_name ?? (user as any)?.user_metadata?.first_name ?? "";
-  const lastName = (user as any)?.last_name ?? (user as any)?.user_metadata?.last_name ?? "";
+  // Derive display name/email from authenticated user to display in sidebar
+  const firstName =
+    (user as any)?.first_name ?? (user as any)?.user_metadata?.first_name ?? "";
+  const lastName =
+    (user as any)?.last_name ?? (user as any)?.user_metadata?.last_name ?? "";
   const hasName = Boolean(firstName || lastName);
   const displayName = hasName
     ? `Dr. ${[firstName, lastName].filter(Boolean).join(" ")}`
     : user?.email
-      ? `Dr. ${user.email.split("@")[0]}`
-      : "Doctor";
+    ? `Dr. ${user.email.split("@")[0]}`
+    : "Doctor";
   const displayEmail = user?.email ?? "";
 
   // Load collapsed state from localStorage
@@ -185,7 +194,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 scale-105"
                       : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 hover:scale-102",
                     sidebarCollapsed &&
-                    "lg:justify-center lg:space-x-0 lg:w-12 lg:h-12 lg:mx-auto lg:p-0"
+                      "lg:justify-center lg:space-x-0 lg:w-12 lg:h-12 lg:mx-auto lg:p-0"
                   )}
                   onClick={() => setSidebarOpen(false)}
                   title={sidebarCollapsed ? item.name : undefined}

@@ -1,0 +1,85 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ApiErrorContext > should match snapshot - after clearing errors 1`] = `
+<div>
+  <div>
+    <div
+      data-testid="error-count"
+    >
+      0
+    </div>
+    <div
+      data-testid="has-timeout"
+    >
+      no
+    </div>
+    <div
+      data-testid="has-network"
+    >
+      no
+    </div>
+    <button>
+      Add Error
+    </button>
+    <button>
+      Clear Errors
+    </button>
+  </div>
+</div>
+`;
+
+exports[`ApiErrorContext > should match snapshot - initial state 1`] = `
+<div>
+  <div>
+    <div
+      data-testid="error-count"
+    >
+      0
+    </div>
+    <div
+      data-testid="has-timeout"
+    >
+      no
+    </div>
+    <div
+      data-testid="has-network"
+    >
+      no
+    </div>
+    <button>
+      Add Error
+    </button>
+    <button>
+      Clear Errors
+    </button>
+  </div>
+</div>
+`;
+
+exports[`ApiErrorContext > should match snapshot - with timeout errors 1`] = `
+<div>
+  <div>
+    <div
+      data-testid="error-count"
+    >
+      3
+    </div>
+    <div
+      data-testid="has-timeout"
+    >
+      no
+    </div>
+    <div
+      data-testid="has-network"
+    >
+      yes
+    </div>
+    <button>
+      Add Error
+    </button>
+    <button>
+      Clear Errors
+    </button>
+  </div>
+</div>
+`;

@@ -42,6 +42,8 @@ export interface RecordingResponse {
   session_id: string;
   session_name?: string;
   ambulance_number?: string;
+  camera_id?: string; // Camera identifier (e.g., "AMB-002-ROOM-001")
+  recording_path?: string; // Local recording path
   file_path?: string;
   public_video_url?: string;
   duration?: number; // Duration in seconds

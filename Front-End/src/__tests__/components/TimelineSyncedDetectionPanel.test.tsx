@@ -8,14 +8,15 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import TimelineSyncedDetectionPanel from "@/components/TimelineSyncedDetectionPanel";
 import { api } from "@/services/api";
+import { vi } from "vitest";
 
-jest.mock("@/services/api", () => ({
+vi.mock("@/services/api", () => ({
   api: {
-    get: jest.fn(),
+    get: vi.fn(),
   },
 }));
 
-const mockApiGet = api.get as jest.Mock;
+const mockApiGet = api.get as any;
 
 interface RecordingStub {
   id: string;
@@ -75,15 +76,15 @@ const enqueueFetchResponses = ({
 
 describe("TimelineSyncedDetectionPanel", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it("renders detections and supports interactions when data is returned", async () => {
     const detection = createDetection();
     enqueueFetchResponses({ ai: [detection] });
 
-    const onSeekToTime = jest.fn();
-    const onLandmarksChange = jest.fn();
+    const onSeekToTime = vi.fn();
+    const onLandmarksChange = vi.fn();
 
     render(
       <TimelineSyncedDetectionPanel
@@ -96,7 +97,9 @@ describe("TimelineSyncedDetectionPanel", () => {
 
     expect(await screen.findByText(/Timeline Detections/i)).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText("1 detection near current time")).toBeInTheDocument();
+      expect(
+        screen.getByText("1 detection near current time")
+      ).toBeInTheDocument();
     });
 
     const detectionLabel = await screen.findByText(/ballistic/i);
@@ -140,7 +143,9 @@ describe("TimelineSyncedDetectionPanel", () => {
     await screen.findByText(/ballistic/i);
 
     await waitFor(() => {
-      expect(screen.getByText("No detections near current time")).toBeInTheDocument();
+      expect(
+        screen.getByText("No detections near current time")
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByText(/ballistic/i)).toBeInTheDocument();
@@ -172,14 +177,16 @@ describe("TimelineSyncedDetectionPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Recording rec-1 not found/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Recording rec-1 not found/i)
+      ).toBeInTheDocument();
     });
   });
 
   it("invokes onDetectionsReady with converted detections", async () => {
     const detection = createDetection();
     enqueueFetchResponses({ ai: [detection] });
-    const onDetectionsReady = jest.fn();
+    const onDetectionsReady = vi.fn();
 
     render(
       <TimelineSyncedDetectionPanel
@@ -204,7 +211,7 @@ describe("TimelineSyncedDetectionPanel", () => {
   it("supplies prediction summaries via onPredictionChange", async () => {
     const detection = createDetection();
     enqueueFetchResponses({ ai: [detection] });
-    const onPredictionChange = jest.fn();
+    const onPredictionChange = vi.fn();
 
     render(
       <TimelineSyncedDetectionPanel
@@ -262,7 +269,7 @@ describe("TimelineSyncedDetectionPanel", () => {
 
   it("clears prediction callback when detections are outside the time window", async () => {
     enqueueFetchResponses({ ai: [createDetection({ frame_timestamp: "10" })] });
-    const onPredictionChange = jest.fn();
+    const onPredictionChange = vi.fn();
 
     render(
       <TimelineSyncedDetectionPanel

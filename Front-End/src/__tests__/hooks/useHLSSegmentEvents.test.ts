@@ -5,6 +5,7 @@
 
 import { useHLSSegmentEvents } from "@/hooks/useHLSSegmentEvents";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { vi } from "vitest";
 
 // Store the latest EventSource instance created
 let latestEventSource: MockEventSource | null = null;
@@ -78,22 +79,22 @@ describe("useHLSSegmentEvents", () => {
       writable: true,
       configurable: true,
     });
-    mockVideoElement.play = jest.fn().mockResolvedValue(undefined);
+    mockVideoElement.play = vi.fn().mockResolvedValue(undefined);
 
     // Mock HLS instance
     mockHlsInstance = {
-      loadSource: jest.fn(),
-      startLoad: jest.fn(),
-      stopLoad: jest.fn(),
+      loadSource: vi.fn(),
+      startLoad: vi.fn(),
+      stopLoad: vi.fn(),
       loadLevel: -1,
       media: mockVideoElement,
     };
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe("SSE connection", () => {
@@ -138,7 +139,7 @@ describe("useHLSSegmentEvents", () => {
 
   describe("segment events", () => {
     it("should handle new_segment event", async () => {
-      const onSegmentAdded = jest.fn();
+      const onSegmentAdded = vi.fn();
 
       const { result } = renderHook(() =>
         useHLSSegmentEvents({
@@ -319,7 +320,7 @@ describe("useHLSSegmentEvents", () => {
     });
 
     it("should handle connected event", async () => {
-      const onConnected = jest.fn();
+      const onConnected = vi.fn();
 
       const { result } = renderHook(() =>
         useHLSSegmentEvents({
@@ -353,7 +354,7 @@ describe("useHLSSegmentEvents", () => {
     });
 
     it("should handle error event", async () => {
-      const onError = jest.fn();
+      const onError = vi.fn();
 
       const { result } = renderHook(() =>
         useHLSSegmentEvents({
@@ -435,7 +436,7 @@ describe("useHLSSegmentEvents", () => {
         expect(latestEventSource).not.toBeNull();
       });
 
-      const closeSpy = jest.spyOn(latestEventSource!, "close");
+      const closeSpy = vi.spyOn(latestEventSource!, "close");
 
       unmount();
 

@@ -6,11 +6,12 @@
 import { api } from "@/services/api";
 import { HLSRecordingStatus, hlsService } from "@/services/hlsService";
 import { waitFor } from "@testing-library/react";
+import { vi } from "vitest";
 
 // Mock the api module
-jest.mock("@/services/api");
+vi.mock("@/services/api");
 
-const mockApi = api as jest.Mocked<typeof api>;
+const mockApi = api as any;
 
 describe("hlsService", () => {
   // Suppress console.error and console.log during tests to reduce noise
@@ -18,8 +19,8 @@ describe("hlsService", () => {
   const originalLog = console.log;
 
   beforeAll(() => {
-    console.error = jest.fn();
-    console.log = jest.fn();
+    console.error = vi.fn();
+    console.log = vi.fn();
   });
 
   afterAll(() => {
@@ -28,7 +29,7 @@ describe("hlsService", () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe("getPlaylistUrl", () => {
@@ -201,15 +202,15 @@ describe("hlsService", () => {
 
   describe("pollRecordingStatus", () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it("should poll status and call callback on segment change", async () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       const mockStatus1: HLSRecordingStatus = {
         room_id: "AMB-001-ROOM-001",
         status: "recording",
@@ -244,7 +245,7 @@ describe("hlsService", () => {
       });
 
       // Advance timer
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       // Second poll (segment count changed)
       await waitFor(() => {
@@ -256,7 +257,7 @@ describe("hlsService", () => {
     });
 
     it("should not call callback when segment count unchanged", async () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       const mockStatus: HLSRecordingStatus = {
         room_id: "AMB-001-ROOM-001",
         status: "recording",
@@ -281,7 +282,7 @@ describe("hlsService", () => {
       });
 
       // Advance timer
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
       await Promise.resolve();
 
       // Second poll - same segment count, no callback
@@ -291,7 +292,7 @@ describe("hlsService", () => {
     });
 
     it("should stop polling when recording is not active", async () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       const mockStatus: HLSRecordingStatus = {
         room_id: "AMB-001-ROOM-001",
         status: "completed",
@@ -313,7 +314,7 @@ describe("hlsService", () => {
       await Promise.resolve();
 
       // Advance timer - should not poll again
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
       await Promise.resolve();
 
       expect(callback).toHaveBeenCalledTimes(1);
@@ -322,7 +323,7 @@ describe("hlsService", () => {
     });
 
     it("should cleanup polling when cleanup function is called", async () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
 
       mockApi.get.mockResolvedValue({
         data: { segment_count: 1, is_active: true },
@@ -339,7 +340,7 @@ describe("hlsService", () => {
       cleanup();
 
       // Advance timer
-      jest.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(5000);
       await Promise.resolve();
 
       // Should not have called more than once

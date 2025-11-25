@@ -37,7 +37,9 @@ class RecordingResponse(BaseModel):
     session_id: str
     session_name: Optional[str]
     ambulance_number: Optional[str]
+    camera_id: Optional[str] = None  # Camera identifier (e.g., "ROOM-001")
     file_path: Optional[str]
+    recording_path: Optional[str] = None  # HLS playlist path
     public_video_url: Optional[str]
     duration: Optional[int]  # Duration in seconds
     file_size: Optional[int]  # File size in bytes
@@ -100,10 +102,12 @@ async def get_recording_by_id(recording_id: str):
 @router.get("/recordings/session/{session_id}", response_model=List[RecordingResponse])
 async def get_recordings_by_session(session_id: str):
     """
-    Get all recordings for a specific ambulance session.
+    Get all recordings for a specific ambulance session from database.
+    Returns camera recordings with storage URLs.
     """
     try:
         recordings = await VideoService.get_recordings_by_session(session_id)
+        logger.info(f"Found {len(recordings)} recordings for session {session_id}")
         return recordings
     except Exception as e:
         logger.error("Error getting recordings for session %s: %s", session_id, e)

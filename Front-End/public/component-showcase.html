@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STEMSight UI Components Showcase</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to br, #f8fafc, #e0f2fe);
+            padding: 2rem;
+        }
+        .component-section {
+            background: white;
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .component-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            color: #1e293b;
+        }
+        .component-grid {
+            display: grid;
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-4xl font-bold text-gray-900 mb-8">STEMSight UI Components</h1>
+        
+        <!-- Alert Component -->
+        <div class="component-section">
+            <h2 class="component-title">Alert Component</h2>
+            <div class="component-grid">
+                <!-- Success Alert -->
+                <div class="flex items-start space-x-3 rounded-md border p-4 bg-green-50 border-green-200 text-green-800">
+                    <svg aria-hidden="true" class="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <div class="flex-1">Operation successful!</div>
+                </div>
+
+                <!-- Error Alert -->
+                <div class="flex items-start space-x-3 rounded-md border p-4 bg-red-50 border-red-200 text-red-800">
+                    <svg aria-hidden="true" class="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <div class="flex-1">An error occurred!</div>
+                </div>
+
+                <!-- Warning Alert -->
+                <div class="flex items-start space-x-3 rounded-md border p-4 bg-yellow-50 border-yellow-200 text-yellow-800">
+                    <svg aria-hidden="true" class="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <div class="flex-1">Warning message</div>
+                </div>
+
+                <!-- Info Alert -->
+                <div class="flex items-start space-x-3 rounded-md border p-4 bg-blue-50 border-blue-200 text-blue-800">
+                    <svg aria-hidden="true" class="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <div class="flex-1">Information message</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Button Component -->
+        <div class="component-section">
+            <h2 class="component-title">Button Component</h2>
+            <div class="component-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                <!-- Default Button -->
+                <button class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500 h-10 px-4 text-sm">
+                    Default
+                </button>
+
+                <!-- Destructive Button -->
+                <button class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500 h-10 px-4 text-sm">
+                    Destructive
+                </button>
+
+                <!-- Outline Button -->
+                <button class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus-visible:ring-gray-300 h-10 px-4 text-sm">
+                    Outline
+                </button>
+
+                <!-- Secondary Button -->
+                <button class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-gray-200 text-gray-900 hover:bg-gray-300 focus-visible:ring-gray-500 h-10 px-4 text-sm">
+                    Secondary
+                </button>
+
+                <!-- Ghost Button -->
+                <button class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-300 h-10 px-4 text-sm">
+                    Ghost
+                </button>
+
+                <!-- Link Button -->
+                <button class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none text-blue-600 underline-offset-4 hover:underline focus-visible:ring-blue-500 h-10 px-4 text-sm">
+                    Link
+                </button>
+            </div>
+        </div>
+
+        <!-- Input Component -->
+        <div class="component-section">
+            <h2 class="component-title">Input Component</h2>
+            <div class="component-grid" style="max-width: 600px;">
+                <div class="space-y-1">
+                    <input type="text" placeholder="Default input" class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                </div>
+                <div class="space-y-1">
+                    <input type="email" placeholder="Email input" class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                </div>
+                <div class="space-y-1">
+                    <input type="password" placeholder="Password input" class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                </div>
+                <div class="space-y-1">
+                    <input type="text" placeholder="Disabled input" disabled class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Component -->
+        <div class="component-section">
+            <h2 class="component-title">Card Component</h2>
+            <div style="max-width: 400px;">
+                <div class="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <div class="p-6 space-y-1.5">
+                        <h3 class="text-xl font-semibold leading-none tracking-tight">Card Title</h3>
+                        <p class="text-sm text-gray-500">Card Description</p>
+                    </div>
+                    <div class="p-6 pt-0">
+                        <p class="text-sm text-gray-700">This is the card content area. It can contain any content you want to display.</p>
+                    </div>
+                    <div class="flex items-center p-6 pt-0">
+                        <button class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500 h-9 px-3 text-sm">
+                            Action
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Component -->
+        <div class="component-section">
+            <h2 class="component-title">Loading Component</h2>
+            <div class="component-grid" style="grid-template-columns: repeat(3, 1fr); max-width: 600px;">
+                <div class="text-center">
+                    <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+                    <p class="text-sm text-gray-600 mt-2">Small</p>
+                </div>
+                <div class="text-center">
+                    <div class="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+                    <p class="text-sm text-gray-600 mt-2">Medium</p>
+                </div>
+                <div class="text-center">
+                    <div class="inline-block h-16 w-16 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+                    <p class="text-sm text-gray-600 mt-2">Large</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table Component -->
+        <div class="component-section">
+            <h2 class="component-title">Table Component</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full caption-bottom text-sm">
+                    <thead class="border-b bg-gray-50">
+                        <tr class="border-b transition-colors hover:bg-gray-100">
+                            <th class="h-12 px-4 text-left align-middle font-medium text-gray-900">Name</th>
+                            <th class="h-12 px-4 text-left align-middle font-medium text-gray-900">Status</th>
+                            <th class="h-12 px-4 text-left align-middle font-medium text-gray-900">Role</th>
+                        </tr>
+                    </thead>
+                    <tbody class="[&_tr:last-child]:border-0">
+                        <tr class="border-b transition-colors hover:bg-gray-50">
+                            <td class="p-4 align-middle">John Smith</td>
+                            <td class="p-4 align-middle">
+                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-800">Active</span>
+                            </td>
+                            <td class="p-4 align-middle">Doctor</td>
+                        </tr>
+                        <tr class="border-b transition-colors hover:bg-gray-50">
+                            <td class="p-4 align-middle">Jane Doe</td>
+                            <td class="p-4 align-middle">
+                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">Pending</span>
+                            </td>
+                            <td class="p-4 align-middle">Nurse</td>
+                        </tr>
+                        <tr class="border-b transition-colors hover:bg-gray-50">
+                            <td class="p-4 align-middle">Bob Wilson</td>
+                            <td class="p-4 align-middle">
+                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">Inactive</span>
+                            </td>
+                            <td class="p-4 align-middle">Admin</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

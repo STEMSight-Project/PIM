@@ -1,0 +1,203 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomCamera 1`] = `
+<img
+  alt="Camera Icon"
+  class="h-5 w-5"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/camera-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomCamera with custom className 1`] = `
+<img
+  alt="Camera Icon"
+  class="h-7 w-7 opacity-80"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/camera-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomDash 1`] = `
+<img
+  alt="Dashboard Icon"
+  class="h-5 w-5"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/dashboard-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomDash with custom className 1`] = `
+<img
+  alt="Dashboard Icon"
+  class="h-8 w-8"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/dashboard-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomPatient 1`] = `
+<img
+  alt="Patient Icon"
+  class="h-5 w-5"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/patients-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomPatient with custom className 1`] = `
+<img
+  alt="Patient Icon"
+  class="h-10 w-10"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/patients-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomRecent 1`] = `
+<img
+  alt="Recent Icon"
+  class="h-5 w-5"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/recent-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomRecent with custom className 1`] = `
+<img
+  alt="Recent Icon"
+  class="h-6 w-6 text-blue-500"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/recent-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomReplay 1`] = `
+<img
+  alt="Replay Icon"
+  class="h-5 w-5"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/playback-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - CustomReplay with custom className 1`] = `
+<img
+  alt="Replay Icon"
+  class="h-12 w-12"
+  data-nimg="1"
+  decoding="async"
+  height="30"
+  loading="lazy"
+  src="/playback-icon.svg"
+  style="color: transparent;"
+  width="30"
+/>
+`;
+
+exports[`CustomIcons Component > Snapshots > should match snapshot - all icons together 1`] = `
+<div
+  class="flex gap-4"
+>
+  <img
+    alt="Dashboard Icon"
+    class="h-5 w-5"
+    data-nimg="1"
+    decoding="async"
+    height="30"
+    loading="lazy"
+    src="/dashboard-icon.svg"
+    style="color: transparent;"
+    width="30"
+  />
+  <img
+    alt="Patient Icon"
+    class="h-5 w-5"
+    data-nimg="1"
+    decoding="async"
+    height="30"
+    loading="lazy"
+    src="/patients-icon.svg"
+    style="color: transparent;"
+    width="30"
+  />
+  <img
+    alt="Recent Icon"
+    class="h-5 w-5"
+    data-nimg="1"
+    decoding="async"
+    height="30"
+    loading="lazy"
+    src="/recent-icon.svg"
+    style="color: transparent;"
+    width="30"
+  />
+  <img
+    alt="Replay Icon"
+    class="h-5 w-5"
+    data-nimg="1"
+    decoding="async"
+    height="30"
+    loading="lazy"
+    src="/playback-icon.svg"
+    style="color: transparent;"
+    width="30"
+  />
+  <img
+    alt="Camera Icon"
+    class="h-5 w-5"
+    data-nimg="1"
+    decoding="async"
+    height="30"
+    loading="lazy"
+    src="/camera-icon.svg"
+    style="color: transparent;"
+    width="30"
+  />
+</div>
+`;

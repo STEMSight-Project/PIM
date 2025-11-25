@@ -10,18 +10,16 @@ import { useStreaming } from "@/hooks/useStreaming";
 import { useHLSSegmentEvents } from "@/hooks/useHLSSegmentEvents";
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { vi } from "vitest";
 
 // Mock hooks
-jest.mock("@/hooks/useStreaming");
-jest.mock("@/hooks/useHLS");
-jest.mock("@/hooks/useHLSSegmentEvents");
+vi.mock("@/hooks/useStreaming");
+vi.mock("@/hooks/useHLS");
+vi.mock("@/hooks/useHLSSegmentEvents");
 
-const mockUseStreaming = useStreaming as jest.MockedFunction<
-  typeof useStreaming
->;
-const mockUseHLS = useHLS as jest.MockedFunction<typeof useHLS>;
-const mockUseHLSSegmentEvents =
-  useHLSSegmentEvents as jest.MockedFunction<typeof useHLSSegmentEvents>;
+const mockUseStreaming = useStreaming as any;
+const mockUseHLS = useHLS as any;
+const mockUseHLSSegmentEvents = useHLSSegmentEvents as any;
 
 const createVideoRef = () => {
   const videoElement = document.createElement("video");
@@ -39,8 +37,8 @@ describe("HybridStreamPlayer", () => {
     isWaitingForData: false,
     poseLandmarks: null,
     prediction: null,
-    startStreaming: jest.fn(),
-    stopStreaming: jest.fn(),
+    startStreaming: vi.fn(),
+    stopStreaming: vi.fn(),
   };
 
   const defaultHLSState = {
@@ -57,27 +55,27 @@ describe("HybridStreamPlayer", () => {
       session_id: "session-001",
     },
     isHLSReady: true,
-    reload: jest.fn(),
-    play: jest.fn().mockResolvedValue(undefined),
-    pause: jest.fn(),
-    seek: jest.fn(),
+    reload: vi.fn(),
+    play: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn(),
+    seek: vi.fn(),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockUseHLSSegmentEvents.mockImplementation(() => undefined);
     mockUseStreaming.mockReturnValue({
       ...defaultStreamingState,
       videoRef: createVideoRef(),
-      startStreaming: jest.fn(),
-      stopStreaming: jest.fn(),
+      startStreaming: vi.fn(),
+      stopStreaming: vi.fn(),
     } as any);
     mockUseHLS.mockReturnValue({
       ...defaultHLSState,
       videoRef: createVideoRef(),
-      play: jest.fn().mockResolvedValue(undefined),
-      pause: jest.fn(),
-      seek: jest.fn(),
+      play: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+      seek: vi.fn(),
     } as any);
   });
 
@@ -123,7 +121,7 @@ describe("HybridStreamPlayer", () => {
     });
 
     it("should switch to playback mode", async () => {
-      const mockPlay = jest.fn().mockResolvedValue(undefined);
+      const mockPlay = vi.fn().mockResolvedValue(undefined);
       mockUseHLS.mockReturnValue({
         ...defaultHLSState,
         videoRef: createVideoRef(),
@@ -160,7 +158,7 @@ describe("HybridStreamPlayer", () => {
 
   describe("playback controls", () => {
     it("should play video when play button clicked", async () => {
-      const mockPlay = jest.fn().mockResolvedValue(undefined);
+      const mockPlay = vi.fn().mockResolvedValue(undefined);
       mockUseHLS.mockReturnValue({
         ...defaultHLSState,
         play: mockPlay,
@@ -179,7 +177,7 @@ describe("HybridStreamPlayer", () => {
     });
 
     it("should pause video when pause button clicked", () => {
-      const mockPause = jest.fn();
+      const mockPause = vi.fn();
       mockUseHLS.mockReturnValue({
         ...defaultHLSState,
         pause: mockPause,
@@ -195,7 +193,7 @@ describe("HybridStreamPlayer", () => {
     });
 
     it("should seek when timeline clicked", () => {
-      const mockSeek = jest.fn();
+      const mockSeek = vi.fn();
       mockUseHLS.mockReturnValue({
         ...defaultHLSState,
         seek: mockSeek,

@@ -1,0 +1,266 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Card Component > Snapshots > should match snapshot - basic card 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm"
+>
+  <h2>
+    Card Title
+  </h2>
+  <p>
+    Card content goes here
+  </p>
+</div>
+`;
+
+exports[`Card Component > Snapshots > should match snapshot - card with complex content 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm"
+>
+  <div
+    class="p-6"
+  >
+    <div
+      class="flex items-center justify-between mb-4"
+    >
+      <h2
+        class="text-2xl font-bold"
+      >
+        Session Details
+      </h2>
+      <span
+        class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
+      >
+        Active
+      </span>
+    </div>
+    <div
+      class="space-y-2"
+    >
+      <p
+        class="text-gray-600"
+      >
+        Duration: 45 minutes
+      </p>
+      <p
+        class="text-gray-600"
+      >
+        Status: In Progress
+      </p>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Card Component > Snapshots > should match snapshot - card with custom className 1`] = `
+<div
+  class="rounded-lg border border-gray-200 shadow-sm custom-class bg-blue-100"
+>
+  <h2>
+    Custom Card
+  </h2>
+</div>
+`;
+
+exports[`Card Component > Snapshots > should match snapshot - card with custom styled sections 1`] = `
+<div
+  class="rounded-lg border bg-white shadow-sm border-blue-500"
+>
+  <div
+    class="flex flex-col space-y-1.5 p-6 bg-blue-50"
+  >
+    <h3>
+      Custom Header
+    </h3>
+  </div>
+  <div
+    class="p-6 pt-0 bg-gray-50"
+  >
+    <p>
+      Custom Content
+    </p>
+  </div>
+  <div
+    class="flex items-center p-6 pt-0 bg-blue-50 justify-end"
+  >
+    <button
+      class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500 h-10 px-4 text-sm"
+    >
+      Close
+    </button>
+  </div>
+</div>
+`;
+
+exports[`Card Component > Snapshots > should match snapshot - card with footer 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm"
+>
+  <div
+    class="p-6 pt-0"
+  >
+    <p>
+      Card content
+    </p>
+  </div>
+  <div
+    class="flex items-center p-6 pt-0"
+  >
+    <button
+      class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500 h-10 px-4 text-sm"
+    >
+      Action
+    </button>
+  </div>
+</div>
+`;
+
+exports[`Card Component > Snapshots > should match snapshot - card with header 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm"
+>
+  <div
+    class="flex flex-col space-y-1.5 p-6"
+  >
+    <h3
+      class="text-lg font-semibold"
+    >
+      Card Header
+    </h3>
+  </div>
+  <div
+    class="p-6 pt-0"
+  >
+    <p>
+      Card content section
+    </p>
+  </div>
+</div>
+`;
+
+exports[`Card Component > Snapshots > should match snapshot - card with hover effect 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-lg transition-shadow"
+>
+  <div
+    class="p-4"
+  >
+    <h3
+      class="font-bold"
+    >
+      Hoverable Card
+    </h3>
+    <p
+      class="text-gray-600"
+    >
+      Hover over me
+    </p>
+  </div>
+</div>
+`;
+
+exports[`Card Component > Snapshots > should match snapshot - card with onClick handler 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm cursor-pointer hover:shadow-md"
+>
+  <div
+    class="p-6 pt-0"
+  >
+    <p>
+      Clickable Card
+    </p>
+  </div>
+</div>
+`;
+
+exports[`Card Component > Snapshots > should match snapshot - full card with all sections 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm"
+>
+  <div
+    class="flex flex-col space-y-1.5 p-6"
+  >
+    <h3
+      class="text-lg font-semibold"
+    >
+      Patient Information
+    </h3>
+    <p
+      class="text-sm text-gray-500"
+    >
+      Patient ID: P12345
+    </p>
+  </div>
+  <div
+    class="p-6 pt-0"
+  >
+    <div
+      class="space-y-2"
+    >
+      <p>
+        Name: John Doe
+      </p>
+      <p>
+        Age: 65
+      </p>
+      <p>
+        Diagnosis: Parkinson's Disease
+      </p>
+    </div>
+  </div>
+  <div
+    class="flex items-center p-6 pt-0"
+  >
+    <button
+      class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus-visible:ring-gray-300 h-8 px-3 text-sm"
+    >
+      View Details
+    </button>
+    <button
+      class="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500 h-8 px-3 text-sm"
+    >
+      Start Session
+    </button>
+  </div>
+</div>
+`;
+
+exports[`Card Component > Snapshots > should match snapshot - nested cards 1`] = `
+<div
+  class="rounded-lg border border-gray-200 bg-white shadow-sm"
+>
+  <div
+    class="flex flex-col space-y-1.5 p-6"
+  >
+    <h3>
+      Parent Card
+    </h3>
+  </div>
+  <div
+    class="p-6 pt-0"
+  >
+    <div
+      class="rounded-lg border border-gray-200 bg-white shadow-sm mb-2"
+    >
+      <div
+        class="p-6 pt-0"
+      >
+        <p>
+          Nested Card 1
+        </p>
+      </div>
+    </div>
+    <div
+      class="rounded-lg border border-gray-200 bg-white shadow-sm"
+    >
+      <div
+        class="p-6 pt-0"
+      >
+        <p>
+          Nested Card 2
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+`;
