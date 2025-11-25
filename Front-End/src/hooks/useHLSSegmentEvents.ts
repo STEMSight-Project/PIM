@@ -7,8 +7,9 @@
 
 import Hls from "hls.js";
 import { useEffect, useRef, useState } from "react";
+import getApiBaseUrl from "@/lib/apiBase";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = getApiBaseUrl();
 
 export interface SegmentEvent {
   type: "connected" | "new_segment" | "heartbeat" | "error";

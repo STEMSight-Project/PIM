@@ -1,0 +1,43 @@
+name: deploy-frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Front-End/**"
+      - ".github/workflows/deploy-frontend.yml"
+
+concurrency:
+  group: deploy-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Front-End
+
+    steps:
+      # 1) Pull the repo
+      - uses: actions/checkout@v4
+
+      # 2) Ensure lockfile exists (Oryx will use it during install)
+      - name: Verify package-lock.json
+        run: test -f package-lock.json && echo "Found package-lock.json"
+
+      # 3) Write build-time env (don't echo it)
+      - name: Create .env.production
+        run: printf "NEXT_PUBLIC_API_URL=%s\n" "${{ secrets.NEXT_PUBLIC_API_URL }}" > .env.production
+
+      # 4) Zip source for Zip Deploy (exclude build outputs and node_modules)
+      - name: Create deployment package
+        run: |
+          zip -qr ../frontend.zip . -x "**/.git/**" "**/.next/**" "**/node_modules/**"
+
+      # 5) Deploy (Zip Deploy). Oryx will build because SCM_DO_BUILD_DURING_DEPLOYMENT=true on the app.
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_FRONTEND_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_FRONTEND_PUBLISH_PROFILE }}
+          package: frontend.zip

@@ -3,6 +3,8 @@
  * Handles Server-Sent Events (SSE) connections to backend realtime endpoints
  */
 
+import { getApiBaseUrl } from "@/lib/apiBase";
+
 export interface RealtimeEvent {
   type: "connected" | "database_change" | "heartbeat" | "error";
   timestamp?: number;
@@ -142,7 +144,7 @@ class RealtimeService {
   private connections = new Map<string, RealtimeConnection>();
 
   constructor() {
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+    this.baseUrl = getApiBaseUrl();
   }
 
   /**

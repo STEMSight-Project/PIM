@@ -1,26 +1,5 @@
+import { getApiBaseUrl } from "@/lib/apiBase";
 import type { ApiResponse, HttpMethod } from "@/types";
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
-const DEFAULT_TIMEOUT = 10000; // 10 seconds
-const REFRESH_IN_PROGRESS_KEY = "_token_refresh_in_progress";
-
-// Global error callback for API errors
-type ErrorCallback = (error: {
-  message: string;
-  endpoint: string;
-  timestamp: number;
-  status?: number;
-}) => void;
-
-let globalErrorCallback: ErrorCallback | null = null;
-
-export function setApiErrorCallback(callback: ErrorCallback) {
-  globalErrorCallback = callback;
-}
-
-// Rate limiting
-const lastRequestTime = new Map<string, number>();
-const MIN_REQUEST_INTERVAL = 50; // Minimum 50ms between requests to same endpoint
 
 class ApiError extends Error {
   constructor(message: string, public status: number, public details?: any) {
@@ -69,9 +48,10 @@ async function request<T>(
       headers.set("Authorization", `Bearer ${accessToken}`);
     }
 
+    const baseUrl = getApiBaseUrl();
     const url = endpoint.startsWith("http")
       ? endpoint
-      : `${BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+      : `${baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
 
     const fetchOptions: RequestInit = {
       method,
@@ -220,35 +200,23 @@ async function refreshAccessToken(): Promise<boolean> {
     const refreshToken = localStorage.getItem("refresh_token");
     if (!refreshToken) return false;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout for refresh
+    const baseUrl = getApiBaseUrl();
+    const res = await fetch(`${baseUrl}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+      }),
+    });
 
-    try {
-      const res = await fetch(`${BASE_URL}/auth/refresh`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          refresh_token: refreshToken,
-        }),
-        signal: controller.signal,
-      });
+    if (!res.ok) return false;
 
-      clearTimeout(timeout);
-
-      if (!res.ok) return false;
-
-      const data = await res.json();
-      localStorage.setItem("access_token", data.access_token);
-      if (data.refresh_token) {
-        localStorage.setItem("refresh_token", data.refresh_token);
-      }
-      return true;
-    } catch (err) {
-      clearTimeout(timeout);
-      console.error("Token refresh failed:", err);
-      return false;
+    const data = await res.json();
+    localStorage.setItem("access_token", data.access_token);
+    if (data.refresh_token) {
+      localStorage.setItem("refresh_token", data.refresh_token);
     }
   } finally {
     sessionStorage.removeItem(REFRESH_IN_PROGRESS_KEY);
@@ -335,8 +303,9 @@ export const apiHelpers = {
   // Download file
   downloadFile: async (endpoint: string, filename?: string) => {
     try {
+      const baseUrl = getApiBaseUrl();
       const response = await fetch(
-        `${BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`,
+        `${baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("access_token")}`,
