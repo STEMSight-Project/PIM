@@ -33,7 +33,6 @@
 - [System Requirements](#system-requirements)
 - [Troubleshooting](#troubleshooting)
 - [Performance Considerations](#performance-considerations)
-- [Future Roadmap](#future-roadmap)
 - [Licenses](#licenses)
 
 # Overview
